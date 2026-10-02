@@ -1,0 +1,65 @@
+{
+  "_comment": "Fun-density quotas by blueprint size. Source: 10-Fun-Mechanics-and-Content-Organization.md §5, derived from crawl/fun-metrics.json rating-tier aggregates (great(8+) n=4 vs lower tiers) and the phase-⑥ test-game diagnosis (385 upgrades, 88% constant-mult, 0 clickables/bars/microtabs). Mechanics catalog M1-M10 and effect taxonomy K1-K8 are defined in handbook 10. Quotas are FLOORS, not targets - theme fit (P14) decides which mechanics are used.",
+  "byBlueprint": {
+    "small": {
+      "minDistinctMechanics": 2,
+      "challengeLayer": "optional",
+      "clickableGroups": 0,
+      "bars": 0,
+      "minUpdateLayers": 1,
+      "minSecondaryCurrencies": 0,
+      "shopLayer": false,
+      "customRitualLayer": "optional",
+      "maxK1SharePerLayer": 0.6,
+      "microtabsRequiredAtContentItems": 14,
+      "tabFormatRequiredEverywhere": true
+    },
+    "medium": {
+      "minDistinctMechanics": 4,
+      "challengeLayer": "required",
+      "challengeStyle": "M1 classic OR M2 score-attack hub",
+      "clickableGroups": 1,
+      "bars": 1,
+      "minUpdateLayers": 3,
+      "minSecondaryCurrencies": 1,
+      "shopLayer": true,
+      "customRitualLayer": "optional",
+      "maxK1SharePerLayer": 0.4,
+      "microtabsRequiredAtContentItems": 12,
+      "tabFormatRequiredEverywhere": true
+    },
+    "large": {
+      "minDistinctMechanics": 6,
+      "challengeLayer": "required",
+      "challengeStyle": "M2 score-attack hub preferred (>=6 challenges)",
+      "clickableGroups": 2,
+      "bars": 2,
+      "minUpdateLayers": 6,
+      "minSecondaryCurrencies": 2,
+      "shopLayer": true,
+      "customRitualLayer": "required",
+      "maxK1SharePerLayer": 0.4,
+      "microtabsRequiredAtContentItems": 12,
+      "tabFormatRequiredEverywhere": true
+    }
+  },
+  "staticCheckThresholds": {
+    "_comment": "Mirrors the D-* rules in scripts/static_checks.js - keep in sync when tuning.",
+    "effectMonoUpgradeFloor": 8,
+    "effectMonoK1Share": 0.6,
+    "microtabsFailAtContentItems": 16,
+    "microtabsWarnAtContentItems": 10,
+    "mechQuotaMinMainLayers": 4
+  },
+  "effectKinds": {
+    "K1": "flat mult (themed name even so); capped by maxK1SharePerLayer",
+    "K2": "self-shape: pow(0.4-0.6)/log/root(2-3) on own amount",
+    "K3": "cross-resource: sources another layer's currency",
+    "K4": "meta-effect: raises another upgrade/buyable's exponent (^1.01-^1.2) or effect",
+    "K5": "softcap/hardcap manipulation: delay cap, raise hardcap, replace formula, reduce cost",
+    "K6": "conditional: if-chains on progress/other components/challenge state",
+    "K7": "unlock/gate: no numeric effect, unlocks layer/subtab/buyable/challenge (excluded from K1 quota)",
+    "K8": "production/conversion: generates a new currency over time"
+  },
+  "perLayerRule": ">=3 distinct non-K1 kinds per layer; rotate K2/K3/K4/K5"
+}

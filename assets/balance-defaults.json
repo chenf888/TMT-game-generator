@@ -1,0 +1,115 @@
+{
+  "$meta": {
+    "name": "TMT balance defaults (measured corpus heuristics)",
+    "source": "TMT-Reference/09-Layer-Design-Patterns.md, §4 Balance heuristics table (measured over 132 published games / 770+ layers); some rows cite §2 patterns P1–P17 for detail",
+    "usage": "Use these as DEFAULT numbers when filling the design brief and generating code. The Stage-2 self-check and Stage-6 balance walkthrough verify generated numbers against these ranges. A deviation is allowed only when written down in the design brief with a reason (theme ceiling, idle-first pacing, or scope).",
+    "version": "1.0.0 (2026-10-01, phase ⑤)"
+  },
+  "firstLayerRequires": {
+    "range": [2, 10],
+    "mode": 10,
+    "evidence": "58/70 row-0 layers",
+    "source": "09 §4 row 1; P1"
+  },
+  "firstMilestone": {
+    "effect": "flat x2–x3 multiplier",
+    "thresholdVsLayerRequires": [500, 700],
+    "example": "Mario Maker coin milestone 0 at 6871 points vs requires 10",
+    "source": "09 §4 row 2"
+  },
+  "adjacentRowRequiresRatio": {
+    "range": [10, 100],
+    "median": 25,
+    "evidence": "54 sane samples; anti-pattern A1 = ratio below 1 (The Click Tree 100000→50→30→20→10→5)",
+    "source": "09 §4 row 3; P2"
+  },
+  "prestigeExponentByRow": {
+    "row0": 0.5,
+    "row1": 0.333,
+    "row2Plus": 0.25,
+    "decayPerRow": -0.1,
+    "evidence": "corpus histogram: exponent 0.5 in 179 layers, deeper rows drift 0.4→0.1",
+    "source": "09 §4 row 4; P3"
+  },
+  "upgradeCostRatioChained": {
+    "median": 5,
+    "p25": 1.5,
+    "p75": 1000,
+    "rowEndJumps": ["1e3", "1e5"],
+    "evidence": "2674 samples; two regimes: gentle 5-upgrade ladders and aggressive row-end jumps",
+    "source": "09 §4 row 5; P7"
+  },
+  "upgradeGrid": {
+    "columns": 5,
+    "standard": "5x5",
+    "mega": "10x5",
+    "idScheme": "row-column ids: 11,12,13,14,15,21,... (first upgrade costs ~0–1; last column's final upgrade = 'unlock a new layer' exit ticket)",
+    "evidence": "61 layers use 5x5, 21 use 10x5",
+    "source": "09 §4 row 6; P7"
+  },
+  "milestonesPerLayer": {
+    "median": 5,
+    "p75": 10,
+    "densityFloor": "at least 3–5 per main layer (anti-pattern A4: thin layers)",
+    "evidence": "796 threshold samples",
+    "source": "09 §4 row 7"
+  },
+  "milestoneThresholdSpacing": {
+    "median": 2,
+    "p25": 1.5,
+    "p75": 5,
+    "lateGame": [5, 10],
+    "source": "09 §4 row 8; P17 (the threshold number IS the design)"
+  },
+  "staticLayer": {
+    "base": { "softWall": 2, "hardChoice": [5, 10], "note": "base 2 = next purchase always ~1 reset away; 5–10 = hard spending decisions" },
+    "exponent": 1,
+    "semantic": "static layers are 'buy N times' counters; canBuyMax() gated by an upgrade is the standard reward",
+    "source": "09 §4 row 9; P5"
+  },
+  "buyableCostCurve": {
+    "form": "exponential",
+    "base": [2, 4],
+    "startVsUnitCurrency": 10,
+    "costSoftcap": "optional: blunt late scaling after ~25 purchases (cost-softcap idiom, 01 §7)",
+    "evidence": "283 exponential, 114 exponential-dynamic, 38 polynomial, 23 linear classified",
+    "source": "09 §4 row 10; P6"
+  },
+  "softcap": {
+    "startAt": "approximately where the NEXT layer unlocks",
+    "power": [0.3, 0.5],
+    "hardCap": "power 0 — softcap(value, cap, 0) freezes the value; use for theme ceilings (exam score 150)",
+    "defenseInDepth": "three independent places (P12): (1) layer softcap/softcapPower props, (2) softcap() helper inside individual effect()s, (3) staged re-root ladders in custom getResetGain()",
+    "source": "09 §4 row 11; P12"
+  },
+  "automationLadder": {
+    "order": ["keep-on-reset (resetsNothing)", "passiveGeneration", "autoPrestige", "autoUpgrade"],
+    "thresholdSpacingPerStep": 2,
+    "stepsPerGame": [4, 8],
+    "crossLayerGrants": "layer N's milestones automate layers < N; achievements are an alternate path (P11, with !has guards)",
+    "antiPattern": "A8 — never one milestone grants everything; one chore removed per step",
+    "source": "09 §4 row 12; P4"
+  },
+  "hotkeyCoverage": {
+    "rule": "every resettable layer gets a hotkey",
+    "sameRowSecondLayer": "Shift+letter variant",
+    "evidence": "103/132 games define hotkeys",
+    "source": "09 §4 row 13"
+  },
+  "currencyRetention": {
+    "rule": "each new layer adds at least one gainMult() line to at least TWO older layers, and at least one of its upgrades boosts the FIRST layer",
+    "antiPattern": "A7 orphaned first layer; test: 'does layer 1 upgrade 11 still matter at endgame?'",
+    "source": "09 §4 row 14; P10"
+  },
+  "layerDensity": {
+    "rule": "10+ upgrades + 3–5 milestones per main layer",
+    "evidence": "high-rated games: ~15 (Mining) to ~27 (Mario Maker 2) content items per main layer; low-rated: ~5–7",
+    "source": "09 §1.1 read of the table; §5 A4"
+  },
+  "whenDefaultsMustMove": {
+    "themeWithNaturalCeilings": "hard-cap via softcap(x, cap, 0) and stop that currency's ladder at the cap (Gaokao: exam score 150)",
+    "idleFirstAudience": "prefer log/custom gains (P8b) over sqrt resets; lengthen the automation ladder",
+    "shortGameScope": "small tree + dense milestones beats many thin layers (A4)",
+    "source": "09 §4 closing paragraph"
+  }
+}

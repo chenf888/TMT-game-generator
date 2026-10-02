@@ -1,0 +1,189 @@
+{
+  "$meta": {
+    "name": "TMT progress blueprints (machine-readable)",
+    "source": "TMT-Reference/09-Layer-Design-Patterns.md, §3 Progress blueprints (§3.1 small, §3.2 medium, §3.3 large); cross-refs to §2 patterns P1–P17 and §5 anti-patterns A1–A10",
+    "usage": "The interview's SCALE answer selects exactly one blueprint. Copy its parameters into the design brief. Every deviation must be written down in the brief with a reason (SKILL.md Stage 2).",
+    "version": "1.0.0 (2026-10-01, phase ⑤)"
+  },
+  "blueprints": {
+    "small": {
+      "label": "Small game — 5–7 layers, 2–4 hours",
+      "source": "09 §3.1",
+      "referenceGames": ["The Spring Festival Tree 2025", "Glyph Tree"],
+      "targetPlaytimeHours": [2, 4],
+      "mainLayers": [5, 7],
+      "rows": { "first": 0, "last": 2, "contiguousFromZero": true, "note": "contiguity is mandatory (anti-pattern A2: skipped row numbers break tree rendering)" },
+      "sideLayers": [
+        { "role": "achievements", "grid": "3x5", "rewards": "flat multipliers + exactly one automation grant", "source": "09 §3.1 side row; P13" }
+      ],
+      "rowPlan": [
+        {
+          "row": 0,
+          "layers": 1,
+          "type": "normal",
+          "exponent": 0.5,
+          "requires": 10,
+          "upgrades": [10, 15],
+          "upgradeGrid": "5x2 to 5x3",
+          "milestones": [3, 5],
+          "buyables": [1, 2],
+          "source": "09 §3.1 row0; opener is P1 (Normal(0.5) Opener), requires mode 10"
+        },
+        {
+          "row": 1,
+          "layers": [1, 2],
+          "type": "normal",
+          "exponent": "1/3",
+          "requiresRatioVsPrevRow": 25,
+          "secondBranchRequiresRatio": 40,
+          "upgrades": [10],
+          "milestones": [3, 5],
+          "buyables": [1],
+          "unlockTrigger": "row-0 layer's upgrade 15 (the 'exit ticket' upgrade, P7)",
+          "source": "09 §3.1 row1; exponent drop is P3"
+        },
+        {
+          "row": 2,
+          "layers": 1,
+          "type": "static",
+          "base": 2,
+          "exponent": 1,
+          "requiresRatioVsPrevRowCurrency": 30,
+          "upgrades": [5],
+          "special": "canBuyMax() gated behind an upgrade is the standard floor-completion reward",
+          "source": "09 §3.1 row2; static floors are P5"
+        }
+      ],
+      "automationLadder": {
+        "source": "09 §3.1 + P4",
+        "order": [
+          { "step": 1, "grant": "resetsNothing (keep on reset)", "grantedBy": "row-1 layer milestone" },
+          { "step": 2, "grant": "passiveGeneration on row-0 layer", "threshold": "milestone at ~30x past the row-0 unlock point" },
+          { "step": 3, "grant": "autoPrestige on row-0 layer" },
+          { "step": 4, "grant": "autoUpgrade on row-0 layer" },
+          { "step": 5, "grant": "autoPrestige on row-1 layer" }
+        ],
+        "spacingPerStep": "x2 threshold spacing (P4 measured median)",
+        "crossLayerGrants": "higher layers' milestones automate lower layers"
+      },
+      "endgame": {
+        "finalUpgradeCostVsLayerUnlock": "1e4x",
+        "isEndgameCondition": "row-2 layer currency >= 25",
+        "source": "09 §3.1 endgame line"
+      }
+    },
+    "medium": {
+      "label": "Medium game — 10–16 layers, 10–30 hours",
+      "source": "09 §3.2",
+      "referenceGames": ["The Spring Festival Tree 2026", "C0v1d Modding Tree", "One Point One Layer"],
+      "targetPlaytimeHours": [10, 30],
+      "mainLayers": [10, 16],
+      "rows": { "first": 0, "last": [3, 4], "contiguousFromZero": true },
+      "sideLayers": [
+        { "role": "achievements", "grid": "5x10", "rewards": "alternate automation path (P11 backfill with !hasUpgrade/!hasMilestone guards)" },
+        { "role": "stats" },
+        { "role": "story dashboard", "optional": true, "pattern": "P13 side-layer dashboard fed by main layers" }
+      ],
+      "rowPlan": [
+        {
+          "row": 0,
+          "layers": 1,
+          "type": "normal",
+          "exponent": 0.5,
+          "requires": 10,
+          "role": "ANCHOR LAYER — every later layer must add at least one gainMult() line boosting it (P10; anti-pattern A7 orphaned opener)",
+          "source": "09 §3.2 row0"
+        },
+        {
+          "row": 1,
+          "layers": [2, 4],
+          "type": ["normal", "custom"],
+          "exponent": [0.3, 0.33],
+          "requiresRatioVsPrevRow": [25, 100],
+          "perLayer": { "upgrades": "5x3 to 5x5 grid", "milestones": [3, 5], "buyables": [1, 3], "challenges": { "optional": true, "count": [2, 4] } },
+          "source": "09 §3.2 row1"
+        },
+        {
+          "row": 2,
+          "layers": [2, 3],
+          "type": ["static", "custom"],
+          "staticBase": [2, 3],
+          "requiresRatioVsPrevRow": [25, 100],
+          "source": "09 §3.2 row2"
+        },
+        {
+          "row": 3,
+          "layers": [1, 2],
+          "type": "custom",
+          "role": "hub or capstone layer",
+          "upgradeGrid": "5x5",
+          "special": "milestone-granted keep-lists (P9 doReset keeps)",
+          "source": "09 §3.2 row3"
+        }
+      ],
+      "automation": {
+        "source": "09 §3.2 automation line; P4",
+        "ladder": "full ladder per branch, cross-layer grants",
+        "packageDealAtRow3": ["autoPrestige", "autoUpgrade", "resetsNothing"],
+        "note": "granting the three flags together as one package is the standard endgame QoL move (P4)"
+      },
+      "milestonesPerMajorLayer": [8, 12],
+      "milestoneThresholdSpacing": { "early": 2, "late": [5, 10] },
+      "challengeUnlockPoint": "~5e7x the first layer's currency",
+      "endgame": {
+        "capstoneMilestoneChainSteps": [10, null],
+        "finalGoal": "side-layer counter or hub milestone 15+",
+        "source": "09 §3.2 endgame line"
+      }
+    },
+    "large": {
+      "label": "Large game — 25+ layers, 50+ hours",
+      "source": "09 §3.3",
+      "referenceGames": ["The Mario Maker 2 Tree", "The Mining Incremental Table"],
+      "targetPlaytimeHours": [50, null],
+      "mainLayers": [25, null],
+      "rows": { "first": 0, "last": "10+ visible rows (Mario Maker: 20 rows x 1–4 layers; Mining: spaced rows 101/201/…)", "contiguousFromZero": true },
+      "structure": {
+        "phases": "theme-driven phases (P14): currency types change per phase",
+        "fanOutPerRow": [1, 4],
+        "hubAndSpoke": "at least one hub-and-spoke region (Incrementreeverse p-hub pattern)",
+        "source": "09 §3.3 structure lines"
+      },
+      "content": {
+        "upgradeGrids": "5x5+ per layer; 10x5 mega-layers allowed",
+        "milestonesTotal": [200, null],
+        "challengeSets": [2, 4],
+        "buyableFamilies": "11,12,13 / 21,22 families per layer (P6)",
+        "source": "09 §3.3 content lines"
+      },
+      "automation": {
+        "ladderSpacing": "x2 per step, full ladder per layer (P4)",
+        "achievementsBackfill": "P11 — push with !hasUpgrade/!hasMilestone idempotence guards",
+        "packageDeals": "at phase ends",
+        "doResetFreePass": "doReset returns undefined when resettingLayer row >= N, so late phases never wipe early phases (P9)",
+        "source": "09 §3.3 automation lines"
+      },
+      "softcaps": {
+        "policy": "layered caps on every long-lived currency (P12 defense-in-depth)",
+        "capDelayUpgrades": "'raise the cap' upgrades sold 2–3 rows later (Mario Maker softcap upgrade pattern)",
+        "source": "09 §3.3 softcaps lines"
+      },
+      "endgame": {
+        "finalLayer": "dedicated final layer(s) (the_end pattern)",
+        "postVictory": "optional rebirth layers (C0v1d U* pattern)",
+        "source": "09 §3.3 endgame lines"
+      },
+      "qol": [
+        "hotkey on every resettable layer (Shift+letter variant for the second layer of the same row)",
+        "formula-on-Shift display (P17)",
+        "stats side layer"
+      ]
+    }
+  },
+  "selectionRules": {
+    "scaleToBlueprint": "interview Q2 answer maps 1:1 to blueprints.small|medium|large — do not mix blueprints or improvise parameters",
+    "ceilingOverride": "if interview Q3 says the theme has natural ceilings, per 09 §4 'when defaults must move': hard-cap capped currencies via softcap(x, cap, 0) and stop their ladder at the cap (Gaokao pattern, P8a)",
+    "idleOverride": "if interview Q4 says idle-first, prefer log/custom gains (P8b Incrementreeverse pattern) over sqrt resets and lengthen the automation ladder",
+    "shortScopeOverride": "never compensate a short scope with many thin layers — density beats breadth (anti-pattern A4)"
+  }
+}
