@@ -1,7 +1,7 @@
 # TMT Game Generator — an agent skill for The Modding Tree
 
 A [SKILL.md-format](https://agentskills.io) agent skill that generates **complete, playable,
-balanced [The Modding Tree](https://github.com/Acamaeda/Modding-Tree) (TMT v2.7) incremental
+balanced [The Modding Tree](https://github.com/Acamaeda/The-Modding-Tree) (TMT v2.7) incremental
 games** from a short conversation. Load it into any agent tool that supports skills
 (ZCode, Claude Code, Codex, Cursor, …), say "make me an incremental game about X", and the
 agent runs the full pipeline: interview → data-driven design brief → scaffold → code
