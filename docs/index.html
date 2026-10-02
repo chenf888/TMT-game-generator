@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="A self-contained SKILL.md agent skill that turns one conversation into a complete, balanced, playable The Modding Tree incremental game. Works in ZCode, Claude Code, and any SKILL.md tool.">
+<meta property="og:title" content="TMT Game Generator: an agent skill for The Modding Tree">
+<meta property="og:description" content="Your agent interviews you, designs the tree, writes and checks the code, then hands you a balanced game.">
+<meta property="og:type" content="website">
+<title>TMT Game Generator: an agent skill for The Modding Tree</title>
+<style>
+  :root {
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fafafa; --surface: #ffffff; --surface2: #f4f4f5;
+      --text: #1b1b1f; --muted: #52525b; --border: #e4e4e7; --hairline: #d4d4d8;
+      --accent: #b45309; --accent-ink: #ffffff; --accent-soft: #fef3e2;
+      --node-fill: #f59e0b; --node-ink: #231303; --bar-track: #e4e4e7;
+      --code-bg: #f4f4f5; --ok: #1a7f37;
+    }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e10; --surface: #161619; --surface2: #1d1d21;
+      --text: #e6e6e9; --muted: #a1a1aa; --border: #2a2a2f; --hairline: #26262b;
+      --accent: #fbbf24; --accent-ink: #201302; --accent-soft: #2b2110;
+      --node-fill: #f59e0b; --node-ink: #231303; --bar-track: #2a2a2f;
+      --code-bg: #1d1d21; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--text);
+    line-height: 1.6; font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- nav ---------- */
+  nav { border-bottom: 1px solid var(--hairline); background: var(--bg); }
+  .nav-inner { height: 64px; display: flex; align-items: center; justify-content: space-between; }
+  .wordmark { font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--text); text-decoration: none; }
+  .wordmark span { color: var(--accent); }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 14.5px; transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a.gh { color: var(--text); font-weight: 600; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 72px 0 64px; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; }
+  .hero > * { min-width: 0; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 18px;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 4.6vw, 3.9rem); line-height: 1.06; letter-spacing: -0.03em;
+    font-weight: 760; margin-bottom: 20px; text-wrap: balance;
+  }
+  .hero-sub { color: var(--muted); font-size: 1.13rem; max-width: 46ch; margin-bottom: 32px; }
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 13px 26px; border-radius: var(--radius);
+    font-size: 15.5px; font-weight: 650; text-decoration: none; border: 1px solid transparent;
+    transition: transform .12s, background .15s, border-color .15s;
+  }
+  .btn:active { transform: translateY(1px) scale(0.99); }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { border-color: var(--border); color: var(--text); background: var(--surface); }
+  .btn-ghost:hover { border-color: var(--accent); }
+
+  /* ---------- live demo panel ---------- */
+  .demo {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 22px 18px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+  .demo-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .demo-title { font-weight: 700; font-size: 15px; }
+  .demo-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ok); }
+  .tree { display: flex; align-items: flex-start; justify-content: center; gap: 0; padding: 10px 0 4px; }
+  .node { width: 120px; text-align: center; position: relative; }
+  .node-circle {
+    width: 64px; height: 64px; border-radius: 50%; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-weight: 700; font-size: 22px;
+    background: var(--node-fill); color: var(--node-ink); border: 3px solid var(--node-fill);
+    cursor: pointer; transition: transform .12s; user-select: none;
+  }
+  .node-circle:active { transform: scale(0.96); }
+  .node.locked .node-circle { background: transparent; color: var(--muted); border: 2px dashed var(--border); cursor: default; }
+  .node-bar { height: 5px; border-radius: 3px; background: var(--bar-track); margin: 10px auto 0; width: 84px; overflow: hidden; }
+  .node-bar i { display: block; height: 100%; background: var(--node-fill); border-radius: 3px; }
+  .node-label { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .node-label b { color: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .tree-link { width: 56px; height: 2px; background: var(--hairline); margin-top: 32px; }
+  .sap-stat { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 2px 12px; }
+  .sap-stat .big { font-family: var(--mono); font-size: 26px; font-weight: 700; }
+  .sap-stat .rate { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .prestige-btn {
+    width: 100%; padding: 11px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 14.5px; font-weight: 650;
+    cursor: pointer; transition: border-color .15s, background .15s, transform .12s;
+  }
+  .prestige-btn.ready { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .prestige-btn:disabled { cursor: default; opacity: 0.75; }
+  .prestige-btn:not(:disabled):active { transform: translateY(1px); }
+  .upg-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .upg {
+    padding: 9px 8px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-family: inherit;
+    cursor: pointer; text-align: center; font-size: 12.5px;
+    transition: border-color .15s, opacity .15s;
+  }
+  .upg b { display: block; font-size: 13px; }
+  .upg small { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .upg.owned { border-color: var(--accent); color: var(--accent); cursor: default; }
+  .upg.owned small { color: var(--accent); opacity: 0.8; }
+  .upg:not(.owned):hover { border-color: var(--accent); }
+  .milestone {
+    margin-top: 12px; padding: 10px 12px; border-radius: var(--radius);
+    background: var(--surface2); font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  }
+  .milestone .m-label b { color: var(--accent); }
+  .milestone .m-label small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .auto-toggle {
+    font-family: var(--mono); font-size: 11.5px; padding: 5px 10px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
+  }
+  .auto-toggle.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+  .demo-cap { margin-top: 12px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  /* ---------- stats band ---------- */
+  .stats { border-block: 1px solid var(--hairline); padding: 34px 0; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .stat .num { font-family: var(--mono); font-size: 34px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .stat .lab { margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+  /* ---------- sections ---------- */
+  section { padding: 84px 0; }
+  .sec-head h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); letter-spacing: -0.02em; font-weight: 740; }
+  .sec-head p { color: var(--muted); margin-top: 10px; max-width: 60ch; }
+
+  /* pipeline: vertical rail */
+  .rail { margin-top: 44px; position: relative; }
+  .rail::before { content: ""; position: absolute; left: 19px; top: 8px; bottom: 8px; width: 1px; background: var(--hairline); }
+  .step { display: grid; grid-template-columns: 40px 190px 1fr; gap: 18px; padding: 13px 0; position: relative; }
+  .step-n { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--bg); width: 40px; padding-top: 3px; }
+  .step-verb { font-weight: 680; font-size: 16px; }
+  .step-desc { color: var(--muted); font-size: 15px; max-width: 62ch; }
+
+  /* install: split */
+  .install-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; margin-top: 44px; align-items: start; }
+  .install-grid > * { min-width: 0; }
+  .install-block { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 18px 20px; }
+  .install-block + .install-block { margin-top: 14px; }
+  .install-block h3 { font-size: 15px; margin-bottom: 6px; }
+  .install-block p { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; }
+  code.path {
+    display: block; font-family: var(--mono); font-size: 13px; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; overflow-x: auto; white-space: nowrap;
+  }
+  code.clone {
+    display: block; font-family: var(--mono); font-size: 12.5px; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+    word-break: break-all; margin-top: 14px; cursor: pointer;
+  }
+  .side-label { font-weight: 680; font-size: 16px; margin-bottom: 14px; }
+  .chip {
+    display: block; width: 100%; text-align: left; font-family: var(--mono); font-size: 13px;
+    padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); cursor: pointer; transition: border-color .15s;
+  }
+  .chip + .chip { margin-top: 10px; }
+  .chip:hover { border-color: var(--accent); }
+  .chip .hint { color: var(--muted); font-size: 11px; margin-left: 8px; }
+  .verify { margin-top: 22px; font-size: 13.5px; color: var(--muted); }
+  .verify code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: inline-block; margin-top: 6px; cursor: pointer;
+  }
+  .verify .expect { color: var(--ok); font-family: var(--mono); font-size: 12px; }
+
+  /* quality: grouped columns */
+  .qual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 44px; }
+  .qual-grid > * { min-width: 0; }
+  .qual-col h3 { font-size: 15px; font-weight: 700; padding-bottom: 12px; border-bottom: 1px solid var(--hairline); margin-bottom: 14px; }
+  .qual-col li { list-style: none; color: var(--muted); font-size: 14.5px; padding: 7px 0 7px 18px; position: relative; }
+  .qual-col li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: 0.85; }
+
+  /* footer */
+  footer { border-top: 1px solid var(--hairline); padding: 30px 0 40px; }
+  .foot-inner { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
+  .foot-inner a { color: var(--text); text-decoration: none; font-weight: 600; }
+  .foot-inner a:hover { color: var(--accent); }
+
+  /* copied feedback */
+  .copied { color: var(--ok) !important; }
+
+  /* load-in */
+  @media (prefers-reduced-motion: no-preference) {
+    .hero > * { animation: rise .55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .hero > *:nth-child(2) { animation-delay: 0.08s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 940px) {
+    .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 52px; }
+    .demo { max-width: 480px; }
+    .install-grid { grid-template-columns: 1fr; gap: 40px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); row-gap: 32px; }
+    .qual-grid { grid-template-columns: 1fr; gap: 32px; }
+    .step { grid-template-columns: 40px 1fr; }
+    .step-desc { grid-column: 2; }
+  }
+  @media (max-width: 640px) {
+    .nav-links a.hide-m { display: none; }
+    section { padding: 60px 0; }
+    .hero { padding-top: 40px; }
+    .upg-row { grid-template-columns: 1fr; }
+    .upg { display: flex; justify-content: space-between; align-items: center; }
+    .upg b { display: inline; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="#">tmt<span>gg</span></a>
+    <div class="nav-links">
+      <a href="#pipeline" class="hide-m">How it works</a>
+      <a href="#install" class="hide-m">Install</a>
+      <a href="#quality" class="hide-m">Quality bar</a>
+      <a class="gh" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="wrap hero">
+  <div>
+    <p class="eyebrow">Agent skill &middot; The Modding Tree v2.7</p>
+    <h1>One conversation, one playable game.</h1>
+    <p class="hero-sub">Your agent interviews you, designs the tree, writes and checks the code, then hands you a balanced game to play.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">Get the skill</a>
+      <a class="btn btn-ghost" href="#pipeline">See the pipeline</a>
+    </div>
+  </div>
+
+  <div class="demo" id="demo">
+    <div class="demo-head">
+      <span class="demo-title">The Sapling Tree</span>
+      <span class="demo-tag">live demo</span>
+    </div>
+    <div class="tree">
+      <div class="node">
+        <div class="node-circle" id="sNode" title="Sap fills over time. Click Prestige to convert it.">S</div>
+        <div class="node-bar"><i id="sBar" style="width:0%"></i></div>
+        <div class="node-label">sap <b id="sAmt">0.0</b></div>
+      </div>
+      <div class="tree-link"></div>
+      <div class="node locked" id="aNode">
+        <div class="node-circle" id="aCircle">?</div>
+        <div class="node-bar"><i id="aBar" style="width:0%"></i></div>
+        <div class="node-label"><span id="aName">locked</span> <b id="aAmt"></b></div>
+      </div>
+    </div>
+    <div class="sap-stat">
+      <span class="big" id="sapCount">0.0</span>
+      <span class="rate" id="sapRate">1.0 / sec</span>
+    </div>
+    <button class="prestige-btn" id="prestigeBtn" disabled>Prestige</button>
+    <div class="upg-row" id="upgRow"></div>
+    <div class="milestone">
+      <div class="m-label">
+        <b>Squirrels</b>
+        <small id="mDesc">auto-prestige unlocks at 12 total amber</small>
+      </div>
+      <button class="auto-toggle" id="autoBtn" hidden>AUTO OFF</button>
+    </div>
+    <p class="demo-cap">A real little game running on this page: prestige loop, upgrades, one automation milestone. Games from the full pipeline grow 10 to 25 layers.</p>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="wrap stats-grid">
+    <div class="stat"><div class="num">132</div><div class="lab">real TMT games measured to build the balance data</div></div>
+    <div class="stat"><div class="num">7</div><div class="lab">pipeline stages, from theme interview to test handoff</div></div>
+    <div class="stat"><div class="num">43</div><div class="lab">automated checks gating every generated build</div></div>
+    <div class="stat"><div class="num">2</div><div class="lab">complete games generated and play-tested during development</div></div>
+  </div>
+</div>
+
+<section id="pipeline" class="wrap">
+  <div class="sec-head">
+    <h2>How a game gets made</h2>
+    <p>Every run follows the same measured pipeline. Nothing skips a stage, and nothing ships before the checks pass.</p>
+  </div>
+  <div class="rail">
+    <div class="step"><div class="step-n">01</div><div class="step-verb">Interview</div><div class="step-desc">Seven questions lock theme, scale, natural ceilings, pacing, side content, and language. The theme dictates the tree, not just the names.</div></div>
+    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against eleven rules before any code exists.</div></div>
+    <div class="step"><div class="step-n">03</div><div class="step-verb">Scaffold</div><div class="step-desc">A fresh TMT v2.7 game folder with a permanent savefile id, patched and syntax-verified by a bundled script.</div></div>
+    <div class="step"><div class="step-n">04</div><div class="step-verb">Generate</div><div class="step-desc">Decimal-safe layer code: upgrades with varied effects, milestones, challenges, buyables, automation ladders, softcaps, theming.</div></div>
+    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">43 static rules run over the source. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
+    <div class="step"><div class="step-n">06</div><div class="step-verb">Balance</div><div class="step-desc">Era-by-era reachability math against the measured heuristics, with every compounding multiplier zone audited.</div></div>
+    <div class="step"><div class="step-n">07</div><div class="step-verb">Hand off</div><div class="step-desc">You serve the folder, play it, and verify the checklist: clean console, working saves, reachable endgame.</div></div>
+  </div>
+</section>
+
+<section id="install" class="wrap" style="padding-top: 0;">
+  <div class="sec-head">
+    <h2>Drop it in, then say go</h2>
+    <p>The folder is the skill. Copy it into your tool's skills directory; it ships its own handbook, scripts, and engine template.</p>
+  </div>
+  <div class="install-grid">
+    <div>
+      <div class="install-block">
+        <h3>ZCode</h3>
+        <p>User-level skills folder, shared across your tools:</p>
+        <code class="path" data-copy="~/.agents/skills/">~/.agents/skills/</code>
+      </div>
+      <div class="install-block">
+        <h3>Claude Code</h3>
+        <p>User-level skills folder:</p>
+        <code class="path" data-copy="~/.claude/skills/">~/.claude/skills/</code>
+      </div>
+      <div class="install-block">
+        <h3>Any other SKILL.md tool</h3>
+        <p>Copy the folder into whatever directory your tool scans for skills.</p>
+        <code class="clone" data-copy="git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator">git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator</code>
+      </div>
+    </div>
+    <div>
+      <p class="side-label">Then say one of these</p>
+      <button class="chip" data-copy="Make me an incremental game about beekeeping">"Make me an incremental game about beekeeping"<span class="hint">click to copy</span></button>
+      <button class="chip" data-copy="Build a prestige tree game around a space elevator">"Build a prestige tree game around a space elevator"<span class="hint">click to copy</span></button>
+      <button class="chip" data-copy="Generate a TMT mod tree where you brew tea">"Generate a TMT mod tree where you brew tea"<span class="hint">click to copy</span></button>
+      <p class="verify">To verify an install, run the bundled smoke tests from the skill folder:<br>
+      <code data-copy="node tests/run_tests.js">node tests/run_tests.js</code><br>
+      it should end with <span class="expect">ALL SMOKE TESTS PASSED</span>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="quality" class="wrap" style="padding-top: 0;">
+  <div class="sec-head">
+    <h2>What "finished" means</h2>
+    <p>A generated game ships only when every one of these holds. The rules come from measured corpus data and from real defects caught in earlier generated games.</p>
+  </div>
+  <div class="qual-grid">
+    <div class="qual-col">
+      <h3>Numbers</h3>
+      <ul>
+        <li>Requires ladders and cost curves taken from 132 measured games</li>
+        <li>First prestige within minutes; endgame reachable, never instant</li>
+        <li>Self-scaling effects budgeted so gains cannot compound out of control</li>
+      </ul>
+    </div>
+    <div class="qual-col">
+      <h3>Content</h3>
+      <ul>
+        <li>The theme decides tree topology, currencies, and hard caps</li>
+        <li>Effect-kind quotas prevent walls of identical flat multipliers</li>
+        <li>Microtabs organize layers before they become scroll walls</li>
+        <li>Challenges, clickables, and active loops land per blueprint quota</li>
+      </ul>
+    </div>
+    <div class="qual-col">
+      <h3>Verification</h3>
+      <ul>
+        <li>43 static checks pass before manual testing starts</li>
+        <li>Zero console errors across the whole playthrough</li>
+        <li>Saves, offline cap, and the win screen verified by hand</li>
+        <li>Rules hardened by two full games played end to end</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span>MIT licensed. Built on The Modding Tree v2.7 by Acamaeda. This project is not affiliated with the TMT team.</span>
+    <span>
+      <a href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
+      &nbsp;&nbsp;
+      <a href="https://github.com/chenf888/TMT-game-generator/blob/main/SKILL.md" target="_blank" rel="noopener">SKILL.md</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  /* ---------------- copy-to-clipboard ---------------- */
+  document.querySelectorAll("[data-copy]").forEach(function (el) {
+    el.addEventListener("click", function () {
+      var text = el.getAttribute("data-copy");
+      function done() {
+        var old = el.innerHTML;
+        el.classList.add("copied");
+        el.innerHTML = "copied";
+        setTimeout(function () { el.innerHTML = old; el.classList.remove("copied"); }, 1200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, done);
+      } else { done(); }
+    });
+  });
+
+  /* ---------------- The Sapling Tree ---------------- */
+  var S = { sap: 0, amber: 0, totalAmber: 0, auto: false, autoUnlocked: false,
+            upg: { u1: false, u2: false, u3: false } };
+  var UPGS = [
+    { id: "u1", name: "Sunlight",  cost: 1, mult: 2 },
+    { id: "u2", name: "Rainwater", cost: 3, mult: 3 },
+    { id: "u3", name: "Deep roots", cost: 8, mult: 4 }
+  ];
+  var MILESTONE_AT = 12, AUTO_AT = 100;
+  var $ = function (id) { return document.getElementById(id); };
+  var last = Date.now();
+
+  function mult() { return UPGS.reduce(function (m, u) { return m * (S.upg[u.id] ? u.mult : 1); }, 1); }
+  function gain() { return (1 + 0.5 * S.amber) * mult(); }
+  function prestigeGain() { return Math.floor(Math.sqrt(S.sap / 10)); }
+  function fmt(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+    if (n >= 1e4) return (n / 1e3).toFixed(1) + "k";
+    if (n >= 100) return String(Math.floor(n));
+    return n.toFixed(1);
+  }
+
+  function buildUpgrades() {
+    var row = $("upgRow");
+    UPGS.forEach(function (u) {
+      var b = document.createElement("button");
+      b.className = "upg"; b.id = "btn-" + u.id;
+      b.innerHTML = "<b>" + u.name + "</b><small></small>";
+      b.addEventListener("click", function () {
+        if (S.upg[u.id] || S.amber < u.cost) return;
+        S.amber -= u.cost; S.upg[u.id] = true; render();
+      });
+      row.appendChild(b);
+    });
+  }
+
+  function doPrestige() {
+    var g = prestigeGain();
+    if (g < 1) return;
+    S.amber += g; S.totalAmber += g; S.sap = 0;
+    if (!S.autoUnlocked && S.totalAmber >= MILESTONE_AT) S.autoUnlocked = true;
+    render();
+  }
+
+  function render() {
+    var g = prestigeGain();
+    var btn = $("prestigeBtn");
+    if (g >= 1) {
+      btn.disabled = false; btn.className = "prestige-btn ready";
+      btn.textContent = "Prestige for +" + g + " amber";
+    } else {
+      btn.disabled = true; btn.className = "prestige-btn";
+      btn.textContent = "Prestige";
+    }
+    var unlocked = S.totalAmber > 0;
+    var aNode = $("aNode");
+    aNode.className = unlocked ? "node" : "node locked";
+    $("aCircle").textContent = unlocked ? "A" : "?";
+    $("aName").textContent = unlocked ? "amber" : "locked";
+    $("aAmt").textContent = unlocked ? fmt(S.amber) : "";
+    var p = prestigeGain();
+    var lo = 10 * p * p, hi = 10 * (p + 1) * (p + 1);
+    $("sBar").style.width = (Math.max(0, Math.min(1, (S.sap - lo) / (hi - lo))) * 100) + "%";
+    $("aBar").style.width = (Math.min(1, S.totalAmber / MILESTONE_AT) * 100) + "%";
+    UPGS.forEach(function (u) {
+      var b = $("btn-" + u.id);
+      var small = b.querySelector("small");
+      if (S.upg[u.id]) { b.className = "upg owned"; small.textContent = "owned"; }
+      else {
+        b.className = "upg";
+        small.textContent = "cost " + u.cost + " amber" + (S.amber >= u.cost ? "" : " - need " + fmt(u.cost - S.amber));
+      }
+    });
+    if (S.autoUnlocked) {
+      $("mDesc").textContent = "auto-prestige at " + AUTO_AT + " sap";
+      var ab = $("autoBtn");
+      ab.hidden = false;
+      ab.textContent = S.auto ? "AUTO ON" : "AUTO OFF";
+      ab.className = "auto-toggle" + (S.auto ? " on" : "");
+    }
+  }
+
+  function tick() {
+    var now = Date.now(), dt = Math.min(1, (now - last) / 1000); last = now;
+    S.sap += gain() * dt;
+    if (S.autoUnlocked && S.auto && S.sap >= AUTO_AT) doPrestige();
+    $("sapCount").textContent = fmt(S.sap);
+    $("sAmt").textContent = fmt(S.sap);
+    $("sapRate").textContent = gain().toFixed(1) + " / sec";
+    render();
+  }
+
+  $("prestigeBtn").addEventListener("click", doPrestige);
+  $("autoBtn").addEventListener("click", function () { S.auto = !S.auto; render(); });
+  buildUpgrades();
+  render();
+  setInterval(tick, 100);
+})();
+</script>
+</body>
+</html>
