@@ -79,6 +79,7 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             "D-EFFECTMONO",    // layers m (12/16 flat) and n (8/8 constants) (10 §2)
             "D-MECHQUOTA",     // 4 main layers, zero interactive components (10 §5)
             "M-CHARSET",       // fixture-bad index.html has no charset meta (phase-⑥ incident)
+            "N-PGBOOL",        // layer a: passiveGeneration returns a boolean, not a number
         ];
         ok(status === 1, "exit code 1 (FAILs present)", `status=${status}`);
         for (const rule of expectedFails)

@@ -64,6 +64,13 @@
  *     N-SELFTOTAL   (FAIL ≥1 / WARN ≥0.75) Σ self-scaling exponents a layer wires into its own
  *                   gainMult via player[this.layer].points.pow(p) effects — Σp ≥ 1 compounds
  *                   superlinearly per prestige and explodes within the layer (y summed 1.25)
+ *     N-PGBOOL      (WARN) passiveGeneration() returns a bare boolean. The docs promise a plain
+ *                   NUMBER: stock v2.7 only coerces true→1 via a temp.js normalization line, and
+ *                   new Decimal(true) is ZERO — so forks or custom code reading
+ *                   tmp[layer].passiveGeneration as a Decimal silently zero it. Decimals are also
+ *                   wrong here: game.js does diff * passiveGeneration, which is NaN for objects.
+ *                   Return 1 / 0 / 0.5 — plain numbers only (found via a player report on a
+ *                   generated game)
  *
  * The scanner is comment/string/template-literal aware (same pitfalls catalogued in
  * crawl/extract_metrics.js: apostrophes in comments, CR line endings, interpolation braces).
@@ -965,6 +972,32 @@ function layerUpgradeSpans(rec, L) {
         else if (sum > 0)
             pass("N-SELFTOTAL", `layer "${L.id}" self-scaling Σ${sum.toFixed(2)} ok`);
     }
+}
+
+// N-PGBOOL — passiveGeneration() must return a plain NUMBER (1 / 0 / 0.5). Bare booleans only
+// work because stock v2.7 normalizes true→1 in temp.js (new Decimal(true) is ZERO), and a
+// Decimal return NaNs in game.js's `diff * passiveGeneration` multiply. Found via a player
+// report on a generated game.
+{
+    let boolPg = 0;
+    for (const L of layers) {
+        const pgM = L.code.match(/passiveGeneration\s*\(/);
+        if (!pgM) continue;
+        const body = functionBody(L.code, pgM.index);
+        const retM = body && body.match(/return\s+([^;}]+)/);
+        if (!retM) continue;
+        const ret = retM[1].trim();
+        const booleanish = /\b(hasMilestone|hasAchievement|hasChallenge|hasUpgrade|true|false)\b/.test(ret);
+        // strip the has*() calls (their milestone-index args contain digits!) and see if an
+        // actual amount remains: "hasMilestone("c", 0) ? 1 : 0" -> " ? 1 : 0" (explicit),
+        // "hasMilestone("c", 0)" -> "" (a bare boolean), "hasMilestone(...) || hasAchievement(...)" -> " || "
+        const stripped = ret.replace(/has(?:Milestone|Achievement|Challenge|Upgrade)\s*\((?:[^()]|\([^()]*\))*\)/g, "");
+        if (booleanish && !/\d/.test(stripped) && !/new\s+Decimal/.test(stripped)) {
+            boolPg++;
+            add(WARN, "N-PGBOOL", L.file, L.start, `layer "${L.id}" passiveGeneration() returns a bare boolean (${ret.slice(0, 70)}) — the docs promise a plain number; stock v2.7 coerces true to 1 only via a temp.js normalization line, new Decimal(true) is ZERO (any Decimal context silently disables it), and a Decimal return would NaN in the engine's diff multiply`, 'Return an amount: passiveGeneration() { if (hasMilestone("x", 0)) return 1 } — fractional rates like 0.5 are valid; return 0 or omit the function to disable.');
+        }
+    }
+    if (boolPg === 0) pass("N-PGBOOL", "passiveGeneration returns plain numbers");
 }
 
 // ---------------------------------------------------------------------------

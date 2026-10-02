@@ -211,6 +211,13 @@ the brief's table:
   also accepts `|| hasUpgrade("<parent>", <id>)` (heals saves that bought it before the hook
   existed). `layerShown() { return player.X.unlocked }` with no onPurchase writer anywhere
   dead-ends the tree after layer 1 — static rule N-UNLOCKDEAD.
+- **Automation functions return typed values** — `passiveGeneration()` returns a plain NUMBER
+  (`if (hasMilestone("x", 0)) return 1`; fractional rates like `0.5` are valid; `return 0` or omit
+  the function to disable). Never a bare boolean: stock v2.7 only coerces `true`→1 via a temp.js
+  normalization line and `new Decimal(true)` is ZERO, so any fork or custom layer reading it as a
+  Decimal silently gets 0. Never a Decimal either: the engine computes `diff * passiveGeneration`,
+  which is NaN for objects. `autoPrestige()`/`autoUpgrade()` stay booleans (truthiness-only).
+  Static rule N-PGBOOL.
 - **Self-scaling budget** — at most ONE upgrade per layer may read the layer's own
   `points` and raise it to a power (≤0.5, softcapped). Never wire two self-mults into one
   `gainMult`: the exponents SUM and Σp ≥ 1 compounds superlinearly per prestige (a real
@@ -297,7 +304,9 @@ node scripts/static_checks.js "<game-folder>"
   with no onPurchase writer — tree dead-ends), `N-UNLOCKTEXT` (WARN, unlock-promising
   upgrade with no onPurchase/layerShown ref), `N-CAPMULT` (FAIL, cap-valued effect wired
   into getPointGen — base currency ×1e12+), `N-SELFTOTAL` (FAIL Σ ≥1 / WARN ≥0.75, Σ
-  self-scaling exponents wired into one layer's gainMult — superlinear compounding).
+  self-scaling exponents wired into one layer's gainMult — superlinear compounding), `N-PGBOOL`
+  (WARN, `passiveGeneration()` returning a bare boolean or Decimal instead of a plain number —
+  boolean relies on a stock-only engine coercion, Decimal NaNs in the engine's diff multiply).
 - Use `--json` for machine-readable output. Fixture-proof: `tests/fixture-good` passes clean,
   `tests/fixture-bad` triggers every rule (run `node tests/run_tests.js` to re-verify).
 
@@ -350,6 +359,7 @@ Give the user these instructions (and the 07 Part D checklist):
 | Layer node missing from tree | file not in modFiles, `row` wrong, `layerShown()` false — or the layer gates on `player.X.unlocked` that nothing ever sets: give the unlock upgrade `onPurchase()` (N-UNLOCKDEAD) |
 | Something runs 20×/sec | custom action-function not registered in `doNotCallTheseFunctionsEveryTick` |
 | Numbers explode / game beat in minutes | three causes, check in order: a cap-valued `upgradeEffect` wired into `getPointGen()` (N-CAPMULT), Σ self-scaling exponents in a `gainMult` ≥ 1 (N-SELFTOTAL), or a missing softcap (P12) — fix the formula, then rebalance the era's requires in the brief |
+| Passive generation never kicks in, or a fork/custom layer sees it as 0 | `passiveGeneration()` returned a boolean or Decimal (N-PGBOOL): `new Decimal(true)` is 0 and `diff * Decimal` is NaN — return a plain number (`if (hasMilestone(...)) return 1`) |
 | Engine misbehavior you can't explain | check `references/core/07` Part B for deprecated features (challenge `goal:`, `goalTooltip`) |
 
 ## Constraints (do not violate)

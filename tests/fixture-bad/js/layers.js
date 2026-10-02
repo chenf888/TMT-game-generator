@@ -13,6 +13,7 @@ addLayer("a", {
     type: "normal",
     exponent: 0.5,
     gainMult() { return new Decimal(1) },
+    passiveGeneration() { return hasMilestone("c", 0) },  // [N-PGBOOL] boolean, not a number
     layerShown() { return true },
     hotkeys: [
         { key: "a", description: "A: Reset for prestige points", onPress() { if (canReset(this.layer)) doReset(this.layer) } },
