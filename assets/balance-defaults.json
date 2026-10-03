@@ -3,7 +3,71 @@
     "name": "TMT balance defaults (measured corpus heuristics)",
     "source": "TMT-Reference/09-Layer-Design-Patterns.md, §4 Balance heuristics table (measured over 132 published games / 770+ layers); some rows cite §2 patterns P1–P17 for detail",
     "usage": "Use these as DEFAULT numbers when filling the design brief and generating code. The Stage-2 self-check and Stage-6 balance walkthrough verify generated numbers against these ranges. A deviation is allowed only when written down in the design brief with a reason (theme ceiling, idle-first pacing, or scope).",
-    "version": "1.0.0 (2026-10-01, phase ⑤)"
+    "version": "1.2.0 (2026-10-03, phases ⑧ + handbook 12 — added corpusBaselines and authorPacingTargets)"
+  },
+  "corpusBaselines": {
+    "_source": "Full numeric archive of 329 real TMT games (36,111,909 bytes): 1,156 layers, 29,141 component entities, every entry traceable to file+line. Full guide: E:\\Idle-Skill\\archive\\TMT_生成式AI增量游戏数值设计指南.md. These are DESCRIPTIVE baselines for judging whether generated content looks like real TMT content — not prescriptive targets.",
+    "corpus": {
+      "files": 329,
+      "layers": 1156,
+      "upgrades": 13746,
+      "challenges": 521,
+      "milestones": 5369,
+      "achievements": 3032,
+      "buyables": 2875,
+      "clickables": 2664,
+      "bars": 275,
+      "infoboxes": 336,
+      "microtabs": 323,
+      "note": "challenges are only 1.8% of all components — the component mass is upgrades + milestones + achievements. A generator that splits types evenly does not look like a real game."
+    },
+    "layerDensity": {
+      "p25": 6, "median": 15, "p75": 29, "p90": 56, "p99": 313, "max": 486,
+      "shareAtOrBelow40": 83.7,
+      "layersWithComponents": 993,
+      "generationRange": [8, 30],
+      "note": "REPLACES the old qualitative '10+ upgrades + 3-5 milestones' floor with a measured distribution. The 486-component layer is a top-0.1% outlier, not a model."
+    },
+    "layersPerGame": { "median": 11, "p90": 41, "max": 74, "filesWithExactly1Layer": 191 },
+    "rowDistribution": { "0": 231, "1": 275, "2": 138, "3": 98, "4": 49, "5": 26, "6": 21, "7": 5,
+      "note": "long decaying tail = the prestige-rhythm curve. Flat layer counts per row read as a flat game." },
+    "exponent": { "absent": 386, "0.5": 17, "1": 62, "2": 15, "3": 10, "4+": 6,
+      "note": "0.5 / 1 / 2 dominate; 386 layers omit the field entirely (tab/side layers)." },
+    "requiresForm": { "decimal-literal": 474, "function": 163, "expression": 141, "identifier": 73, "arrow": 30,
+      "note": "41% of layers gate on a plain literal." },
+    "layerType": { "normal": 384, "none": 292, "static": 196, "custom": 118, "absent": 163 },
+    "upgradeCost": {
+      "form": { "decimal-literal": 6716, "function": 3251, "expression": 2454, "arrow": 822, "identifier": 190, "absent": 262 },
+      "growth": { "constant": 6765, "dynamic": 4073, "exponential": 1450, "expression": 1004 },
+      "literalMagnitudes": { "sample": 5038, "atOrAbove1e10": 1948, "shareAtOrAbove1e10": 38.7 },
+      "ladderSpanOrdersTarget": 6,
+      "note": "Half of real upgrade costs are hand-written constants; only 10.6% are exponential. Cost ladders in real layers span 6+ orders of magnitude (worked example: c0v1d layer 's' runs 5e3 -> Decimal.pow(10, 545766), with a deliberate cheap 'key' upgrade at 7). A pure geometric ladder is NOT the real shape — and a cost drop is a legitimate rhythm device, not a bug."
+    },
+    "upgradeEffects": {
+      "withEffect": 6274, "withoutEffect": 7472, "withoutEffectShare": 0.544,
+      "opFrequency": { "pow": 4830, "add": 3364, "log10": 3350, "mul_or_times": 1652, "sqrt": 61, "softcap": 39 },
+      "unlockGating": { "referencesUpgrade": 9079, "referencesMilestone": 967 },
+      "note": "THE headline finding: 54.4% of real upgrades carry NO effect() — their power is wired into the layer's gainMult()/gainExp()/passiveGeneration(), which branch on the upgrade being owned. An effect() nobody reads is a lie; it renders in effectDisplay() and changes nothing. Static rule N-UNWIRED. Also: power/log shapes outnumber plain multiplies ~3:1, so an all-times(2) layer looks unfinished (D-EFFECTSHAPE)."
+    },
+    "softcaps": { "layersDefiningSoftcap": 69, "shareOfLayers": 0.06,
+      "typicalForm": "a constant that an upgrade later raises, e.g. softcap(){ let C = new Decimal(\"e1.8e12\"); if (hasUpgrade('x', 14)) C = new Decimal(\"e30000000000003\"); return C }",
+      "note": "Only 6% of layers define one — but they are what keep the late game from exploding. The default is: set a LOW constant cap and sell the raise as an upgrade." },
+    "gridLayouts": { "collectionsUsingRowsCols": 920,
+      "commonShapes": { "upgrades 5x5": 70, "buyables 3x3": 57, "buyables 1xN": 42, "challenges 2xN": 41 },
+      "note": "Grid shape is pacing, not decoration: a 5x5 upgrade block reads very differently from a 1x3 buyable strip." },
+    "buyables": { "total": 2875, "costIsFunction": 2598, "shareFunctionCost": 0.904,
+      "note": "Let the engine price buyables via cost_base/cost_mult. Hand-writing 90% of buyable cost functions re-implements the engine and makes them harder to balance." },
+    "engineFieldFacts": {
+      "challengesRepeatable": true,
+      "challengesRepeatableField": "completionLimit (number; engine defaults it to 1 — js/technical/layerSupport.js:109-110; 374 real uses)",
+      "challengeWinCondition": "canComplete()",
+      "challengeRewardRendered": "rewardDescription — `reward:` renders a BLANK line (js/components.js:148)",
+      "milestonesPersistentByDefault": true,
+      "layerAchievementCondition": "done() — condition() is never evaluated (0 of 3,032 real achievements use it)",
+      "standaloneComponentCalls": 0,
+      "standaloneNote": "addBuyable/addClickable/addAchievement/addGrid/addBar are called 0 times across 329 real games — components are inlined in addLayer().",
+      "caveat": "Absence in the corpus proves a field is UNUSED, never that it is UNSUPPORTED. Field legality must be checked against references/core/04 and the engine source; corpus is for convention, not validity."
+    }
   },
   "firstLayerRequires": {
     "range": [2, 10],
@@ -105,6 +169,35 @@
     "rule": "10+ upgrades + 3–5 milestones per main layer",
     "evidence": "high-rated games: ~15 (Mining) to ~27 (Mario Maker 2) content items per main layer; low-rated: ~5–7",
     "source": "09 §1.1 read of the table; §5 A4"
+  },
+  "authorPacingTargets": {
+    "_source": "references/design/12-Author-Design-Wisdom.md — design notes by Acamaeda (the TMT author), 2020-10..2023-04. These outrank the corpus statistics where they disagree.",
+    "firstBoostSeconds": 10,
+    "firstBoostNote": "It should not take more than 10 seconds to get the very first boost in the game (2021-05-20). Enforced in practice by keeping the row-0 first upgrade at cost ~1.",
+    "firstUpgradeCost": { "range": [0.5, 10], "default": 1,
+      "note": "Combined with base gain new Decimal(1)/sec this lands the first purchase inside the 10s budget." },
+    "minimumGainPerReset": "if a reset cycle runs longer than a minute, EVERY reset must pay something — more currency carried in, or a new purchase (2020-10-07)",
+    "resetSpeedup": "a major reset must speed the game up from the first second, not after automation comes online (2020-10-07)",
+    "resetBudgetTarget": "each new layer gets the player to the point of the next one, then visibly slows there (2020-10-07)",
+    "costScalingOverSoftcap": "cost scaling is the primary shaping tool; softcaps only where a loop would truly run away, because a softcapped x10 reads as less than x10 to the player (2022-07-04)",
+    "softcapUpgradeRequiresVisibility": "only sell a cap-raising upgrade if the cap is visible to the player (2021-02-24)",
+    "staticCurrencyNeedsBuyMaxEarly": "static currencies require unlockable buy-max early, or the loop is a thousand identical clicks (2020-10-07)",
+    "scaleAtZero": "an upgrade that scales with the currency spent must still give a real bonus at zero (2020-10-07)",
+    "exponentNotForEarly": "exponents are weak on small values and make bad early upgrades; use flat/absolute bonuses in the first layer (2020-10-07)",
+    "hardResetForbidden": "never hard reset the player — not for cheating, not for inflation (use fixOldSaves) (2020-10-07)",
+    "gatesByThreshold": "never gate a paid layer behind a purchase; use a milestone / requires / display-text threshold (2022-06-26)",
+    "unlockAlongsideFeatures": "reveal upgrades alongside new features, never one at a time (2022-07-03)",
+    "productionVsQoLSplit": "never force a choice between production and QOL from one static pool — separate sources, orderable upgrades, or a tech tree (2021-02-24)",
+    "maxEffectsPerUpgrade": 2,
+    "maxEffectsNote": "one production bonus per upgrade; 3+ effects is never needed (2021-02-24). Two is allowed only across genuinely distinct resources.",
+    "noMetaUpgrades": "never boost another upgrade's effect; boost resources or named mechanics instead (2021-02-24) — narrows effect-kind K4",
+    "milestonesVsAchievements": "past ~15 milestones per layer, prefer achievements — they are more compact and easier to reach back through (2021-09-09)",
+    "staticLayerAutomation": "automate static layers with resetsNothing + autoPrestige; normal layers with passiveGeneration (2020-10-07)",
+    "automationDefaultsOn": "set toggleable automation true when it unlocks; most players would rather have it running (2022-09-27)",
+    "displaySpentCurrency": "if a tab spends a currency often, display that currency in the tab (2022-07-05)",
+    "noInternalNames": "never show buyable ids, prestige exponents, upgrade ids or the raw points name to the player (2021-02-24)",
+    "noArrowFunctions": "never use () => for layer/component functions — they have no own `this` (2020-10-07). Static rule N-ARROWTHIS.",
+    "expantaNumProhibited": "ExpantaNum/TMT+ performs badly and is unsupported until you exceed Break_Eternity (1.8e308 e's) — use Decimal (2021-05-20)"
   },
   "whenDefaultsMustMove": {
     "themeWithNaturalCeilings": "hard-cap via softcap(x, cap, 0) and stop that currency's ladder at the cap (Gaokao: exam score 150)",

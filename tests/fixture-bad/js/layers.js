@@ -154,3 +154,81 @@ addLayer("n", {
         23: { title: "Flat 9", description: "Nonuple flat point gain.", cost: new Decimal(1e7), effect() { return new Decimal(9) }, effectDisplay() { return format(this.effect()) + "x" } },
     },
 })
+
+// [N-UNWIRED][FAIL] upgrades 31 and 32 define effect() but nothing in the mod files ever
+//   references their ids — the effects are never read, so buying them changes nothing.
+// [D-COSTSPAN][WARN] 8 literal costs inside a 1.4-order band — a flat ladder.
+addLayer("z", {
+    name: "unwired",
+    symbol: "Z",
+    position: 0,
+    startData() { return { unlocked: true, points: new Decimal(0), best: new Decimal(0) } },
+    color: "#4BDCFF",
+    resource: "unwired points",
+    row: 3,
+    baseResource: "flat points",
+    baseAmount() { return player.n.points },
+    requires: new Decimal(5e9),                    // [D-REQRATIO] x1e6 jump from row 2's 5000, far outside the x10-x100 band
+    type: "normal",
+    exponent: 0.5,
+    tabFormat: ["main-display", "prestige-button", "upgrades"],
+    gainMult() { return new Decimal(1) },
+    gainExp() { return new Decimal(1) },
+    layerShown() { return true },
+    upgrades: {
+        11: { title: "Cheap A", description: "Flat.", cost: new Decimal(1), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        12: { title: "Cheap B", description: "Flat.", cost: new Decimal(2), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        13: { title: "Cheap C", description: "Flat.", cost: new Decimal(4), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        14: { title: "Cheap D", description: "Flat.", cost: new Decimal(8), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        15: { title: "Cheap E", description: "Flat.", cost: new Decimal(16), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        21: { title: "Cheap F", description: "Flat.", cost: new Decimal(32), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        22: { title: "Cheap G", description: "Flat.", cost: new Decimal(64), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        31: { title: "Orphan A", description: "Doubles flat-point gain.", cost: new Decimal(500), effect() { return new Decimal(2) }, effectDisplay() { return format(this.effect()) + "x" } },
+        32: { title: "Orphan B", description: "Triples flat-point gain.", cost: new Decimal(900), effect() { return new Decimal(3) }, effectDisplay() { return format(this.effect()) + "x" } },
+    },
+})
+
+// Handbook-12 rule injections (2026-10-03, design notes by the TMT author):
+//   [N-ARROWTHIS]  gainMult written as an arrow function that uses `this`
+//   [N-CONTRAST]   color too dark to read as text on the page background #0f0f0f
+//   [N-HOTKEYDESC] hotkey description omits the key itself
+//   [N-UNLOCKPAYGATE] an "unlock" upgrade gating layer "n", which still charges requires
+addLayer("w", {
+    name: "wisdom",
+    symbol: "W",
+    position: 0,
+    startData() { return { unlocked: true, points: new Decimal(0) } },
+    color: "#141414",                    // [N-CONTRAST] unreadable as text on #0f0f0f
+    resource: "wisdom shards",
+    row: 4,
+    baseResource: "unwired points",
+    baseAmount() { return player.z.points },
+    requires: new Decimal(1e6),
+    type: "normal",
+    exponent: 0.5,
+    tabFormat: ["main-display", "prestige-button", "upgrades"],
+    gainMult: () => {                    // [N-ARROWTHIS] arrow + `this` = undefined context
+        let ret = new Decimal(1)
+        if (hasUpgrade("w", 11)) ret = ret.times(player[this.layer].points.add(1).log10())
+        return ret
+    },
+    gainExp() { return new Decimal(1) },
+    layerShown() { return true },
+    hotkeys: [
+        { key: "w", description: "Reset for wisdom shards", onPress() { if (canReset(this.layer)) doReset(this.layer) } },
+    ],
+    upgrades: {
+        11: {
+            title: "Shaper",
+            description: "Wisdom scales with your shards.",
+            cost: new Decimal(1e3),
+            effect() { return player.w.points.add(1).log10() },
+        },
+        12: {
+            title: "Ticket to n",
+            description: "Unlocks the unwired layer n.",
+            cost: new Decimal(1e6),
+            onPurchase() { player.n.unlocked = true },   // [N-UNLOCKPAYGATE] layer n still has requires
+        },
+    },
+})

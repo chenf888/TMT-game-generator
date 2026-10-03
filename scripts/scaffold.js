@@ -188,9 +188,29 @@ function patchModJs(src, opts, modId) {
 
     out = out.slice(0, objOpen) + info + out.slice(objClose + 1);
 
-    // --- VERSION (outside modInfo; the literals are unique to it)
-    [out,] = replaceOnce(out, 'num: "0.0"', 'num: "0.1"', "VERSION.num", patches);
-    [out,] = replaceOnce(out, 'name: "Literally nothing"', 'name: "Initial build"', "VERSION.name", patches);
+    // --- VERSION block. Templates differ: TMT-master ships num "0.0" / name
+    //     "Literally nothing"; the Nebula re-skeleton ships num "1.0" / name
+    //     "Nebula". Patch whatever version line exists inside `let VERSION = {...}`.
+    const verStart = out.indexOf("let VERSION");
+    if (verStart >= 0) {
+        const verOpen = out.indexOf("{", verStart);
+        const verEnd = out.indexOf("}", verOpen);
+        if (verOpen > 0 && verEnd > verOpen) {
+            let ver = out.slice(verStart, verEnd + 1);
+            [ver,] = replaceOnce(ver, 'num: "0.0"', 'num: "0.1"', "VERSION.num", patches);
+            if (!/num:\s*"0\.1"/.test(ver)) {
+                ver = ver.replace(/num:\s*"[^"]*"/, 'num: "0.1"');
+                if (!patches.includes("VERSION.num")) patches.push("VERSION.num");
+            }
+            [ver,] = replaceOnce(ver, 'name: "Literally nothing"', 'name: "Initial build"', "VERSION.name", patches);
+            if (!/name:\s*"Initial build"/.test(ver)) {
+                ver = ver.replace(/name:\s*"[^"]*"/, 'name: "Initial build"');
+                if (!patches.includes("VERSION.name")) patches.push("VERSION.name");
+            }
+            out = out.slice(0, verStart) + ver + out.slice(verEnd + 1);
+        }
+    }
+    if (!/VERSION\s*=\s*\{[\s\S]*?num:\s*"0\.1"/.test(out)) die("js/mod.js: could not patch VERSION.num");
 
     // --- changelog placeholder (replace the whole first template literal)
     const changelogRe = /let changelog = `[\s\S]*?`/;
@@ -251,7 +271,15 @@ function main() {
     console.log(`Template : ${templateDir}`);
     console.log(`Output   : ${outDir}`);
     console.log(`Copying template ...`);
-    fs.cpSync(templateDir, outDir, { recursive: true, verbatimSymlinks: false });
+    // Never carry the template's own .git (history bloat + locked pack files on Windows).
+    fs.cpSync(templateDir, outDir, {
+        recursive: true,
+        verbatimSymlinks: false,
+        filter: (src) => {
+            const rel = path.relative(templateDir, src);
+            return rel === "" || !rel.split(path.sep)[0].startsWith(".git");
+        },
+    });
 
     // Patch index.html: ensure a charset meta so theme glyphs (×, —, emoji) survive
     // any static server (M-CHARSET: without it some servers render them as mojibake).

@@ -71,6 +71,49 @@
  *                   wrong here: game.js does diff * passiveGeneration, which is NaN for objects.
  *                   Return 1 / 0 / 0.5 — plain numbers only (found via a player report on a
  *                   generated game)
+ * Phase-⑧ corpus rules (2026-10-03, from the full numeric archive of 329 real TMT games —
+ *   E:\Idle-Skill\archive\, guide §1–§2). Every threshold below is a MEASURED corpus value,
+ *   not a guess:
+ *     N-UNWIRED    (FAIL) an upgrade defines effect() but its id is referenced NOWHERE else in
+ *                   the mod files — the effect is never read and buying it changes nothing.
+ *                   Corpus: 7,472 of 13,746 upgrades (54.4%) have no effect() of their own
+ *                   because their power is wired into gainMult/gainExp/passiveGeneration instead;
+ *                   only 2 of 1,156 layers do that wiring inside their own file. This is the
+ *                   #1 way a generated TMT game runs perfectly and does nothing.
+ *     D-LOCALWIRE  (WARN) a main layer with >=3 effect-bearing upgrades whose gainMult/gainExp/
+ *                   passiveGeneration/update reference NONE of them
+ *     N-GHOSTFIELD (WARN) component keys the engine never reads: challenges{reward, repeatable,
+ *                   canBypass, countTowardsCompletion}, milestones{persistent},
+ *                   achievements{condition, secret}, layer{grids}. Grounded in the engine
+ *                   source, NOT in corpus absence: js/components.js:148 renders
+ *                   rewardDescription (not reward) and js/technical/layerSupport.js:109-110
+ *                   defaults completionLimit to 1, so challenges ARE repeatable.
+ *     D-EFFECTSHAPE (WARN) all of a layer's effects are flat multiplies — corpus op frequencies
+ *                   are pow 4,830 / add 3,364 / log 3,350 / mul 1,652 / softcap 39
+ *     D-COSTSPAN   (WARN) a layer's literal costs span <3 orders of magnitude — corpus: 38.7% of
+ *                   the 5,038 literal costs are >=1e10; real ladders span 6+ orders
+ * Handbook-12 rules (2026-10-03) — design notes by Acamaeda, the author of TMT
+ *   (2020-10 .. 2023-04), collected in references/design/12-Author-Design-Wisdom.md.
+ *   These outrank the corpus statistics where the two disagree.
+ *     N-ARROWTHIS   (FAIL) a layer/component hook written as an arrow function whose body
+ *                   uses `this`. Arrows have no own `this`, so this.layer / this.id are
+ *                   undefined and the component context is lost ("Don't use the () =>
+ *                   notation because you can't use the 'this' keyword", 2020-10-07).
+ *     N-CONTRAST    (WARN, aggregated) layer colors too dark to read as TEXT on the page
+ *                   background #0f0f0f (css/general-style.css:5). The engine renders the
+ *                   layer's currency amount in this color (js/components.js:239), so a dark
+ *                   color hides the player's own balance. The opposite direction (pale color
+ *                   behind the near-white upgrade-button highlight, js/components.js:176) is
+ *                   design guidance, not a defect: the tree node needs a LIGHT color behind
+ *                   dark text (css/tree-node.css:7), so the two uses cannot both be satisfied
+ *                   by one value without restyling ("your layer colors make the text hard to
+ *                   read", 2023-04-17).
+ *     N-UNLOCKPAYGATE (WARN, aggregated) an upgrade whose job is to admit the player to a
+ *                   layer that still charges a `requires` toll — pay twice, second price
+ *                   invisible ("not good to have to buy an upgrade to unlock something you
+ *                   also have to pay to use", 2022-06-26). Use a threshold instead.
+ *     N-HOTKEYDESC  (WARN) a hotkey whose description text omits the key itself
+ *                   ("You need to have the key in the description", 2020-10-07).
  *
  * The scanner is comment/string/template-literal aware (same pitfalls catalogued in
  * crawl/extract_metrics.js: apostrophes in comments, CR line endings, interpolation braces).
@@ -446,7 +489,11 @@ for (const f of allModderCandidates) {
             add(FAIL, "D-DUPID", f, L.start, `duplicate layer id "${L.id}"`, "Layer ids must be unique — a collision breaks the registry and the tree.");
         layerIds.add(L.id);
 
-        const info = { id: L.id, file: f, code: L.code, start: L.start, end: L.end, type: "none", row: null, rowDyn: false, isSide: false, isUtility: false, requiresNum: null, requiresDyn: false };
+        const info = { id: L.id, file: f, code: L.code, start: L.start, end: L.end, type: "none", row: null, rowDyn: false, isSide: false, isUtility: false, requiresNum: null, requiresDyn: false, color: null };
+        {
+            const cm = L.code.match(/\bcolor\s*:\s*(["'`])(#[0-9a-fA-F]{3,8})\1/);
+            if (cm) info.color = cm[2];
+        }
 
         const tm = L.code.match(/\btype\s*:\s*["'](normal|static|custom|none)["']/);
         if (tm) info.type = tm[1];
@@ -827,14 +874,17 @@ function layerContentInfo(rec, L) {
 // phase-⑦ negative-example rules (2026-10-02, The Yeast Tree as the bad specimen)
 // ---------------------------------------------------------------------------
 
-// Shared: spans of one layer's upgrade entries ({key, start, end, text}), absolute indices.
-function layerUpgradeSpans(rec, L) {
+// Shared: spans of one layer's component entries ({key, start, end, text}), absolute indices.
+// `field` defaults to "upgrades"; pass "challenges"/"milestones"/"achievements"/"buyables"/…
+// to walk another collection on the same layer object.
+function layerUpgradeSpans(rec, L, field) {
+    const fieldName = field || "upgrades";
     const out = [];
     const objStart = rec.clean.indexOf("{", L.start);
     if (objStart < 0 || objStart >= L.end) return out;
     const keys = topLevelKeys(rec.clean, rec.mask, objStart, L.end);
     for (const k of keys) {
-        if (k.key !== "upgrades") continue;
+        if (k.key !== fieldName) continue;
         let i = k.idx + k.key.length;
         while (i < L.end && rec.mask[i] !== 0) i++;
         while (i < L.end && /\s/.test(rec.clean[i])) i++;
@@ -998,6 +1048,370 @@ function layerUpgradeSpans(rec, L) {
         }
     }
     if (boolPg === 0) pass("N-PGBOOL", "passiveGeneration returns plain numbers");
+}
+
+// ===========================================================================
+// Phase-⑧ corpus rules (2026-10-03). Grounded in the full numeric archive of
+// 329 real TMT games / 1,156 layers / 13,746 upgrades
+// (E:\Idle-Skill\archive\TMT_生成式AI增量游戏数值设计指南.md).
+// ===========================================================================
+
+// N-UNWIRED — the headline defect this whole corpus study surfaced.
+//
+// 7,472 of 13,746 real upgrades (54.4%) carry NO effect() of their own: their power
+// lives in the layer's gainMult()/gainExp()/passiveGeneration(), which branch on the
+// upgrade being present. An AI that writes 40 upgrades each with a self-contained
+// effect() but never references one id from any formula produces a game that RUNS,
+// BUYS, DISPLAYS — and changes nothing, with no error anywhere.
+//
+// Precision matters more than recall here: we only FAIL when the id is mentioned NOWHERE
+// else in any modder-scope file, so a game using a custom helper (getUpgEff(11)) still
+// passes. The softer "is this layer wired to itself" steer is D-LOCALWIRE (WARN).
+{
+    const modderRecs = allModderCandidates.map((f) => ({ f, rec: loadRec(f) }));
+    const deadUpgrades = [];
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        for (const s of layerUpgradeSpans(rec, L, "upgrades")) {
+            if (!/(^|[{,])\s*effect\s*\(/.test(s.text)) continue; // no effect of its own
+            const id = String(s.key);
+            const tok = isNaN(Number(id))
+                ? "[\"']" + id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[\"']"
+                : "\\b" + id + "\\b";
+            // (1) anywhere else INSIDE this layer's own code range — the classic wiring shape
+            //     is gainMult(){ if (hasUpgrade("<this layer>", 31)) ... }; also covers a
+            //     layer-local helper like getUpgEff(31). Scoped to the layer because numeric
+            //     ids collide across layers (other layers also own an upgrade "31").
+            const layerSeg = rec.clean.slice(L.start, L.end);
+            // the span starts at the entry's `{`, so the `id:` key itself sits just before
+            // it — strip that too or every upgrade "mentions" itself
+            const relStart = s.start - L.start;
+            const head = layerSeg.slice(0, relStart);
+            const mKey = /(["']?[A-Za-z0-9_$-]+["']?)\s*:\s*$/.exec(head);
+            const cutFrom = mKey ? head.length - mKey[0].length + mKey[0].indexOf(mKey[1]) : relStart;
+            const layerHay = layerSeg.slice(0, cutFrom) + layerSeg.slice(s.end - L.start);
+            if (new RegExp("(?<![\\w$])" + tok + "(?![\\w$])").test(layerHay)) continue;
+            // (2) anywhere else, but only in a recognised CONSUMPTION context
+            const consumer = new RegExp(
+                "(?:hasUpgrade|upgradeEffect|hasSEendlessUpgrade|hasUpgradeEffect)\\s*\\([^)]*?" + tok +
+                "|\\.upgrades\\s*\\.\\s*(?:includes|indexOf)\\s*\\(\\s*" + tok +
+                "|\\.upgrades\\s*\\[\\s*" + tok);
+            let mentioned = false;
+            for (const { f, rec: r } of modderRecs) {
+                const hay = f === L.file ? layerHay : r.clean;
+                if (consumer.test(hay)) { mentioned = true; break; }
+            }
+            if (!mentioned) deadUpgrades.push({ L, id, idx: s.start });
+        }
+    }
+    if (deadUpgrades.length) {
+        const ids = deadUpgrades.slice(0, 12).map((d) => `"${d.id}"`).join(", ");
+        add(FAIL, "N-UNWIRED", deadUpgrades[0].L.file, deadUpgrades[0].idx,
+            `${deadUpgrades.length} upgrade(s) define effect() but their id is never referenced anywhere in the mod files (${ids}${deadUpgrades.length > 12 ? " …" : ""}) — the effect is never read, so buying them changes nothing. This is the single most common way a generated TMT game silently does nothing (54.4% of real upgrades have NO effect() precisely because their power is wired into gainMult/gainExp/passiveGeneration instead)`,
+            "Either (a) wire the id into the consumer: `if (hasUpgrade(\"" + deadUpgrades[0].L.id + "\", " + deadUpgrades[0].id + ")) ret = ret.times(2)` inside the relevant gainMult()/gainExp()/passiveGeneration()/getPointGen(), or (b) if it is a flag ticket, drop the effect() and put the consequence in onPurchase(). An effect() that is only read by effectDisplay() is a lie: it shows a number that never applies.");
+    } else {
+        pass("N-UNWIRED", "every effect()-bearing upgrade is referenced somewhere in the mod files");
+    }
+}
+
+// D-LOCALWIRE — a main layer whose own upgrades never touch its own production.
+// Real games usually DO wire at least one (cost ≤0 guidance: the layer's upgrades are
+// the player's main lever on that layer). WARN only — cross-layer-only boosts are a
+// legitimate (if unusual) design.
+{
+    let flagged = 0;
+    for (const L of layers) {
+        if (L.isSide || L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const ups = layerUpgradeSpans(rec, L, "upgrades");
+        const withEffect = ups.filter((s) => /(^|[{,])\s*effect\s*\(/.test(s.text));
+        if (withEffect.length < 3) continue;
+        const hookSrc = ["gainMult", "gainExp", "passiveGeneration", "update"]
+            .map((kw) => { const m = L.code.match(new RegExp("\\b" + kw + "\\s*\\(")); return m ? functionBody(L.code, m.index) || "" : ""; })
+            .join("\n");
+        const wired = withEffect.filter((s) => new RegExp("(?<![\\w$])" + String(s.key) + "(?![\\w$])").test(hookSrc));
+        if (wired.length === 0) {
+            flagged++;
+            add(WARN, "D-LOCALWIRE", L.file, L.start,
+                `layer "${L.id}" has ${withEffect.length} effect()-bearing upgrades but its gainMult/gainExp/passiveGeneration/update reference NONE of them — the layer's upgrades do nothing for the layer they live in`,
+                "Wire at least one: `if (hasUpgrade(\"" + L.id + "\", 11)) ret = ret.times(2)` in gainMult(). If the boosts are deliberately all cross-layer, note that in the brief.");
+        }
+    }
+    if (flagged === 0) pass("D-LOCALWIRE", "main layers wire at least one of their own upgrades into production");
+}
+
+// N-GHOSTFIELD — component keys the ENGINE DOES NOT READ. Every entry below was checked
+// against references/core/04 field tables AND the bundled engine source, not inferred
+// from corpus absence:
+//   js/components.js:148 renders `challenges[data].rewardDescription` — NOT `reward`
+//   js/technical/layerSupport.js:109-110 defaults `completionLimit` to 1 (so challenges
+//     ARE repeatable; do not flag completionLimit)
+// Corpus counts for orientation: reward 212 (all render a BLANK reward line),
+// canBypass/repeatable/countTowardsCompletion 0, persistent 0, condition() 0, grids 0.
+{
+    const GHOSTS = {
+        challenges: [["reward", "use rewardDescription (text) + rewardEffect() (value) — the engine renders rewardDescription (js/components.js:148), so `reward:` shows nothing"],
+            ["repeatable", "not a TMT field — use completionLimit (a number; engine defaults it to 1, js/technical/layerSupport.js:109)"],
+            ["canBypass", "not a TMT field — a bypassable challenge needs an onExit()-driven flag of your own"],
+            ["countTowardsCompletion", "not a TMT field — use countsAs: [id, …] to have one challenge count for another"]],
+        milestones: [["persistent", "milestones are always persistent in TMT v2.7 — delete the key"]],
+        achievements: [["condition", "layer achievements use done(), not condition() (0 of 3,032 real achievements use condition(); global addAchievement is also 0)"],
+            ["secret", "TMT achievements are always listed (uncompleted ones render dimmed) — hide nothing"]],
+    };
+    let ghostHits = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        for (const coll of Object.keys(GHOSTS)) {
+            for (const s of layerUpgradeSpans(rec, L, coll)) {
+                for (const [k, why] of GHOSTS[coll]) {
+                    const km = new RegExp("(^|[{,])\\s*" + k + "\\s*[:(]").exec(s.text);
+                    if (!km) continue;
+                    ghostHits++;
+                    add(WARN, "N-GHOSTFIELD", L.file, s.start + km.index + km[1].length,
+                        `layer "${L.id}" ${coll}."${s.key}" defines \`${k}\` — ${why}`,
+                        "Rewrite it with the field the engine actually reads; a ghost key is silently dropped at runtime.");
+                }
+            }
+        }
+        // layer-level: `grids` is not a TMT collection (it is `grid`, singular), and corpus = 0
+        if (/(^|[{,])\s*grids\s*:/.test(L.code))
+            add(WARN, "N-GHOSTFIELD", L.file, L.start, `layer "${L.id}" defines \`grids:\` — the TMT grid component is \`grid\` (singular); \`grids\` is silently ignored (0 of 1,156 real layers use it)`, "Rename to grid: { … }.");
+    }
+    if (ghostHits === 0) pass("N-GHOSTFIELD", "no ghost component fields");
+}
+
+// D-EFFECTSHAPE — corpus effect-op frequencies across 6,274 effect-bearing upgrades:
+//   .pow 4,830 · .add 3,364 · .log10 3,350 · .mul/.times 1,652 · .sqrt 61 · softcap 39
+// i.e. power/log shapes outnumber plain multiplies ~3:1. A layer whose every effect is a
+// flat ×2 has the shape of an unfinished draft. (D-EFFECTMONO measures the same axis from
+// the share side; this one fires when the layer has NO non-linear effect at all.)
+{
+    let flagged = 0;
+    for (const L of layers) {
+        if (L.isSide || L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const withEffect = layerUpgradeSpans(rec, L, "upgrades").filter((s) => /(^|[{,])\s*effect\s*\(/.test(s.text));
+        if (withEffect.length < 5) continue;
+        const shaped = withEffect.filter((s) => /\.(pow|log10?|log)\s*\(|\bsqrt\s*\(|\bsoftcap\s*\(|\.sqrt\s*\(/.test(s.text));
+        if (shaped.length === 0) {
+            flagged++;
+            add(WARN, "D-EFFECTSHAPE", L.file, L.start,
+                `layer "${L.id}": all ${withEffect.length} effect()-bearing upgrades are flat multipliers — no .pow()/.log()/.sqrt()/softcap() anywhere. Real TMT layers use power/log shapes ~3:1 against plain .times() (corpus: pow 4,830 vs multiply 1,652)`,
+                "Give at least one upgrade a shaped effect so the layer's growth is not purely linear: `return player.this.points.add(2).pow(0.5)` or `.log10().add(1).pow(0.2)`.");
+        }
+    }
+    if (flagged === 0) pass("D-EFFECTSHAPE", "main layers include at least one power/log-shaped effect");
+}
+
+// D-COSTSPAN — corpus cost-ladder shape. Of 5,038 literal upgrade costs, 38.7% are ≥1e10
+// and the ladder spans many orders; the worked example (c0v1d layer "s") runs 5e3 →
+// Decimal.pow(10, 545766). A layer whose literal costs all sit within one order of
+// magnitude has a flat ladder: no sense of escalating stakes, and no room for the
+// exponential tail that late-game layers need. (D-REQRATIO covers the LAYER ladder;
+// this covers the COST ladder INSIDE a layer.)
+{
+    let flagged = 0;
+    for (const L of layers) {
+        if (L.isSide || L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const ups = layerUpgradeSpans(rec, L, "upgrades");
+        if (ups.length < 8) continue;
+        const logs = [];
+        for (const s of ups) {
+            const cm = s.text.match(/(^|[{,])\s*cost\s*:\s*new\s+Decimal\s*\(\s*("?[\d.]+(e[+-]?\d+)?)\s*\)/i);
+            if (!cm) continue;
+            const v = Number(cm[2].replace(/"/g, ""));
+            if (isFinite(v) && v > 0) logs.push(Math.log10(v));
+        }
+        if (logs.length < 8) continue;
+        const span = Math.max(...logs) - Math.min(...logs);
+        if (span < 3) {
+            flagged++;
+            add(WARN, "D-COSTSPAN", L.file, L.start,
+                `layer "${L.id}": ${logs.length} literal upgrade costs span only ${span.toFixed(1)} orders of magnitude (${Math.pow(10, Math.min(...logs)).toExponential(1)} → ${Math.pow(10, Math.max(...logs)).toExponential(1)}) — a flat ladder with no escalating stakes. Real layers span 6+ orders (corpus: 38.7% of literal costs are ≥1e10)`,
+                "Spread the ladder across orders — first upgrade ~1, last a hard ticket (`Decimal.pow(10, n)` with a hand-picked exponent). Non-monotonic drops are fine and are a real rhythm device (a cheap key upgrade amid an expensive chain).");
+        }
+    }
+    if (flagged === 0) pass("D-COSTSPAN", "layer cost ladders span escalating orders of magnitude");
+}
+
+// ===========================================================================
+// Handbook-12 rules (2026-10-03) — design notes by Acamaeda, the author of TMT.
+// Source: references/design/12-Author-Design-Wisdom.md (dated 2020-10 .. 2023-04).
+// ===========================================================================
+
+// N-ARROWTHIS — "Don't use the () => notation because you can't use the 'this' keyword in
+// them." (2020-10-07). The engine invokes layer/component hooks with the component as `this`,
+// and nearly every useful one reads this.layer / this.id / this.points. An arrow function has
+// no own `this`, so those resolve to undefined and the game misbehaves silently.
+{
+    const ARROW_FIELDS = ["gainMult", "gainExp", "passiveGeneration", "softcap", "canReset", "startData",
+        "baseAmount", "layerShown", "update", "effect", "effectDisplay", "unlocked", "done", "unlock",
+        "cost", "canComplete", "rewardEffect", "rewardDisplay", "onPurchase", "onComplete", "onEnter", "onExit",
+        "getStyle", "getTitle", "getDisplay", "getCanClick", "onClick", "onHold", "buttonStyle"];
+    let arrowHits = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const mask = rec.mask.slice(L.start, L.end + 1);
+        const re = /(?:^|[{,;]\s*)([A-Za-z_$][\w$]*)\s*:\s*(?:async\s*)?\([^)]*\)\s*=>/g;
+        for (const m of codeMatches(L.code, mask, re)) {
+            if (!ARROW_FIELDS.includes(m[1])) continue;
+            arrowHits++;
+            const arrowAt = m.index + m[0].length - 2;
+            let end = arrowAt, depth = 0;
+            for (let i = arrowAt; i < L.code.length; i++) {
+                const ch = L.code[i];
+                if (ch === "(" || ch === "[" || ch === "{") depth++;
+                else if (ch === ")" || ch === "]" || ch === "}") { if (depth === 0) break; depth--; }
+                else if (ch === "," && depth === 0) break;
+                end = i;
+            }
+            if (!/\bthis\b/.test(L.code.slice(arrowAt, end))) continue; // harmless arrow, style only
+            add(FAIL, "N-ARROWTHIS", L.file, L.start + m.index,
+                `layer "${L.id}" defines \`${m[1]}\` as an arrow function but its body uses \`this\` — arrow functions have no own \`this\`, so this.layer / this.id / this.points are undefined and the engine's component context is lost (TMT author, 2020-10-07)`,
+                `Write it as a normal function: ${m[1]}() { ... }. Every layer/component hook the engine calls takes its context from \`this\`.`);
+        }
+    }
+    if (arrowHits === 0) pass("N-ARROWTHIS", "no layer/component hook uses an arrow function with `this`");
+}
+
+// N-CONTRAST — "Make sure that your layer colors don't make the text too hard to read. Don't
+// choose a dark color unless you plan to change the background of the main display and the
+// color of the text on upgrades, buyables, etc." (2023-04-17)
+//
+// Verified in the bundled engine, and the two uses pull AGAINST each other:
+//   js/components.js:239  the layer's currency amount is rendered AS TEXT in this color
+//                         (plus a glow of the same color) on the page background #0f0f0f
+//   css/tree-node.css:7   the tree node paints the color as a background under DARK text
+//                         (rgba(0,0,0,0.5)), so the node wants a LIGHT color
+// No single value satisfies both with the stock theme — which is exactly what the author is
+// warning about. So this rule checks only the direction with no counter-pressure: a color too
+// dark to read as TEXT on the page background, which silently hides the player's own balance.
+// The opposite tension is design guidance, not a defect (handbook 12 §6-34).
+{
+    const PAGE_BG = "#0f0f0f";
+    const relLum = (r, g, b) => {
+        const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const lumOf = (hex) => {
+        const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+        if (!m) return null;
+        const n = parseInt(m[1], 16);
+        return relLum((n >> 16) & 255, (n >> 8) & 255, n & 255);
+    };
+    const ratio = (a, b) => { const hi = Math.max(a, b), lo = Math.min(a, b); return (hi + 0.05) / (lo + 0.05); };
+    const bgLum = lumOf(PAGE_BG);
+    let contrastHits = [];
+    for (const L of layers) {
+        if (!L.color) continue;
+        const lum = lumOf(L.color);
+        if (lum === null) continue;
+        const cr = ratio(lum, bgLum);
+        if (cr < 4.5) contrastHits.push({ id: L.id, color: L.color, cr, file: L.file, at: L.start });
+    }
+    if (contrastHits.length === 0) pass("N-CONTRAST", "layer colors are readable as text on the page background");
+    else {
+        contrastHits.sort((a, b) => a.cr - b.cr);
+        const ex = contrastHits.slice(0, 4).map((c) => `${c.id} ${c.color} (${c.cr.toFixed(1)}:1)`).join("; ");
+        add(WARN, "N-CONTRAST", contrastHits[0].file, contrastHits[0].at,
+            `${contrastHits.length}/${layers.length} layer color(s) too dark to read as text on the page background ${PAGE_BG} (worst: ${ex}${contrastHits.length > 4 ? "; …" : ""}). The engine renders the layer's currency amount in this color (js/components.js:239), so the player's own balance disappears (TMT author, 2023-04-17)`,
+            "Brighten those colors, or override the amount's style yourself. Note the opposite tension: the tree node paints this color behind DARK text (css/tree-node.css:7), so erring bright is the safe side.");
+    }
+}
+
+// N-UNLOCKPAYGATE — "It's usually not good to have to buy an upgrade to unlock something that
+// you also have to pay to use after (like a buyable or prestige layer). You don't get a
+// benefit from buying the upgrade, it just takes your currency. And you don't know how much
+// the thing it unlocks will cost, so you can't plan ahead for it either. Usually you should
+// use a threshold of some kind." (2022-06-26)
+//
+// Complements N-UNLOCKDEAD (FAIL — nothing can ever set the flag) by catching the design smell:
+// an upgrade whose only job is to admit the player to a layer that still charges a toll.
+{
+    const layerById = new Map(layers.map((L) => [L.id, L]));
+    const hasRequires = (L) => {
+        const rec = fileRecs.get(L.file);
+        if (!rec) return false;
+        return /\brequires\s*:/.test(L.code);
+    };
+    const titleOf = (txt) => {
+        const m = /(?:title|description)\s*:\s*(["'])([^"']*)\1/.exec(txt);
+        return m ? m[2] : "";
+    };
+    // A layer id like "wall", "n" or "gh" also occurs as an ordinary English word, so a bare
+    // \bid\b test produces garbage. Require an actual REFERENCE: quoted, dotted (player.x),
+    // parenthesised in the description, or written as "<id> layer/wing".
+    const referencesLayer = (txt, id) => {
+        const e = escapeRe(id);
+        return new RegExp(
+            "[\"'`]" + e + "[\"'`]" +              // "x" / 'x' / `x`
+            "|\\bplayer\\." + e + "\\b" +           // player.x
+            "|\\blayers\\." + e + "\\b" +           // layers.x
+            "|\\(\\s*" + e + "\\s*\\)" +            // "... wing (x)"
+            "|\\b" + e + "\\s+(?:wing|layer|tree|tab)\\b", "i").test(txt);
+    };
+    let gateHits = [];
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        for (const s of layerUpgradeSpans(rec, L, "upgrades")) {
+            if (!/\bunlock/i.test(s.text)) continue;
+            for (const t of layers) {
+                if (t.id === L.id) continue;
+                if (!referencesLayer(s.text, t.id)) continue;
+                if (!hasRequires(t)) continue;   // free to enter -> onPurchase is fine
+                gateHits.push({ file: L.file, at: s.start, from: L.id, key: s.key, to: t.id, title: titleOf(s.text) });
+            }
+        }
+    }
+    if (gateHits.length === 0) pass("N-UNLOCKPAYGATE", "no upgrade gates a layer the player must also pay to enter");
+    else {
+        // Reported once per game: this is a systemic design pattern, and one WARN per
+        // occurrence buries the signal. Count + examples is what a reviewer can act on.
+        const ex = gateHits.slice(0, 4).map((g) => `${g.from}-${g.key}${g.title ? ` (“${g.title}”)` : ""} → "${g.to}"`).join("; ");
+        add(WARN, "N-UNLOCKPAYGATE", gateHits[0].file, gateHits[0].at,
+            `${gateHits.length} upgrade/layer pair(s) gate a paid layer behind a purchase — the player pays once for the upgrade and again for the layer's \`requires\`, with no warning of the second price (e.g. ${ex}${gateHits.length > 4 ? "; …" : ""}). TMT author, 2022-06-26`,
+            "Unlock those layers by threshold instead: a milestone, the previous layer's `requires`, or a [\"display-text\", …] line announcing when it unlocks. Keep `onPurchase()` for things that are free to use afterwards (subtabs, shops, mechanics). Note this WARN is systemic by design — either fix the pattern or record why this game wants pay-to-enter (it is a legitimate choice, it just needs to be a deliberate one).");
+    }
+}
+
+// N-HOTKEYDESC — "Don't forget to add hotkeys! You need to have the key in the description,
+// like 'p: reset for prestige points'" (2020-10-07). The key is what TMT renders on the
+// button; without it in the text the player never learns the binding.
+{
+    let hotkeys = 0, labelled = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const hm = L.code.match(/\bhotkeys\s*:\s*\[/);
+        if (!hm) continue;
+        const open = hm.index + hm[0].length - 1;
+        // stay inside L.code: its indices are layer-relative, not file-relative
+        const layerMask = rec.mask.slice(L.start, L.end + 1);
+        const close = matchBracket(L.code, layerMask, open);
+        if (close < 0) continue;
+        const seg = L.code.slice(open, close + 1);
+        const segMask = layerMask.slice(open, close + 1);
+        const re = /\bkey\s*:\s*(["'])([^"']+)\1\s*,\s*description\s*:\s*(["'])([^"']*)\3/g;
+        for (const h of codeMatches(seg, segMask, re)) {
+            hotkeys++;
+            if (new RegExp("(?:^|\\W)" + escapeRe(h[2]) + "\\s*:", "i").test(h[4])) { labelled++; continue; }
+            add(WARN, "N-HOTKEYDESC", L.file, L.start + hm.index,
+                `layer "${L.id}" hotkey "${h[2]}" has description "${h[4]}" without the key in it — the player never sees which key to press (TMT author, 2020-10-07)`,
+                `Put the key in the text, e.g. "${h[2]}: reset for ${(L.config && L.config.resource) || "prestige points"}".`);
+        }
+    }
+    if (hotkeys === 0) pass("N-HOTKEYDESC", "no hotkeys declared");
+    else pass("N-HOTKEYDESC", `${labelled}/${hotkeys} hotkeys name their key in the description`);
 }
 
 // ---------------------------------------------------------------------------

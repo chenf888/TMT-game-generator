@@ -198,6 +198,43 @@
   .qual-col li { list-style: none; color: var(--muted); font-size: 14.5px; padding: 7px 0 7px 18px; position: relative; }
   .qual-col li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: 0.85; }
 
+  /* ---------- corpus section ---------- */
+  .corpus-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; }
+  .cstat .num { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .cstat .lab { margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+  .wire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 44px; }
+  .wire-col { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 18px 20px; min-width: 0; }
+  .wire-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
+  .wire-col.bad .wire-tag { color: #b42318; }
+  .wire-col.good .wire-tag { color: var(--ok); }
+  @media (prefers-color-scheme: dark) { .wire-col.bad .wire-tag { color: #ff7b72; } }
+  .wire-col pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: var(--muted);
+    background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+    white-space: pre; margin: 0;
+  }
+  .wire-col pre b { color: var(--text); font-weight: 600; }
+  .wire-col pre i { font-style: normal; color: var(--accent); }
+  .wire-col p { margin-top: 12px; font-size: 13.5px; color: var(--muted); }
+  .wire-col p b { color: #b42318; font-weight: 650; }
+  @media (prefers-color-scheme: dark) { .wire-col p b { color: #ff7b72; } }
+
+  .corpus-note {
+    margin-top: 24px; border-left: 2px solid var(--accent); padding: 2px 0 2px 16px;
+    font-size: 15px; color: var(--text); max-width: 74ch;
+  }
+  .corpus-note b { font-family: var(--mono); font-weight: 700; }
+
+  .ops { margin-top: 40px; max-width: 640px; }
+  .ops-row { display: grid; grid-template-columns: 132px 1fr 76px; gap: 14px; align-items: center; padding: 5px 0; }
+  .ops-name { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .ops-track { height: 9px; background: var(--bar-track); border-radius: 5px; overflow: hidden; }
+  .ops-fill { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+  .ops-fill.dim { opacity: 0.4; }
+  .ops-val { font-family: var(--mono); font-size: 13px; color: var(--text); text-align: right; }
+  .ops-cap { margin-top: 12px; font-size: 13px; color: var(--muted); }
+
   /* footer */
   footer { border-top: 1px solid var(--hairline); padding: 30px 0 40px; }
   .foot-inner { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
@@ -216,6 +253,8 @@
 
   /* ---------- responsive ---------- */
   @media (max-width: 940px) {
+    .corpus-stats { grid-template-columns: repeat(2, 1fr); }
+    .wire-grid { grid-template-columns: 1fr; }
     .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 52px; }
     .demo { max-width: 480px; }
     .install-grid { grid-template-columns: 1fr; gap: 40px; }
@@ -241,6 +280,7 @@
     <a class="wordmark" href="#">tmt<span>gg</span></a>
     <div class="nav-links">
       <a href="#pipeline" class="hide-m">How it works</a>
+      <a href="#corpus" class="hide-m">The data</a>
       <a href="#install" class="hide-m">Install</a>
       <a href="#quality" class="hide-m">Quality bar</a>
       <a class="gh" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
@@ -290,16 +330,16 @@
       </div>
       <button class="auto-toggle" id="autoBtn" hidden>AUTO OFF</button>
     </div>
-    <p class="demo-cap">A real little game running on this page: prestige loop, upgrades, one automation milestone. Games from the full pipeline grow 10 to 25 layers.</p>
+    <p class="demo-cap">A real little game running on this page: prestige loop, upgrades, one automation milestone &mdash; and it is wired the way the corpus says real games are, with the producer reading each upgrade flag. Games from the full pipeline grow 10 to 25 layers.</p>
   </div>
 </header>
 
 <div class="stats">
   <div class="wrap stats-grid">
-    <div class="stat"><div class="num">132</div><div class="lab">real TMT games measured to build the balance data</div></div>
+    <div class="stat"><div class="num">329</div><div class="lab">real TMT games fully extracted to build the balance data</div></div>
     <div class="stat"><div class="num">7</div><div class="lab">pipeline stages, from theme interview to test handoff</div></div>
-    <div class="stat"><div class="num">43</div><div class="lab">automated checks gating every generated build</div></div>
-    <div class="stat"><div class="num">2</div><div class="lab">complete games generated and play-tested during development</div></div>
+    <div class="stat"><div class="num">53</div><div class="lab">automated checks gating every generated build</div></div>
+    <div class="stat"><div class="num">6</div><div class="lab">complete games generated and play-tested during development</div></div>
   </div>
 </div>
 
@@ -310,12 +350,67 @@
   </div>
   <div class="rail">
     <div class="step"><div class="step-n">01</div><div class="step-verb">Interview</div><div class="step-desc">Seven questions lock theme, scale, natural ceilings, pacing, side content, and language. The theme dictates the tree, not just the names.</div></div>
-    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against eleven rules before any code exists.</div></div>
+    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against fourteen rules before any code exists.</div></div>
     <div class="step"><div class="step-n">03</div><div class="step-verb">Scaffold</div><div class="step-desc">A fresh TMT v2.7 game folder with a permanent savefile id, patched and syntax-verified by a bundled script.</div></div>
     <div class="step"><div class="step-n">04</div><div class="step-verb">Generate</div><div class="step-desc">Decimal-safe layer code: upgrades with varied effects, milestones, challenges, buyables, automation ladders, softcaps, theming.</div></div>
-    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">43 static rules run over the source. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
+    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">53 static rules run over the source. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
     <div class="step"><div class="step-n">06</div><div class="step-verb">Balance</div><div class="step-desc">Era-by-era reachability math against the measured heuristics, with every compounding multiplier zone audited.</div></div>
     <div class="step"><div class="step-n">07</div><div class="step-verb">Hand off</div><div class="step-desc">You serve the folder, play it, and verify the checklist: clean console, working saves, reachable endgame.</div></div>
+  </div>
+</section>
+
+<section id="corpus" class="wrap" style="padding-top: 0;">
+  <div class="sec-head">
+    <h2>Every number came from a real game</h2>
+    <p>The balance data is not intuition. It is a full numeric archive of every component in 329 published TMT games &mdash; 36&nbsp;MB of source, each value traceable back to a file and a line number.</p>
+  </div>
+
+  <div class="corpus-stats">
+    <div class="cstat"><div class="num">329</div><div class="lab">published games fully extracted, not sampled</div></div>
+    <div class="cstat"><div class="num">1,156</div><div class="lab">layers, with their cost and gain formulas</div></div>
+    <div class="cstat"><div class="num">29,141</div><div class="lab">components catalogued &mdash; upgrades, challenges, milestones, achievements, buyables</div></div>
+    <div class="cstat"><div class="num">53</div><div class="lab">static rules, every threshold measured from data or the engine author's own notes</div></div>
+  </div>
+
+  <div class="corpus-note">
+    <b>54.4%</b> of the 13,746 real upgrades carry no <code>effect()</code> of their own at all.
+    Their power is a branch inside the layer&rsquo;s <code>gainMult()</code>. That is the single
+    most common way a generated incremental game runs perfectly and does nothing.
+  </div>
+
+  <div class="wire-grid">
+    <div class="wire-col bad">
+      <div class="wire-tag">generated, unwired</div>
+      <pre>upgrades: {
+  11: {
+    <b>effect()</b>() { return new Decimal(2) },
+    <i>effectDisplay</i>() { return format(this.effect()) }
+  }
+}</pre>
+      <p>It loads. It sells. It prints &times;2. <b>Nothing in the game changes</b> &mdash; and no rule anywhere fails.</p>
+    </div>
+    <div class="wire-col good">
+      <div class="wire-tag">what real games do</div>
+      <pre>upgrades: {
+  11: { <i>unlocked</i>() { return player.p.points.gte(1e6) } }
+}
+
+<b>gainMult</b>() {
+  let ret = new Decimal(1)
+  <b>if</b> (hasUpgrade("p", 11)) ret = ret.times(2)
+  <b>return</b> ret
+}</pre>
+      <p>The upgrade is a token; the layer owns the arithmetic. Now the number is real &mdash; and the checker can prove it.</p>
+    </div>
+  </div>
+
+  <div class="ops">
+    <div class="ops-row"><span class="ops-name">.pow()</span><span class="ops-track"><i class="ops-fill" style="width:100%"></i></span><span class="ops-val">4,830</span></div>
+    <div class="ops-row"><span class="ops-name">.add()</span><span class="ops-track"><i class="ops-fill" style="width:69.6%"></i></span><span class="ops-val">3,364</span></div>
+    <div class="ops-row"><span class="ops-name">.log10()</span><span class="ops-track"><i class="ops-fill" style="width:69.3%"></i></span><span class="ops-val">3,350</span></div>
+    <div class="ops-row"><span class="ops-name">.times()</span><span class="ops-track"><i class="ops-fill dim" style="width:34.2%"></i></span><span class="ops-val">1,652</span></div>
+    <div class="ops-row"><span class="ops-name">softcap()</span><span class="ops-track"><i class="ops-fill dim" style="width:0.8%"></i></span><span class="ops-val">39</span></div>
+    <p class="ops-cap">Operations used by real upgrade effects, out of 6,274 upgrades that have one. Power and log shapes outnumber plain multipliers about three to one &mdash; so a generator that only ever emits &times;2 produces something no human ships.</p>
   </div>
 </section>
 
@@ -363,8 +458,9 @@
     <div class="qual-col">
       <h3>Numbers</h3>
       <ul>
-        <li>Requires ladders and cost curves taken from 132 measured games</li>
+        <li>Requires ladders and cost curves taken from 329 measured games</li>
         <li>First prestige within minutes; endgame reachable, never instant</li>
+        <li>Cost ladders span the measured 6+ orders of magnitude</li>
         <li>Self-scaling effects budgeted so gains cannot compound out of control</li>
       </ul>
     </div>
@@ -380,10 +476,11 @@
     <div class="qual-col">
       <h3>Verification</h3>
       <ul>
-        <li>43 static checks pass before manual testing starts</li>
+        <li>53 static checks pass before manual testing starts</li>
         <li>Zero console errors across the whole playthrough</li>
         <li>Saves, offline cap, and the win screen verified by hand</li>
-        <li>Rules hardened by two full games played end to end</li>
+        <li>Every effect is proven to be consumed by a formula somewhere</li>
+        <li>Rules hardened by six full games, a 329-game corpus, and the engine author's own design notes</li>
       </ul>
     </div>
   </div>

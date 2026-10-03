@@ -44,18 +44,39 @@
     }
   },
   "staticCheckThresholds": {
-    "_comment": "Mirrors the D-* rules in scripts/static_checks.js - keep in sync when tuning.",
+    "_comment": "Mirrors the D-*/N-* rules in scripts/static_checks.js - keep in sync when tuning.",
     "effectMonoUpgradeFloor": 8,
     "effectMonoK1Share": 0.6,
     "microtabsFailAtContentItems": 16,
     "microtabsWarnAtContentItems": 10,
-    "mechQuotaMinMainLayers": 4
+    "mechQuotaMinMainLayers": 4,
+    "effectShapeMinEffects": 5,
+    "effectShapeNote": "D-EFFECTSHAPE fires when a layer has >=5 effect-bearing upgrades and NONE uses .pow()/.log()/.sqrt()/softcap(). Corpus op frequencies: pow 4,830 / add 3,364 / log10 3,350 / mul 1,652 - power-log shapes outnumber plain multiplies ~3:1.",
+    "costSpanMinUpgrades": 8,
+    "costSpanMinOrders": 3,
+    "costSpanNote": "D-COSTSPAN fires when a layer's literal costs span <3 orders of magnitude. Real ladders span 6+ (c0v1d layer 's': 5e3 -> Decimal.pow(10, 545766)).",
+    "localWireMinEffects": 3,
+    "localWireNote": "D-LOCALWIRE fires when a main layer has >=3 effect-bearing upgrades and its gainMult/gainExp/passiveGeneration/update reference none of them."
+  },
+  "corpusEffectShares": {
+    "_source": "Full archive of 329 real TMT games, 6,274 effect-bearing upgrades (phase 8, 2026-10-03). E:\\Idle-Skill\\archive\\TMT_生成式AI增量游戏数值设计指南.md section 1.3.",
+    "sharesOfEffectsCarryingUpgrade": {
+      "pow": 0.770,
+      "add": 0.536,
+      "log10": 0.534,
+      "mul_or_times": 0.263,
+      "softcap": 0.006
+    },
+    "upgradesWithNoOwnEffect": 0.544,
+    "reading": "Overlapping shares (one effect can use several ops). The 3:1 pow:times ratio is the design lesson: a layer of flat x2 multipliers reads as unfinished. Target >=30% of a layer's upgrades using a pow/log shape.",
+    "layerComponentCounts": { "p25": 6, "median": 15, "p75": 29, "p90": 56 },
+    "challengeShareOfAllComponents": 0.018
   },
   "effectKinds": {
     "K1": "flat mult (themed name even so); capped by maxK1SharePerLayer",
     "K2": "self-shape: pow(0.4-0.6)/log/root(2-3) on own amount",
     "K3": "cross-resource: sources another layer's currency",
-    "K4": "meta-effect: raises another upgrade/buyable's exponent (^1.01-^1.2) or effect",
+    "K4": "meta-effect on a NAMED mechanic or resource: rewrites a labelled formula (^1.01-^1.2). Handbook 12: do NOT boost another upgrade's hidden number — the player cannot see or reason about it",
     "K5": "softcap/hardcap manipulation: delay cap, raise hardcap, replace formula, reduce cost",
     "K6": "conditional: if-chains on progress/other components/challenge state",
     "K7": "unlock/gate: no numeric effect, unlocks layer/subtab/buyable/challenge (excluded from K1 quota)",

@@ -16,8 +16,10 @@ This skill is self-contained. Everything it needs is in this folder:
 | `references/core/00–08` | Engine + coding handbook copies (00 overview, 01 Decimal rules, 02 mod.js, 03 layers API, 04 components, 05 UI, 06 idioms, 07 pitfalls/checklist, 08 real-game catalog) |
 | `references/design/09-Layer-Design-Patterns.md` | Design patterns P1–P17, blueprints, measured heuristics, anti-patterns A1–A10 |
 | `references/design/10-Fun-Mechanics-and-Content-Organization.md` | The fun pass: effect-kind taxonomy K1–K8, microtabs organization standard, mechanic catalog M1–M10, per-blueprint fun quotas |
+| `references/design/11-Corpus-Numeric-Design.md` | **The wiring pass**: measured numeric baselines over all 329 real games — the 54.4%-no-effect finding, cost-ladder shapes, gain-curve ratios, softcap forms, and the ghost-field table |
+| `references/design/12-Author-Design-Wisdom.md` | **The author's own design notes** (Acamaeda, 2020–2023): pacing, upgrade/buyable discipline, cost-vs-softcap, gates, readability. §0 lists the four places this skill previously taught the opposite |
 | `assets/blueprints.json` | Machine-readable progress blueprints (from 09 §3) |
-| `assets/balance-defaults.json` | Machine-readable measured balance defaults (from 09 §4) |
+| `assets/balance-defaults.json` | Machine-readable measured balance defaults (from 09 §4) + `corpusBaselines` (from 11) |
 | `assets/fun-quota.json` | Machine-readable fun-density quotas per blueprint (from 10 §5) |
 | `assets/design-brief-template.md` | The design document you fill BEFORE coding |
 | `scripts/scaffold.js` | Creates the game folder from the TMT template |
@@ -37,7 +39,7 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 | 1. Interview | answers mapped to generation parameters | all 7 questions answered |
 | 2. Design brief & self-check | filled `design-brief` doc | every self-check passes |
 | 3. Scaffold | game folder + recorded `modInfo.id` | scaffold exits 0 |
-| 4. Generate code | js/mod.js, layer files, tree.js, theming | all files written & registered |
+| 4. Generate code | js/mod.js, layer files, tree.js, theming | all files written & registered; **every upgrade classified token-vs-value and, if it has an effect, wired to a consumer** |
 | 5. Static checks | check report | 0 FAIL (WARNs justified in brief) |
 | 6. Balance walkthrough | annotated numbers | heuristics table verified |
 | 7. Manual test handoff | test instructions for the user | 07 Part D checklist handed over |
@@ -46,10 +48,10 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 
 | When | Read |
 |---|---|
-| Stage 2 | `references/design/09` (fully), `references/design/10` (fully), all three `assets/*.json`, brief template |
+| Stage 2 | `references/design/09` (fully), `references/design/10` (fully), `references/design/11` (fully), `references/design/12` (fully), all three `assets/*.json`, brief template |
 | Stage 4, any code | `references/core/01` (Decimal rules — mandatory before writing ANY code) |
 | Stage 4, mod.js | `references/core/02`; wiring map `references/core/06` §3 |
-| Stage 4, layers | `references/core/03`, `04`; idioms `references/core/06` |
+| Stage 4, layers | `references/core/03`, `04`; idioms `references/core/06`; **wiring discipline `references/design/11` §2**; **gates, costs and readability `references/design/12`** |
 | Stage 4, theming/UI | `references/core/05` |
 | Stage 5–7 | `references/core/07` (hard rules + Part C crash table + Part D checklist) |
 | Design inspiration | `references/core/08` (real-game catalog) |
@@ -151,9 +153,15 @@ future game folder or in your notes) and fill every section:
 | 9 | organization: tabFormat on every main layer; microtabs planned once a layer has ≥3 content groups; context display-texts (base, best, softcap warning) above tabs | 10 §3 |
 | 10 | game-level fun quota met (mechanics M1–M10 count, challenge style, clickables/bars/update floors for the blueprint) | 10 §5; fun-quota.json |
 | 11 | multiplier budget: **every `.times()` source is an independent multiplicative zone and zones compound** — at most ONE self-scaling upgrade per layer (reads own points, pow ≤0.5, softcapped); Σ self-exponents wired into any gainMult ≤ 0.6; product of all multiplier zones reachable when layer N+1 unlocks must stay within the requires ladder's assumed production (if end-of-row-0 sugar mult > ~1e4 the ladder is fiction) | 09 P12; static rule N-SELFTOTAL |
+| 12 | **wiring plan**: every upgrade is classified in the brief as token/gate (K7, no `effect`) or value (has `effect` → the brief names its consumer, e.g. "wired into layer N `gainMult` via `hasUpgrade`"). No upgrade may sit in neither column. | 11 §2; N-UNWIRED |
+| 13 | cost ladder per layer spans ≥6 orders of magnitude, with at least one deliberate drop marked as a key upgrade; ≥30% of a layer's upgrades use a `pow`/`log` shape | 11 §3–§4; D-COSTSPAN, D-EFFECTSHAPE |
+| 14 | component density 8–30 per layer; challenges ≤15% of the layer's upgrade count; a layer-level `softcap` on every unbounded loop | 11 §1, §5 |
+| 15 | **author pacing**: first boost reachable within 10 seconds; every reset longer than a minute pays something; a major reset speeds the game up from the first second; no hard resets ever | 12 §1; `authorPacingTargets` |
+| 16 | **upgrade discipline**: one production bonus per upgrade, never 3+; no upgrade boosts another upgrade's effect (boost resources or named mechanics); layers are gated by threshold, never behind a purchase you then also pay for | 12 §3 |
+| 17 | **cost before softcap**: shape with `cost()`/`requires`; use softcaps only for genuine runaway loops, and only sell a cap raise if the cap is visible | 12 §2; 09 P12 (revised) |
 
 Also check no two milestones of the same layer claim the same automation grant (the Mario
-Maker 2 "conflict point" incident). Gate: proceed only when all 11 checks pass.
+Maker 2 "conflict point" incident). Gate: proceed only when all 17 checks pass.
 
 ---
 
@@ -206,11 +214,17 @@ the brief's table:
   buyables with exponential `cost(x)` base 2–4 starting ~10× the unit currency; challenges
   if Q5 said so, handicaps via `inChallenge()` formula injection P16, rewards via
   `hasChallenge()`).
-- **Unlock upgrades MUST actually unlock** — an upgrade whose text says "Unlock X"
-  defines `onPurchase() { player.X.unlocked = true }`, and the target layer's `layerShown()`
-  also accepts `|| hasUpgrade("<parent>", <id>)` (heals saves that bought it before the hook
-  existed). `layerShown() { return player.X.unlocked }` with no onPurchase writer anywhere
-  dead-ends the tree after layer 1 — static rule N-UNLOCKDEAD.
+- **Gates: pay-to-enter is a bad gate.** *Revised 2026-10-03 per handbook 12* (the TMT author,
+  2022-06-26: *"It's usually not good to have to buy an upgrade to unlock something that you also
+  have to pay to use after … you don't know how much the thing it unlocks will cost"*):
+  - **A layer the player must pay to prestige is unlocked by a THRESHOLD**, not by a purchase — a
+    milestone, the previous layer's `requires`, or a `display-text` announcing when it lands.
+    Static rule `N-UNLOCKPAYGATE` warns on the pay-to-enter pattern.
+  - **`onPurchase()` is still right** for things that cost nothing afterwards — a subtab, a shop
+    entry, a mechanic toggle — and for healing saves: pair it with
+    `layerShown() { return player.X.unlocked || hasUpgrade("<parent>", <id>) }`.
+  - `layerShown() { return player.X.unlocked }` with **no** writer anywhere still dead-ends the
+    tree after layer 1 — static rule `N-UNLOCKDEAD` (unchanged, still a FAIL).
 - **Automation functions return typed values** — `passiveGeneration()` returns a plain NUMBER
   (`if (hasMilestone("x", 0)) return 1`; fractional rates like `0.5` are valid; `return 0` or omit
   the function to disable). Never a bare boolean: stock v2.7 only coerces `true`→1 via a temp.js
@@ -223,6 +237,18 @@ the brief's table:
   `gainMult`: the exponents SUM and Σp ≥ 1 compounds superlinearly per prestige (a real
   generated game wired 0.5+0.25+0.5 = 1.25 → numbers exploded inside the first layer, game beaten in 5 min).
   Log-shaped sources (`points.log(10).pow(n)`) are sublinear and exempt.
+- **Wiring discipline (handbook 11 §2 — do this as you write, not afterwards).** In real
+  TMT games **54.4% of upgrades carry no `effect()` at all**; their power is a branch in the
+  layer's `gainMult()`/`gainExp()`/`passiveGeneration()`. So for every upgrade decide, and
+  write down, which of two kinds it is:
+  - **token/gate (K7)** — no `effect()`; consequence lives in `onPurchase()` or a layer hook.
+  - **value** — has `effect()`, **and** its id must be consumed somewhere:
+    `if (hasUpgrade("<layer>", <id>)) ret = ret.times(2)` in the layer's `gainMult()`, or
+    `ret = ret.times(layers.<layer>.upgrades[<id>].effect())`, or in `getPointGen()`.
+
+  Never ship an `effect()` that only `effectDisplay()` reads — it renders a multiplier that
+  never applies. Static rule **N-UNWIRED** is a FAIL for exactly this, and it is the one
+  defect that produces a game which runs perfectly and changes nothing.
 - `gainMult()` = the P10 web: list every older layer's upgrade/milestone that boosts this
   layer AND make this layer boost ≥2 older layers (see brief table).
 - **Effect diversity (10 §2)** — follow the brief §4.1 kind plan: K1 flat mults within quota;
@@ -246,6 +272,28 @@ the brief's table:
   achievements.
 - `layerShown()`, `branches: [...]` (must point at existing layer ids), hotkey with safe
   press: `onPress() { if (canReset(this.layer)) doReset(this.layer) }`.
+- **Cost ladder (11 §3)**: spread costs across ≥6 orders; ≥ half of them plain
+  `new Decimal(<literal>)`; allow (and mark) deliberate cheap "key" drops; switch to
+  `Decimal.pow(10, n)` with hand-picked exponents for the late stretch.
+- **Gain shapes (11 §4)**: ≥30% of a layer's upgrades use `.pow()`/`.log10()`, not
+  `.times(2)`. Real games' op mix is pow 4,830 : times 1,652.
+- **Author's rules (handbook 12)** — the ones that change how you write code:
+  - **Never `() =>` for layer/component hooks.** Arrow functions have no own `this`, so
+    `this.layer` / `this.id` are undefined. Use `function() {}`. Static rule `N-ARROWTHIS` (FAIL).
+  - **First boost within 10 seconds**, and every reset over a minute must pay something.
+  - **Never hard reset the player.** Use `fixOldSaves` for inflation.
+  - **Cost scaling shapes the game; softcaps only stop runaway loops**, and only sell a cap
+    raise when the cap is visible.
+  - **Exponents are bad early upgrades** — `points.pow(0.5)` on 12 points is noise. Flat or
+    absolute bonuses in row 0; shaped curves from row 1 on.
+  - **Gate layers by threshold**, never behind an upgrade you must also pay past.
+  - **Display the currency a tab spends**; never show internal ids or the prestige exponent.
+  - **Hotkeys**: put the key in the description text (`"p: reset for prestige points"`).
+- **Ghost fields (11 §6)**: never write `challenges.reward` (the engine renders
+  `rewardDescription` — a blank reward line), `repeatable` (use `completionLimit`),
+  `canBypass`, `countTowardsCompletion` (use `countsAs`), `milestones.persistent`,
+  `achievements.condition` (use `done()`), `achievements.secret`, or layer `grids`
+  (it is `grid`). Components stay inlined in `addLayer()`; let the engine price buyables.
 - `doReset(resettingLayer)` ONLY when keeping things (P9: strictly-higher rows reset me;
   keep `["unlocked","auto"]` + milestone-gated extras; call `layerDataReset(this.layer, kept)`).
 - Softcaps (P12): layer `softcap`/`softcapPower` props on long-lived currencies, `softcap()`
@@ -287,7 +335,7 @@ node scripts/static_checks.js "<game-folder>"
   re-run until 0 FAIL. Manual testing is not allowed with open FAILs.
 - **WARN = needs a written reason** in brief §10 (e.g. a deliberate ×150 requires leap for a
   multi-row jump like Mario Maker's e86). Unexplained WARNs count as failures.
-- Rules cover: mod.js completeness (`M-*`), file registration (`M-UNREG`, 07 rule 2), banned
+- Rules cover: 53 rule ids across mod.js completeness (`M-*`), file registration (`M-UNREG`, 07 rule 2), banned
   calls (`.mod(`, `resetBuyables(`, `ExpantaNum`, raw numbers where Decimals belong,
   native-ops-on-currency suspects), layer integrity (`startData`, prestige fields), the
   corpus-derived design assertions: row contiguity (A2), requires-ladder monotonicity (A1) +
@@ -307,8 +355,25 @@ node scripts/static_checks.js "<game-folder>"
   self-scaling exponents wired into one layer's gainMult — superlinear compounding), `N-PGBOOL`
   (WARN, `passiveGeneration()` returning a bare boolean or Decimal instead of a plain number —
   boolean relies on a stock-only engine coercion, Decimal NaNs in the engine's diff multiply).
+- **Corpus rules (handbook 11)** — thresholds are measured over all 329 real games, not guessed:
+  `N-UNWIRED` (**FAIL**, an upgrade defines `effect()` but its id is referenced nowhere — the
+  effect is never read; corpus: 54.4% of real upgrades have no `effect()` because their power
+  is wired into `gainMult`), `D-LOCALWIRE` (WARN, a main layer's effect-bearing upgrades are
+  referenced by none of its `gainMult`/`gainExp`/`passiveGeneration`/`update`), `N-GHOSTFIELD`
+  (WARN, component keys the engine silently drops — `challenges.reward` renders blank per
+  `template/js/components.js:148`; note `completionLimit` is VALID, challenges are repeatable),
+  `D-EFFECTSHAPE` (WARN, all of a layer's effects are flat multiplies — corpus pow:times ≈ 3:1),
+  `D-COSTSPAN` (WARN, a layer's literal costs span <3 orders — real ladders span 6+).
+- **Author rules (handbook 12)** — from Acamaeda's own design notes, which outrank the corpus
+  statistics where they disagree: `N-ARROWTHIS` (**FAIL**, a layer/component hook written as an
+  arrow function whose body uses `this` — arrows have no own `this`), `N-CONTRAST` (WARN,
+  aggregated, layer colors too dark to read as text on the page background — the engine renders
+  your currency amount in that color), `N-UNLOCKPAYGATE` (WARN, aggregated, an upgrade gating a
+  layer that still charges `requires`: pay twice, second price invisible), `N-HOTKEYDESC` (WARN,
+  a hotkey whose description omits the key).
 - Use `--json` for machine-readable output. Fixture-proof: `tests/fixture-good` passes clean,
-  `tests/fixture-bad` triggers every rule (run `node tests/run_tests.js` to re-verify).
+  `tests/fixture-bad` triggers every main rule, `tests/fixture-ghost` covers the ghost-field
+  table (run `node tests/run_tests.js` to re-verify).
 
 ---
 
@@ -361,6 +426,14 @@ Give the user these instructions (and the 07 Part D checklist):
 | Numbers explode / game beat in minutes | three causes, check in order: a cap-valued `upgradeEffect` wired into `getPointGen()` (N-CAPMULT), Σ self-scaling exponents in a `gainMult` ≥ 1 (N-SELFTOTAL), or a missing softcap (P12) — fix the formula, then rebalance the era's requires in the brief |
 | Passive generation never kicks in, or a fork/custom layer sees it as 0 | `passiveGeneration()` returned a boolean or Decimal (N-PGBOOL): `new Decimal(true)` is 0 and `diff * Decimal` is NaN — return a plain number (`if (hasMilestone(...)) return 1`) |
 | Engine misbehavior you can't explain | check `references/core/07` Part B for deprecated features (challenge `goal:`, `goalTooltip`) |
+| **Upgrades buy fine but nothing in the game changes** | the classic generated-game failure: their `effect()` is never consumed (N-UNWIRED). Wire each id into a `gainMult`/`gainExp`/`passiveGeneration`/`getPointGen` branch, or drop the `effect()` if it is a token — see handbook 11 §2 |
+| A challenge shows no reward text | you wrote `reward:`; the engine renders `rewardDescription` (N-GHOSTFIELD, 11 §6) |
+| A challenge can never be beaten, or the completion count is stuck at 1 | you wrote `repeatable:`; use `completionLimit: n`, and `canComplete()` for the win condition |
+| An achievement never triggers | you wrote `condition()`; layer achievements are evaluated by `done()` (N-GHOSTFIELD) |
+| A layer hook reads `undefined` for `this.layer` / `this.id` | you wrote it as `() =>` — arrows have no own `this`. Use `function() {}` (N-ARROWTHIS) |
+| The player's own balance is invisible in a layer | that layer's color is too dark for the page background; the engine renders the amount in it (N-CONTRAST) |
+| Players complain they pay twice for one layer | an upgrade gates a layer that still charges `requires` — switch to a threshold (N-UNLOCKPAYGATE) |
+| Nobody knows the hotkey exists | the key is missing from the hotkey's `description` string (N-HOTKEYDESC) |
 
 ## Constraints (do not violate)
 

@@ -63,9 +63,15 @@ fun-density table. **K1 (flat mult) may not exceed ~40% of a layer's upgrades** 
   flesh): coin 21 `player.super_mushroom.points.add(3).log(3)`; Gaokao eng 13 sources `chi`
   points; Mining `logEffects` gives each wood species a *different formula shape* (oak `^0.8`,
   spruce `log10^10`, birch `log10^4`).
-- **K4 meta-effect (effect-on-effect)** — raises another upgrade/buyable's *exponent*:
+- **K4 meta-effect** — a **named mechanic** grows stronger (`ret = ret.pow(1.1)`,
+  `exp += 1`, a formula rewrite on a specific labelled thing).
   Gaokao sm 11 "power first 3 Chinese upgrades by ^1.1" → `if(hasUpgrade("chi",11)) ret=ret.pow(1.1)`;
-  MM2 easy 25 "Fire Flower effect ^1000". The single most underused high-value kind.
+  MM2 easy 25 "Fire Flower effect ^1000".
+  > **Narrowed 2026-10-03 per handbook 12** (the TMT author, 2021-02-24): *"Try to avoid
+  > having effects that boost an upgrade's effect. Only boost resources or named mechanics."*
+  > So K4 must target a **resource or a named mechanic the player can see** — never an
+  > anonymous upgrade's hidden number. Boosting `points` or a labelled mechanic is fine;
+  > "upgrade 47 is now stronger" is not, because the player cannot see or reason about it.
 - **K5 softcap/hardcap manipulation** — delays a cap, raises a hardcap, or *replaces a formula*:
   coin milestone 0 "delay 2nd Coin upgrade's softcap by ^25" (`overpowered()` milestone variant,
   §4-M6); easy 24 "delay hardcap to 1000"; easy 14 "tier 7 reward now has a better formula";
@@ -261,7 +267,8 @@ with M2 + M7 + M8 can out-rate a busy one with all ten.
       `hasChallenge()`/`challengeEffect()`; goal via `canComplete()`.
 - [ ] Any clickable state (`_running`, random picks) initialized in `startData()` as Decimal/boolean.
 - [ ] Bars: `progress()` divides by the same cap the `update()` compares against.
-- [ ] Meta-effect upgrades (K4) actually appear in the target's formula (`ret.pow(1.1)`).
+- [ ] Meta-effect upgrades (K4) actually appear in the target's formula (`ret.pow(1.1)`) — and target a
+      resource or named mechanic, never another upgrade's hidden number (handbook 12 §3-15).
 - [ ] Story (if any) in its own microtab/infoboxes, unlock-gated.
 
 ---

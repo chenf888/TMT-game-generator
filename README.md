@@ -1,7 +1,7 @@
 # TMT Game Generator — an agent skill for The Modding Tree
 
 A [SKILL.md-format](https://agentskills.io) agent skill that generates **complete, playable,
-balanced [The Modding Tree](https://github.com/Acamaeda/The-Modding-Tree) (TMT v2.7) incremental
+balanced [The Modding Tree](https://github.com/Acamaeda/Modding-Tree) (TMT v2.7) incremental
 games** from a short conversation. Load it into any agent tool that supports skills
 (ZCode, Claude Code, Codex, Cursor, …), say "make me an incremental game about X", and the
 agent runs the full pipeline: interview → data-driven design brief → scaffold → code
@@ -27,10 +27,19 @@ development — a 25-layer and a 10-layer generated game):
   and mechanic variety (challenges, clickables, bars, secondary currencies, active loops)
   are quota-checked per blueprint, because measured 8+/10 games separate on mechanic
   variety, not layer count.
-- **~30-rule static checker** — every hard rule and every regression caught in real
+- **The engine author's own design notes, built in.** Acamaeda's guidance (2020–2023) is
+  folded in as `references/design/12`: pacing targets, upgrade/buyable discipline, cost-before-
+  softcap, threshold gates, readability. Where it disagreed with our corpus statistics, **it won**
+  — four previously-taught positions were corrected, and §0 of chapter 12 lists them.
+- **Corpus-calibrated numbers** — measured over **every component of 329 real TMT games**
+  (1,156 layers, 29,141 components, every figure traceable to file + line). This is what
+  produced the wiring rule: **54.4% of real upgrades carry no `effect()` at all**, because
+  their power is a branch in the layer's `gainMult()`. See `references/design/11`.
+- **53-rule static checker** — every hard rule and every regression caught in real
   generated games is automated (`scripts/static_checks.js`): Decimal discipline, row
   contiguity, requires monotonicity, dead-end unlock upgrades, self-scaling compounding
-  budgets, achievement visibility, and more.
+  budgets, achievement visibility, **effects that nothing consumes**, unread engine fields,
+  flat cost ladders, and all-flat gain curves.
 
 ## Requirements
 
@@ -68,13 +77,14 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | 1. Interview | ≤7 structured questions: theme-structure confirmation, scale (locks a small/medium/large blueprint), natural ceilings, pacing & interactivity, side content, automation/timewall tolerance, language & style |
 | 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 11 rules before any code exists |
 | 3. Scaffold | `node scripts/scaffold.js "Game Name" <dir>` copies the bundled TMT template, patches `js/mod.js` (unique permanent `modInfo.id`, name, author, modFiles, charset meta), self-verifies and syntax-checks the result |
-| 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, effect-kind diversity plan, tabFormat/microtabs organization, M1–M10 mechanics, automation ladder, softcaps, theming |
+| 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M10 mechanics, automation ladder, softcaps, theming |
 | 5. Static checks | `node scripts/static_checks.js <game-folder>` — FAIL blocks manual testing; WARNs need a written justification in the brief |
 | 6. Balance walkthrough | Era-by-era reachability estimate against the measured heuristics + multiplier-zone compounding audit; rebalance the brief, not the code |
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
 References load **on demand** (`references/core/00–08` engine handbook,
-`references/design/09–10` design patterns + fun mechanics), keeping context small.
+`references/design/09–12` design patterns, fun mechanics, corpus-calibrated numeric
+design, and the engine author's own notes), keeping context small.
 
 ## Folder layout
 
@@ -92,11 +102,13 @@ tmt-game-generator/
 │   └── design-brief-template.md
 ├── scripts/
 │   ├── scaffold.js           # template copy + mod.js patcher (self-verifying)
-│   └── static_checks.js      # ~30-rule mod-code checker (FAIL/WARN/PASS report, --json)
+│   └── static_checks.js      # 53-rule mod-code checker (FAIL/WARN/PASS report, --json)
 ├── tests/
 │   ├── run_tests.js          # smoke suite: fixtures + scaffold e2e  → node tests/run_tests.js
 │   ├── fixture-good/         # must pass with zero findings
-│   └── fixture-bad/          # injects every rule's defect; each must be caught exactly
+│   ├── fixture-bad/          # injects every rule's defect; each must be caught exactly
+│   └── fixture-ghost/        # unread engine fields (own fixture: adding a challenge here
+│                             # would mask fixture-bad's D-MECHQUOTA regression)
 └── template/                 # bundled TMT v2.7 engine template (upstream MIT licenses inside)
 ```
 
@@ -106,9 +118,10 @@ tmt-game-generator/
 node tests/run_tests.js
 ```
 
-Three smoke groups should all pass: good fixture clean, bad fixture catches every rule with
-zero false positives, and a freshly scaffolded game (from the bundled template) passes the
-checker. This works from any directory the skill is installed in — no environment variables
+Four smoke groups should all pass: good fixture clean, bad fixture catches every rule with
+zero false positives, the ghost fixture flags exactly the unread engine fields (and does NOT
+flag the valid ones — `completionLimit`, `canComplete`), and a freshly scaffolded game
+(from the bundled template) passes the checker. This works from any directory the skill is installed in — no environment variables
 needed. To point the scaffolder at a different engine template anyway, use
 `--from <template-dir>` or the `TMT_TEMPLATE` environment variable.
 

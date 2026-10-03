@@ -70,6 +70,10 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             "M-UNREG",         // extra.js not in modFiles
             "D-MICROTABS",     // layer m: 20 content items, no tabFormat (10 §3)
             "C-CONTENT1ELEM",  // layer c: ["upgrades"] renders as nothing (phase-⑥ incident)
+            "N-UNWIRED",       // layers n/z: upgrades define effect() whose id nothing ever
+                               // reads — the phase-⑧ headline defect (54.4% of real upgrades
+                               // have no effect() because their power lives in gainMult)
+            "N-ARROWTHIS",     // layer w: gainMult is an arrow function using `this`
         ];
         const expectedWarns = [
             "M-END-PLACEHOLDER",
@@ -80,6 +84,14 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             "D-MECHQUOTA",     // 4 main layers, zero interactive components (10 §5)
             "M-CHARSET",       // fixture-bad index.html has no charset meta (phase-⑥ incident)
             "N-PGBOOL",        // layer a: passiveGeneration returns a boolean, not a number
+            // phase-⑧ corpus rules (E:\Idle-Skill\archive\ guide):
+            "D-LOCALWIRE",     // layers n/z: effect-bearing upgrades wired to nothing local
+            "D-EFFECTSHAPE",   // layers n/z: all effects flat multiplies, no pow/log/softcap
+            "D-COSTSPAN",      // layer z: 9 literal costs inside a 3-order band
+            // handbook-12 rules (TMT author's own notes, 2020-10 .. 2023-04):
+            "N-CONTRAST",      // layer w: #141414 unreadable as text on the page background
+            "N-UNLOCKPAYGATE", // layer w upgrade 12 unlocks layer "n", which still has requires
+            "N-HOTKEYDESC",    // layer w hotkey "w" whose description omits the key
         ];
         ok(status === 1, "exit code 1 (FAILs present)", `status=${status}`);
         for (const rule of expectedFails)
@@ -117,6 +129,29 @@ console.log("== test 3: scaffold output passes static checks ==");
         }
     }
     fs.rmSync(out, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+console.log("== test 4: fixture-ghost flags every unread component key ==");
+{
+    const dir = path.join(ROOT, "tests", "fixture-ghost");
+    const { parsed, stderr } = runChecks(dir);
+    if (!parsed) ok(false, "static_checks produced JSON", stderr || "");
+    else {
+        const warnRules = new Set(parsed.findings.filter((f) => f.level === "WARN").map((f) => f.rule));
+        ok(warnRules.has("N-GHOSTFIELD"), "WARN N-GHOSTFIELD reported");
+        const keys = parsed.findings.filter((f) => f.rule === "N-GHOSTFIELD")
+            .map((f) => (f.msg.match(/defines `([^`]+)`/) || [])[1]).filter(Boolean);
+        for (const k of ["reward", "repeatable", "canBypass", "countTowardsCompletion", "persistent", "condition", "secret"])
+            ok(keys.includes(k), `ghost key flagged: ${k}`, "got: " + [...new Set(keys)].join(", "));
+        // the two fields an earlier corpus-only guess would have wrongly flagged:
+        // completionLimit makes a challenge repeatable (js/technical/layerSupport.js:109-110)
+        // and canComplete() is the modern win-condition hook.
+        ok(!keys.includes("completionLimit"), "completionLimit NOT flagged (challenges ARE repeatable)");
+        ok(!keys.includes("canComplete"), "canComplete NOT flagged (valid field)");
+        ok(!warnRules.has("D-DUPKEY"), "ghost fixture has no accidental D-DUPKEY");
+        ok(!parsed.findings.some((f) => f.rule === "N-UNWIRED" && f.level !== "PASS"), "the properly wired upgrade is not flagged unwired");
+    }
 }
 
 // ---------------------------------------------------------------------------

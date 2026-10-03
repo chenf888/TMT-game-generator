@@ -342,9 +342,17 @@ Their tooltips state the reward explicitly: `// achievements 31: "Get 3rd Invinc
 
 ---
 
-### P12 — Softcap Defense-in-Depth  `[required for balance]`
+### P12 — Softcap Defense-in-Depth  `[required only for runaway loops]`
 
-**What:** high-rated games cap runaway growth at **three independent places**, and sell "cap delay" as upgrade rewards:
+> **Revised 2026-10-03 after handbook 12 (the TMT author's own notes, 2022-07-04).**
+> *"Cost scaling is usually better than softcaps… It's easier to understand, because it affects
+> something simpler… (10x points isn't actually 10x if it's softcapped)."* **Reach for cost
+> scaling first.** Softcaps are the fallback for a loop that would otherwise run away, not
+> the default shaping tool. The corpus agrees: only **6%** (69 / 1,156) of real layers define a
+> softcap, while cost ladders are the dominant mechanism everywhere. Prefer shaping through
+> `cost()`/`requires` and use softcaps only where the numbers genuinely must not be unbounded.
+
+**What:** when a softcap IS warranted, high-rated games cap runaway growth at **three independent places**, and sell "cap delay" as upgrade rewards:
 
 1. **layer-`softcap` property** on the currency itself (engine-supported, applies to reset gain),
 2. **`softcap(value, cap, power)` helper** inside individual `effect()`s,
@@ -355,6 +363,8 @@ Their tooltips state the reward explicitly: `// achievements 31: "Get 3rd Invinc
 softcap() {
     let Csoftcap = new Decimal("e1.8e12")
     if (hasUpgrade('super_hammer', 14)) Csoftcap = new Decimal("e30000000000003")  // upgrade RAISES the cap
+    // NOTE (handbook 12, 2021-02-24): only sell cap-raising if the cap is VISIBLE.
+    // "Don't do upgrades that modify softcaps, unless it's clear where the softcap is."
     return new Decimal(Csoftcap)
 },
 softcapPower() {
