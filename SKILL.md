@@ -36,11 +36,11 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 
 | Stage | Output | Gate to next stage |
 |---|---|---|
-| 1. Interview | answers mapped to generation parameters | all 7 questions answered |
-| 2. Design brief & self-check | filled `design-brief` doc | every self-check passes |
+| 1. Interview | answers mapped to generation parameters | all 7 questions answered **+ a game type locked (Q4b)** |
+| 2. Design brief & self-check | filled `design-brief` doc | every self-check passes (20 checks) |
 | 3. Scaffold | game folder + recorded `modInfo.id` | scaffold exits 0 |
 | 4. Generate code | js/mod.js, layer files, tree.js, theming | all files written & registered; **every upgrade classified token-vs-value and, if it has an effect, wired to a consumer** |
-| 5. Static checks | check report | 0 FAIL (WARNs justified in brief) |
+| 5. Static checks | check report (type profile applied) | 0 FAIL (WARNs justified in brief) |
 | 6. Balance walkthrough | annotated numbers | heuristics table verified |
 | 7. Manual test handoff | test instructions for the user | 07 Part D checklist handed over |
 
@@ -48,7 +48,8 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 
 | When | Read |
 |---|---|
-| Stage 2 | `references/design/09` (fully), `references/design/10` (fully), `references/design/11` (fully), `references/design/12` (fully), all three `assets/*.json`, brief template |
+| Stage 1, after Q4 | `references/design/13` (§1 types + §3 routing); run `scripts/classify.js` |
+| Stage 2 | `references/design/09` (fully), `references/design/10` (fully), `references/design/11` (fully), `references/design/12` (fully), all `assets/*.json`, brief template |
 | Stage 4, any code | `references/core/01` (Decimal rules — mandatory before writing ANY code) |
 | Stage 4, mod.js | `references/core/02`; wiring map `references/core/06` §3 |
 | Stage 4, layers | `references/core/03`, `04`; idioms `references/core/06`; **wiring discipline `references/design/11` §2**; **gates, costs and readability `references/design/12`** |
@@ -99,7 +100,46 @@ percentages, levels, distance-to-zero)?
   minigame OR M4 bar+clickable active production — handbook 10 §4); at most ONE `type: "none"`
   core-loop layer built from clickables/bars/update() (P15 — use sparingly, one max)
 - `Balanced` → default blueprint behavior + the blueprint's fun-quota mechanics
-  (`assets/fun-quota.json`)
+  (`assets/fun-quota.json`) — **and Q4b will ask what the player actually does.** "Balanced"
+  is not permission to install every mechanic in the quota list; the generated game picks its
+  mechanics from the locked type plus modifiers.
+
+**Q4b — Game type (interaction model).** Q2 locked the game's *scale*; Q4b locks its *shape*.
+The two axes are independent — do not merge them, and do not change the blueprint.
+
+Derive the type from what the player **does**, never from the theme. Run:
+
+```bash
+node scripts/classify.js --request "<the user's request verbatim>" \
+                         --recap "<the Q1 three-line recap>" \
+                         --q4 <idle|active|balanced> [--json]
+```
+
+Exit 0 = routed. Exit 3 = the script could not decide and returns a question — **ask the
+user that question verbatim, in their language, then re-run with `--explicit <typeId>`.**
+Never guess past an exit-3, and never let a keyword override an explicit request.
+
+| Type | The player… | Layers | Exempt |
+|---|---|---|---|
+| `passive-prestige` | accumulates / unlocks / resets, never acts | `normal`, `static` | `D-NOUPDATE` |
+| `active-click` | taps, chops, presses — a discrete action | + `clickables` | — |
+| `active-tick` | pushes a continuous quantity that fills over time | + `bars` + `update()` | — |
+| `board-minigame` | plays on a 2D board | + `grid` | — |
+
+Then pick modifiers, checking each hard dependency:
+
+| Modifier | Requires | Drop it (and log why in brief §10) if… |
+|---|---|---|
+| `sim` | — | more than 3 layers would use it |
+| `score-attack` (M2) | type `active-*` **and** `sim` | the game has no tick — M2 records a peak inside `update()`, and the engine has **no** score-attack API |
+| `minigame` (M3) | type `active-*` | there are no clickables to click |
+| `board`, `challenges`, `caps` | — | never |
+
+**At most one interaction type.** Everything else is a modifier. If the user wants all of
+them, ask which one is the core and treat the rest as modifiers.
+
+Record in brief §2: the type, the confidence, and any modifier you dropped and why.
+Full judgment aid: `references/design/13`.
 
 **Q5 — Side content.**
 - `Full — challenges (M2 score-attack hub for medium+) + achievements + story/dashboard side layer`
@@ -161,22 +201,27 @@ future game folder or in your notes) and fill every section:
 | 17 | **cost before softcap**: shape with `cost()`/`requires`; use softcaps only for genuine runaway loops, and only sell a cap raise if the cap is visible | 12 §2; 09 P12 (revised) |
 | 18 | **row pacing written as two constants**: `per-row time = requires step ÷ output step`, target **×1.1–×1.6**. Both numbers appear in the brief with the resulting multiplier beside them. No static rule can check this — it spans layers and generator constants | 11 §4.1 |
 | 19 | **reset lifecycle**: every layer whose milestones read `best`/`total` keeps both in `doReset`; `autoPrestige` implies `resetsNothing` (compare milestone sets); no `update()` assigns `player[layer].points`; every static layer has `canBuyMax()` | 03 §4.1; N-MSDESTROY, N-AUTOWIPE, N-POINTSWRITE, N-STATICMAX |
+| 20 | **type contract (Q4b)**: every module the locked type makes mandatory is planned and every forbidden one is absent; each modifier's hard dependency holds (M2 needs a tick, M3 needs clickables); every dropped modifier has a reason in §10 | 13 §1–§3; `assets/type-registry.json`; T-CLICKABLE, T-GRID |
 
 Also check no two milestones of the same layer claim the same automation grant (the Mario
-Maker 2 "conflict point" incident). Gate: proceed only when all 19 checks pass.
+Maker 2 "conflict point" incident). Gate: proceed only when all 20 checks pass.
 
 ---
 
 ## Stage 3 — Scaffold
 
 ```bash
-node scripts/scaffold.js "Game Name" [output-dir] [--author Name] [--points-name points] [--from /path/to/The-Modding-Tree-master]
+node scripts/scaffold.js "Game Name" [output-dir] [--author Name] [--points-name points] [--from /path/to/The-Modding-Tree-master] [--type <typeId>] [--modifier id,id]
 ```
 
 The script copies the whole TMT template and patches `js/mod.js` (name, a unique
 `modInfo.id` = slug + random suffix, author, pointsName, modFiles, VERSION 0.1, changelog
 and winText placeholders; `offlineLimit` stays 1 hour). It verifies the patch and
 syntax-checks the result.
+
+`--type` / `--modifier` are **optional**. With them, the scaffolder writes
+`.tmt-profile.json` into the game folder; Stage 5's checker reads it and applies that type's
+gates and thresholds automatically. Omit them and nothing changes.
 
 - **Record `modInfo.id`** from the output — it keys the localStorage savefile and must never
   change afterwards (07 rule 3).
@@ -337,7 +382,7 @@ node scripts/static_checks.js "<game-folder>"
   re-run until 0 FAIL. Manual testing is not allowed with open FAILs.
 - **WARN = needs a written reason** in brief §10 (e.g. a deliberate ×150 requires leap for a
   multi-row jump like Mario Maker's e86). Unexplained WARNs count as failures.
-- Rules cover: 58 rule ids across mod.js completeness (`M-*`), file registration (`M-UNREG`, 07 rule 2), banned
+- Rules cover: 61 rule ids across mod.js completeness (`M-*`), file registration (`M-UNREG`, 07 rule 2), banned
   calls (`.mod(`, `resetBuyables(`, `ExpantaNum`, raw numbers where Decimals belong,
   native-ops-on-currency suspects), layer integrity (`startData`, prestige fields), the
   corpus-derived design assertions: row contiguity (A2), requires-ladder monotonicity (A1) +
@@ -346,8 +391,17 @@ node scripts/static_checks.js "<game-folder>"
   assertions: `D-EFFECTMONO` (WARN, layer >60% constant-mult upgrades), `D-MICROTABS`
   (FAIL ≥16 / WARN ≥10 content items without tabFormat/microtabs), `D-MECHQUOTA` (WARN, ≥4
   main layers with zero challenges/clickables/bars/grids anywhere), `D-NOUPDATE` (WARN, ≥4
-  main layers and no `update()` tick logic in the game). Thresholds live in
-  `assets/fun-quota.json` → `staticCheckThresholds`.
+  main layers and no `update()` tick logic in the game). Thresholds are read from
+  `assets/fun-quota.json` at run time — that file is the authority, not the numbers above.
+- **Type rules (`T-*`)** — the type locked in Q4b decides which of these are enforced and
+  which are exempt. The checker reads `.tmt-profile.json` from the game folder (written by
+  `scaffold.js --type`); `--profile <typeId>` overrides it and `--no-profile` disables it.
+  Without either, the checker behaves exactly as it did before types existed.
+  `T-CLICKABLE` (FAIL, a clickable with no `canClick`/`onClick`, or state absent from
+  `startData`), `T-GRID` (FAIL, `grids:` instead of `grid:`, non-base-100 ids, or no
+  `getStartData`), `T-TICKREG` (WARN, `doNotCallTheseFunctionsEveryTick` omits a hook the game
+  actually defines — `M-DNC` alone only checks the declaration exists).
+  `passive-prestige` is exempt from `D-NOUPDATE`: having no tick is that type's correct shape.
   Negative-example rules — each one caught a real defect in a previously generated game:
   `N-ACHVIS` (FAIL, uncompleted
   achievements hidden via visibility:hidden), `N-UNLOCKDEAD` (FAIL, unlocked-gated layers

@@ -281,6 +281,7 @@
     <div class="nav-links">
       <a href="#pipeline" class="hide-m">How it works</a>
       <a href="#corpus" class="hide-m">The data</a>
+      <a href="#types" class="hide-m">Game types</a>
       <a href="#lifecycle" class="hide-m">Save safety</a>
       <a href="#install" class="hide-m">Install</a>
       <a href="#quality" class="hide-m">Quality bar</a>
@@ -293,7 +294,7 @@
   <div>
     <p class="eyebrow">Agent skill &middot; The Modding Tree v2.7</p>
     <h1>One conversation, one playable game.</h1>
-    <p class="hero-sub">Your agent interviews you, designs the tree, writes and checks the code, then hands you a balanced game to play.</p>
+    <p class="hero-sub">Your agent interviews you, works out what kind of game you actually asked for, designs the tree, writes and checks the code, then hands you a balanced game to play.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">Get the skill</a>
       <a class="btn btn-ghost" href="#pipeline">See the pipeline</a>
@@ -339,8 +340,8 @@
   <div class="wrap stats-grid">
     <div class="stat"><div class="num">329</div><div class="lab">real TMT games fully extracted to build the balance data</div></div>
     <div class="stat"><div class="num">7</div><div class="lab">pipeline stages, from theme interview to test handoff</div></div>
-    <div class="stat"><div class="num">58</div><div class="lab">automated checks gating every generated build</div></div>
-    <div class="stat"><div class="num">6</div><div class="lab">complete games generated and play-tested during development</div></div>
+    <div class="stat"><div class="num">61</div><div class="lab">automated checks gating every generated build</div></div>
+    <div class="stat"><div class="num">4</div><div class="lab">game types, each with its own generation rules and acceptance bar</div></div>
   </div>
 </div>
 
@@ -350,11 +351,11 @@
     <p>Every run follows the same measured pipeline. Nothing skips a stage, and nothing ships before the checks pass.</p>
   </div>
   <div class="rail">
-    <div class="step"><div class="step-n">01</div><div class="step-verb">Interview</div><div class="step-desc">Seven questions lock theme, scale, natural ceilings, pacing, side content, and language. The theme dictates the tree, not just the names.</div></div>
-    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against nineteen rules before any code exists.</div></div>
+    <div class="step"><div class="step-n">01</div><div class="step-verb">Interview</div><div class="step-desc">Seven questions lock theme, scale, natural ceilings, pacing, side content, and language &mdash; then a scorer decides what kind of game this is. The theme dictates the tree, not just the names.</div></div>
+    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against twenty rules before any code exists.</div></div>
     <div class="step"><div class="step-n">03</div><div class="step-verb">Scaffold</div><div class="step-desc">A fresh TMT v2.7 game folder with a permanent savefile id, patched and syntax-verified by a bundled script.</div></div>
     <div class="step"><div class="step-n">04</div><div class="step-verb">Generate</div><div class="step-desc">Decimal-safe layer code: upgrades with varied effects, milestones, challenges, buyables, automation ladders, softcaps, theming.</div></div>
-    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">58 static rules run over the source. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
+    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">61 static rules run over the source, gated by the locked type. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
     <div class="step"><div class="step-n">06</div><div class="step-verb">Balance</div><div class="step-desc">Era-by-era reachability math against the measured heuristics, with every compounding multiplier zone audited.</div></div>
     <div class="step"><div class="step-n">07</div><div class="step-verb">Hand off</div><div class="step-desc">You serve the folder, play it, and verify the checklist: clean console, working saves, reachable endgame.</div></div>
   </div>
@@ -370,7 +371,7 @@
     <div class="cstat"><div class="num">329</div><div class="lab">published games fully extracted, not sampled</div></div>
     <div class="cstat"><div class="num">1,156</div><div class="lab">layers, with their cost and gain formulas</div></div>
     <div class="cstat"><div class="num">29,141</div><div class="lab">components catalogued &mdash; upgrades, challenges, milestones, achievements, buyables</div></div>
-    <div class="cstat"><div class="num">58</div><div class="lab">static rules, every threshold measured from data or the engine author's own notes</div></div>
+    <div class="cstat"><div class="num">61</div><div class="lab">static rules, every threshold measured from data or the engine author's own notes</div></div>
   </div>
 
   <div class="corpus-note">
@@ -412,6 +413,77 @@
     <div class="ops-row"><span class="ops-name">.times()</span><span class="ops-track"><i class="ops-fill dim" style="width:34.2%"></i></span><span class="ops-val">1,652</span></div>
     <div class="ops-row"><span class="ops-name">softcap()</span><span class="ops-track"><i class="ops-fill dim" style="width:0.8%"></i></span><span class="ops-val">39</span></div>
     <p class="ops-cap">Operations used by real upgrade effects, out of 6,274 upgrades that have one. Power and log shapes outnumber plain multipliers about three to one &mdash; so a generator that only ever emits &times;2 produces something no human ships.</p>
+  </div>
+</section>
+
+<section id="types" class="wrap" style="padding-top: 0;">
+  <div class="sec-head">
+    <h2>It knows which kind of game you asked for</h2>
+    <p>Size and shape are two different questions, and they were being answered by the same one.
+    Scale is locked by Q2 &mdash; 5 to 7 layers, or 25+. Shape is locked separately, from the same
+    corpus: of the 329 real games, how many let the player act, and how? That ratio is not a guess.
+    It decides which components are mandatory, which are forbidden outright, and which checks
+    the build has to pass.</p>
+  </div>
+
+  <div class="corpus-stats">
+    <div class="cstat">
+      <div class="num">53.5%</div>
+      <div class="lab"><b>passive-prestige</b><br>the player accumulates and resets, never acts. <code>normal</code> and <code>static</code> layers only &mdash; no tick, no clickables, no grid.</div>
+    </div>
+    <div class="cstat">
+      <div class="num">11.2%</div>
+      <div class="lab"><b>active-click</b><br>discrete taps. Every clickable must define <code>canClick()</code> and <code>onClick()</code>, and its state must live in <code>startData</code>.</div>
+    </div>
+    <div class="cstat">
+      <div class="num">10.0%</div>
+      <div class="lab"><b>active-tick</b><br>a continuous quantity the player pushes. Needs <code>update()</code>, bars with a real <code>progress()</code>, and tick-hook registration.</div>
+    </div>
+    <div class="cstat">
+      <div class="num">6.7%</div>
+      <div class="lab"><b>board-minigame</b><br>the playfield is a 2D board. Grid contract: <code>getStartData</code>, a rows/cols spec, base-100 cell ids.</div>
+    </div>
+  </div>
+
+  <div class="wire-grid">
+    <div class="wire-col bad">
+      <div class="wire-tag">one bar for every game</div>
+      <pre>58 rules &mdash; the same rules
+for a clicker and a prestige chain
+
+A 3-layer prestige chain was
+  never checked for tick logic:
+  the floor sat at 4 layers
+
+A clickable with no onClick():
+  the rule counted the button
+  and never opened it</pre>
+    </div>
+    <div class="wire-col good">
+      <div class="wire-tag">gated by the locked type</div>
+      <pre>61 rules &mdash; each type gets
+the ones that apply to it
+
+passive-prestige is EXEMPT from
+  "needs tick logic" &mdash; having
+  no tick is CORRECT there
+
+active-click: a clickable with
+  no onClick() is a FAIL,
+  not a count
+
+board-minigame: a grid missing
+  getStartData is a FAIL</pre>
+    </div>
+  </div>
+
+  <div class="corpus-note">
+    Mechanics that depend on an interaction model are <b>gated, not dropped</b>. The score-attack
+    challenge hub (M2) records a peak inside <code>update()</code> &mdash; and the engine has no
+    score-attack API at all, so the pattern is hand-rolled and needs a tick to exist. Ask for it
+    on a passive game and the skill says so, records the reason in the design brief, and moves on.
+    A game with no declared type at all is checked exactly as it was before types existed: the
+    extra rules stay silent and every threshold falls back to its old value.
   </div>
 </section>
 
@@ -545,15 +617,17 @@ resetsNothing() {
         <li>Effect-kind quotas prevent walls of identical flat multipliers</li>
         <li>Microtabs organize layers before they become scroll walls</li>
         <li>Challenges, clickables, and active loops land per blueprint quota</li>
+        <li>The locked game type&rsquo;s contract is honoured &mdash; required components present, forbidden ones absent</li>
       </ul>
     </div>
     <div class="qual-col">
       <h3>Verification</h3>
       <ul>
-        <li>58 static checks pass before manual testing starts</li>
+        <li>61 static checks pass before manual testing starts</li>
         <li>Zero console errors across the whole playthrough</li>
         <li>Saves, offline cap, and the win screen verified by hand</li>
         <li>Every effect is proven to be consumed by a formula somewhere</li>
+        <li>A clickable is opened and read, not merely counted; a grid declares <code>getStartData</code></li>
         <li>Prestige a high row with milestones earned, then confirm the ladder survived the reset</li>
         <li>Rules hardened by six full games, a 329-game corpus, and the engine author's own design notes</li>
       </ul>

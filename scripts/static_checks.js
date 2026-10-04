@@ -76,7 +76,7 @@
  *                   Return 1 / 0 / 0.5 — plain numbers only (found via a player report on a
  *                   generated game)
  * Phase-⑧ corpus rules (2026-10-03, from the full numeric archive of 329 real TMT games —
- *   E:\Idle-Skill\archive\, guide §1–§2). Every threshold below is a MEASURED corpus value,
+ *   numeric archive's guide §1–§2). Every threshold below is a MEASURED corpus value,
  *   not a guess:
  *     N-UNWIRED    (FAIL) an upgrade defines effect() but its id is referenced NOWHERE else in
  *                   the mod files — the effect is never read and buying it changes nothing.
@@ -119,7 +119,7 @@
  *     N-HOTKEYDESC  (WARN) a hotkey whose description text omits the key itself
  *                   ("You need to have the key in the description", 2020-10-07).
  * Lifecycle rules (2026-10-04) — from the The Galaxy Nebula postmortem
- * (E:\Idle-Skill\The-Galaxy-Nebula\FINDINGS.md). All three of that game's player reports were
+ * (the Galaxy Nebula generated game's FINDINGS.md). All three of that game's player reports were
  * of ONE shape — each part individually reasonable, the COMBINATION unrecoverable — and all
  * three passed the entire rule set above with 0 FAIL. The rules above check wiring and
  * magnitude; these check what SURVIVES a reset:
@@ -146,6 +146,30 @@
  *     N-STATICMAX   (FAIL) a static layer with no canBuyMax(): getResetGain() short-circuits to 1
  *                   (game.js:21) and doReset() clamps the payout to 1 (game.js:186), so the layer
  *                   banks exactly ONE floor per prestige and its whole upgrade ladder is dead.
+ *   Type-profile rules (SKILL.md Q4b, assets/type-registry.json, references/design/13).
+ *   These run ONLY when a type is declared, via .tmt-profile.json in the game folder
+ *   (written by scaffold.js --type) or the --profile flag; --no-profile turns them off.
+ *   A game with no declared type emits no T-* output and every threshold falls back to the
+ *   values below — its report is byte-identical to the pre-type checker.
+ *     T-CLICKABLE  (FAIL) a clickable with no canClick() and/or no onClick() — the button
+ *                  renders but does nothing; (WARN) clickables whose state has no home in
+ *                  startData(), so it resets every load. (handbook 10 §6; 07 hard rule 11)
+ *     T-GRID       (FAIL) a grid missing getStartData or a rows/cols spec. 22 real files use
+ *                  `grid: {` and every one declares both; the old rules counted grids but
+ *                  never opened one. (hard rule 10 — ids are base-100)
+ *     T-TICKREG    (FAIL) a hook slot pointing at a name no mod file defines and the engine
+ *                  does not provide; (WARN) doNotCallTheseFunctionsEveryTick listing such a
+ *                  name. M-DNC only ever checked that the declaration EXISTS. (07 rule 4)
+ *
+ *   Type gating: the locked type's acceptance.exemptRules are skipped entirely — notably
+ *   passive-prestige is exempt from D-NOUPDATE, because having no tick is that type's correct
+ *   shape. D-MECHQUOTA also narrows to challenges-only for passive-prestige.
+ *
+ *   Thresholds are read at run time from assets/fun-quota.json:
+ *   staticCheckThresholds for the global ones, byBlueprint[<blueprint>] for the per-scale
+ *   ones (maxK1SharePerLayer, microtabsRequiredAtContentItems). The literals in this file are
+ *   only the fallback for running the checker without the skill's assets folder.
+ *   --profile <typeId> forces a type; --no-profile forces the untyped behaviour.
  *
  * The scanner is comment/string/template-literal aware (same pitfalls catalogued in
  * crawl/extract_metrics.js: apostrophes in comments, CR line endings, interpolation braces).
@@ -160,10 +184,23 @@ const path = require("path");
 // CLI
 // ---------------------------------------------------------------------------
 const args = process.argv.slice(2);
-const asJson = args.includes("--json");
-const gameDir = args.find((a) => !a.startsWith("--"));
+const flagSet = new Set();
+const optVals = {};
+const positionals = [];
+for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    // --profile takes a value, so consume the next token: without this, a naive
+    // "first non-flag" scan would pick the profile id up as the game directory.
+    if (a === "--profile") { optVals["--profile"] = args[++i]; continue; }
+    if (a.startsWith("--")) { flagSet.add(a); continue; }
+    positionals.push(a);
+}
+const asJson = flagSet.has("--json");
+const profileOff = flagSet.has("--no-profile");
+const profileFlag = optVals["--profile"] || null;
+const gameDir = positionals[0];
 if (!gameDir) {
-    console.error("Usage: node static_checks.js <game-folder> [--json]");
+    console.error("Usage: node static_checks.js <game-folder> [--json] [--profile <typeId>] [--no-profile]");
     process.exit(2);
 }
 const jsDir = path.resolve(gameDir, "js");
@@ -173,14 +210,54 @@ if (!fs.existsSync(path.resolve(gameDir, "index.html")) || !fs.existsSync(path.j
 }
 
 // ---------------------------------------------------------------------------
+// game-type profile
+// The type is orthogonal to the blueprint; both come from the .tmt-profile.json that
+// scaffold.js --type/--blueprint writes. Absent that file (or with --no-profile) every
+// threshold below falls back to its hardcoded value and every rule runs — a game with no
+// declared type is checked exactly as it was before types existed.
+// ---------------------------------------------------------------------------
+function readJsonQuiet(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch (_) { return null; } }
+
+const REGISTRY = readJsonQuiet(path.resolve(__dirname, "..", "assets", "type-registry.json"));
+const FUN_QUOTA = readJsonQuiet(path.resolve(__dirname, "..", "assets", "fun-quota.json"));
+
+const profile = profileOff ? null : readJsonQuiet(path.join(path.resolve(gameDir), ".tmt-profile.json"));
+const PROFILE_TYPE = profileFlag || (profile && profile.type) || null;
+const PROFILE_BP = profile && profile.blueprint;
+const EXEMPT = new Set(
+    PROFILE_TYPE && REGISTRY && REGISTRY.types && REGISTRY.types[PROFILE_TYPE]
+        ? (REGISTRY.types[PROFILE_TYPE].acceptance.exemptRules || [])
+        : []
+);
+const PROFILE_MODIFIERS = new Set((profile && profile.modifiers) || []);
+
+// assets/fun-quota.json is the single authority for thresholds; the literals below are only
+// the fallback for when the skill is used without its assets folder.
+const TQ = (FUN_QUOTA && FUN_QUOTA.staticCheckThresholds) || {};
+const BPQ = (PROFILE_BP && FUN_QUOTA && FUN_QUOTA.byBlueprint && FUN_QUOTA.byBlueprint[PROFILE_BP]) || {};
+const TH = {
+    effectMonoUpgradeFloor: TQ.effectMonoUpgradeFloor || 8,
+    effectMonoK1Share: BPQ.maxK1SharePerLayer || TQ.effectMonoK1Share || 0.6,
+    microtabsWarn: BPQ.microtabsRequiredAtContentItems || TQ.microtabsWarnAtContentItems || 10,
+    microtabsFail: (BPQ.microtabsRequiredAtContentItems || TQ.microtabsWarnAtContentItems || 10) + 2,
+    mechQuotaMinMainLayers: TQ.mechQuotaMinMainLayers || 4,
+    effectShapeMinEffects: TQ.effectShapeMinEffects || 5,
+    costSpanMinUpgrades: TQ.costSpanMinUpgrades || 8,
+    costSpanMinOrders: TQ.costSpanMinOrders || 3,
+    costSpanMinOrdersStatic: TQ.costSpanMinOrdersStatic || 1,
+    localWireMinEffects: TQ.localWireMinEffects || 3,
+};
+
+// ---------------------------------------------------------------------------
 // findings
 // ---------------------------------------------------------------------------
 const findings = [];
 function add(level, rule, file, idx, msg, fix) {
+    if (EXEMPT.has(rule)) return; // the locked type declares this rule inapplicable to it
     findings.push({ level, rule, file: path.relative(path.resolve(gameDir), file).replace(/\\/g, "/"), line: idx == null ? null : lineOf(fileRecs.get(file).lines, idx), msg, fix: fix || null });
 }
 const FAIL = "FAIL", WARN = "WARN", PASS = "PASS";
-function pass(rule, msg) { findings.push({ level: PASS, rule, file: null, line: null, msg, fix: null }); }
+function pass(rule, msg) { if (EXEMPT.has(rule)) return; findings.push({ level: PASS, rule, file: null, line: null, msg, fix: null }); }
 
 // ---------------------------------------------------------------------------
 // source scanning: comment/string/template-aware
@@ -902,6 +979,11 @@ function layerContentInfo(rec, L) {
         const closeIdx = matchBracket(rec.clean, rec.mask, i);
         if (closeIdx < 0 || closeIdx > L.end) continue;
         info.counts[comp] = countCollectionEntries(rec.clean, rec.mask, i, closeIdx);
+        // A `grid: { rows, cols, getStartData, ... }` is ONE definition object, not a map of
+        // `name: {...}` entries, so the counter above sees zero keys. Without this the grid
+        // is invisible to D-MECHQUOTA and to T-GRID — and to the indexer, which is why
+        // archive/data/tmt_index.json reports grids=0 for all 329 files.
+        if (comp === "grids" && info.counts.grids === 0 && openCh === "{") info.counts.grids = 1;
         if (comp === "upgrades" && openCh === "{") {
             for (const s of upgradeEntrySpans(rec.clean, rec.mask, i, closeIdx))
                 info.upgradeKinds.push(classifyUpgrade(rec.clean, rec.mask, s.start, s.end, L.id));
@@ -916,8 +998,11 @@ function layerContentInfo(rec, L) {
     return info;
 }
 
+// Declared at module scope, not inside the per-layer block: the T-* type rules below
+// run after that block closes and still need the per-layer component counts.
+const contentByLayer = new Map();
+
 {
-    const contentByLayer = new Map();
     for (const L of layers) {
         const rec = fileRecs.get(L.file);
         const info = layerContentInfo(rec, L);
@@ -930,32 +1015,200 @@ function layerContentInfo(rec, L) {
             if (process.env.DBG_FUN) console.error(`DBG ${L.id} kinds=[${info.upgradeKinds.join(",")}] items=${items}`);
             // D-EFFECTMONO — flat-mult monotony (10 §2)
             const total = info.upgradeKinds.length;
-            if (total >= 8) {
+            if (total >= TH.effectMonoUpgradeFloor) {
                 const mono = info.upgradeKinds.filter((k) => k === "mult-const" || k === "wired-other").length;
-                if (mono / total > 0.6)
+                if (mono / total > TH.effectMonoK1Share)
                     add(WARN, "D-EFFECTMONO", L.file, L.start, `layer "${L.id}": ${mono}/${total} upgrades are flat multipliers (inline constant or externally-wired) — 10 §2 effect-kind quota violated`, "Vary effects: K2 pow/log/root shapes, K3 cross-resource sources, K4 meta ^effects, K5 cap-play, K7 unlocks (handbook 10 §2).");
             }
             // D-MICROTABS — content organization (10 §3)
-            if (items >= 16 && !info.organized)
+            if (items >= TH.microtabsFail && !info.organized)
                 add(FAIL, "D-MICROTABS", L.file, L.start, `layer "${L.id}" stacks ${items} content items with no tabFormat/microtabs — long-scroll wall (10 §3; seen in a real generated game: 24 heavy layers, 0 microtabs)`, "Add tabFormat with [\"microtabs\",\"stuff\"] groups (upgrades / milestones / secondary currency / challenges), each unlocked()-gated.");
-            else if (items >= 10 && !info.organized)
+            else if (items >= TH.microtabsWarn && !info.organized)
                 add(WARN, "D-MICROTABS", L.file, L.start, `layer "${L.id}" stacks ${items} content items without tabFormat — add at least ["main-display","prestige-button","upgrades"] (10 §3)`, "Give the layer a tabFormat; microtabs once it has >=3 content groups.");
         }
     }
 
     // D-MECHQUOTA / D-NOUPDATE — game-level mechanic floors (10 §5)
-    if (mainLayers.length >= 4) {
+    if (mainLayers.length >= TH.mechQuotaMinMainLayers) {
+        // A passive-prestige game is never asked for clickables/bars/grids — demanding
+        // them here would just be the interaction types' rule wearing a different hat.
+        // Challenges still apply: every type can have one.
+        const quotaKeys = PROFILE_TYPE === "passive-prestige"
+            ? ["challenges"]
+            : ["challenges", "clickables", "bars", "grids"];
         let interactive = 0, updates = 0;
         for (const L of layers) {
             const info = contentByLayer.get(L.id);
-            interactive += info.counts.challenges + info.counts.clickables + info.counts.bars + info.counts.grids;
+            for (const k of quotaKeys) interactive += info.counts[k];
             if (info.hasUpdate) updates++;
         }
         if (interactive === 0)
-            add(WARN, "D-MECHQUOTA", mainLayers[0].file, mainLayers[0].start, `game has ${mainLayers.length} main layers but zero challenges/clickables/bars/grids anywhere — mechanic-variety floor (10 §5; seen in a real generated game: prestige was the only verb)`, "Add theme-fitting mechanics from handbook 10 §4 (M1/M2 challenges, M3/M4 clickable loops, M5 secondary currency).");
+            add(WARN, "D-MECHQUOTA", mainLayers[0].file, mainLayers[0].start, `game has ${mainLayers.length} main layers but zero ${quotaKeys.join("/")} anywhere — mechanic-variety floor (10 §5; seen in a real generated game: prestige was the only verb)`, "Add theme-fitting mechanics from handbook 10 §4 (M1/M2 challenges, M3/M4 clickable loops, M5 secondary currency).");
         if (updates === 0)
             add(WARN, "D-NOUPDATE", mainLayers[0].file, mainLayers[0].start, `game has ${mainLayers.length} main layers but no update() tick logic — nothing happens between prestiges (10 §5)`, "Add tick-driven behavior: secondary-currency production (M5), run/minigame resolution (M3), or bar charging (M4).");
     }
+}
+
+// ---------------------------------------------------------------------------
+// T-* — type-profile rules
+//
+// The original rules COUNT interactive components but never check that they work:
+// D-MECHQUOTA sums challenges/clickables/bars/grids without opening one, and M-DNC only
+// checks that doNotCallTheseFunctionsEveryTick is declared — never that it lists the hooks
+// the game actually defines. These close exactly those gaps.
+//
+// They run ONLY when a type profile is declared (.tmt-profile.json, or --profile). A game
+// with no declared type emits no T-* output at all, so its report stays byte-identical to
+// what it was before types existed.
+// ---------------------------------------------------------------------------
+
+const ENGINE_HOOK_NAMES = new Set([
+    "gainMult", "gainExp", "softcap", "softcapPower", "passiveGeneration", "autoPrestige",
+    "autoUpgrade", "resetsNothing", "automate", "update", "doReset", "startData", "canReset",
+    "getResetGain", "getNextAt", "points", "getAmount", "affordProgress", "buyablesFill",
+    "clickables", "barDefinitions", "beforeReset", "afterReset", "buyMax", "onPurchase",
+    "style", "display", "layers", "branches", "addLayer", "addGrid", "addClickable", "addBar",
+    "addBuyable", "addMilestone", "addAchievement", "addChallenge", "createModal",
+]);
+
+// layerHookBody() cannot be used here: it depends on `maskOf`, which is declared further
+// down the file and would still be in its temporal dead zone at this point. This reads
+// startData straight off the record the per-layer scan already built.
+function startDataReturnsObjectLiteral(rec, L) {
+    const span = rec.clean.slice(L.start, L.end);
+    const re = /(?:^|[,{\n])\s*startData\s*\(/g;
+    let mm;
+    while ((mm = re.exec(span))) {
+        const base = L.start + mm.index;
+        if (rec.mask[base] !== 0) continue;
+        const open = rec.clean.indexOf("(", base);
+        if (open < 0) continue;
+        const close = matchBracket(rec.clean, rec.mask, open);
+        if (close < 0) continue;
+        const body = rec.clean.slice(open, close + 1);
+        if (/\breturn\s*\{/.test(body)) return true;
+        if (/\breturn\b/.test(body)) return false; // returns a variable — cannot tell, stay quiet
+    }
+    return true; // no startData at all: D-STARTDATA owns that finding, so stay quiet here
+}
+
+function componentBlock(rec, L, key) {
+    const objStart = rec.clean.indexOf("{", L.start);
+    if (objStart < 0 || objStart >= L.end) return null;
+    const k = topLevelKeys(rec.clean, rec.mask, objStart, L.end).find((x) => x.key === key);
+    if (!k) return null;
+    let i = k.idx + k.key.length;
+    while (i < L.end && rec.mask[i] !== 0) i++;
+    while (i < L.end && /\s/.test(rec.clean[i])) i++;
+    if (rec.clean[i] !== ":") return null;
+    i++;
+    while (i < L.end && (rec.mask[i] !== 0 || /\s/.test(rec.clean[i]))) i++;
+    if (rec.clean[i] !== "{" && rec.clean[i] !== "[") return null; // variable ref — skip (conservative)
+    const closeIdx = matchBracket(rec.clean, rec.mask, i);
+    if (closeIdx < 0 || closeIdx > L.end) return null;
+    return { open: i, close: closeIdx };
+}
+
+// --- T-CLICKABLE: a button that cannot be clicked is dead content -----------
+if (PROFILE_TYPE) {
+    let clickLayers = 0, deadClickables = 0, uninitState = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        const info = contentByLayer.get(L.id);
+        if (!rec || !info || info.counts.clickables === 0) continue;
+        clickLayers++;
+        const blk = componentBlock(rec, L, "clickables");
+        if (!blk) continue;
+        const spans = upgradeEntrySpans(rec.clean, rec.mask, blk.open, blk.close);
+        for (const s of spans) {
+            const text = rec.clean.slice(s.start, s.end + 1);
+            const absent = [];
+            if (!/(?:^|[,{\n])\s*onClick\s*\(/.test(text)) absent.push("onClick()");
+            if (!/(?:^|[,{\n])\s*canClick\s*\(/.test(text)) absent.push("canClick()");
+            if (absent.length) {
+                deadClickables++;
+                add(FAIL, "T-CLICKABLE", L.file, s.start,
+                    `layer "${L.id}" clickable "${s.key}" declares no ${absent.join(" and no ")} — the button renders but can do nothing`,
+                    "Every clickable needs canClick() to gate it and onClick() to perform it (references/core/04). onClick must be a method, not an arrow function using this (N-ARROWTHIS).");
+            }
+        }
+        if (spans.length && !startDataReturnsObjectLiteral(rec, L)) {
+            uninitState++;
+            add(WARN, "T-CLICKABLE", L.file, L.start,
+                `layer "${L.id}" declares ${spans.length} clickable(s) but startData() returns no object literal — clickable state has nowhere to be initialised and resets on every load`,
+                "Initialise the clickable's state in startData() (handbook 10 §6). State must be a number or a string, never a Decimal (hard rule 11).");
+        }
+    }
+    if (clickLayers === 0) pass("T-CLICKABLE", "no clickables in this game — rule not applicable");
+    else if (!deadClickables && !uninitState) pass("T-CLICKABLE", `every clickable across ${clickLayers} layer(s) defines canClick/onClick and startData initialises its state`);
+}
+
+// --- T-GRID: the contract 22/22 corpus grids satisfy, and nothing ever checked -----
+if (PROFILE_TYPE) {
+    let gridLayers = 0, badGrids = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        const info = contentByLayer.get(L.id);
+        if (!rec || !info || info.counts.grids === 0) continue;
+        gridLayers++;
+        const blk = componentBlock(rec, L, "grid");
+        if (!blk) {
+            badGrids++;
+            add(WARN, "T-GRID", L.file, L.start,
+                `layer "${L.id}" declares a grid that is not an inline object literal — the grid contract cannot be verified`,
+                "Declare grid: { rows, cols, getStartData(id) } inline so it can be checked and so cell ids stay base-100 (hard rule 10).");
+            continue;
+        }
+        const body = rec.clean.slice(blk.open, blk.close + 1);
+        const absent = [];
+        if (!/getStartData/.test(body)) absent.push("getStartData()");
+        if (!/(^|[^\w])rows\s*[:(]/.test(body) && !/maxRows/.test(body)) absent.push("rows/maxRows");
+        if (!/(^|[^\w])cols\s*[:(]/.test(body) && !/maxCols/.test(body)) absent.push("cols/maxCols");
+        if (absent.length) {
+            badGrids++;
+            add(FAIL, "T-GRID", L.file, blk.open,
+                `layer "${L.id}" grid is missing ${absent.join(" and ")} — every real grid in the corpus declares getStartData and a row/col spec (22/22)`,
+                "grid: { rows, cols, getStartData(id) } — ids are row*100+col (hard rule 10). The plural key grids: is a ghost field (N-GHOSTFIELD).");
+        }
+    }
+    if (gridLayers === 0) pass("T-GRID", "no grid component in this game — rule not applicable");
+    else if (!badGrids) pass("T-GRID", `every grid across ${gridLayers} layer(s) declares getStartData and a row/col spec`);
+}
+
+// --- T-TICKREG: M-DNC checks the declaration exists, never what it must list -----
+if (PROFILE_TYPE) {
+    const declared = [];
+    const dnc = modRec.clean.match(/doNotCallTheseFunctionsEveryTick\s*=\s*\[([^\]]*)\]/);
+    if (dnc) for (const id of dnc[1].match(/[A-Za-z0-9_$]+/g) || []) declared.push(id);
+
+    const defined = new Set();
+    for (const rec of fileRecs.values())
+        for (const mm of rec.clean.matchAll(/function\s+([A-Za-z0-9_$]+)\s*\(/g)) defined.add(mm[1]);
+
+    const dangling = declared.filter((n) => !defined.has(n) && !ENGINE_HOOK_NAMES.has(n));
+    if (dangling.length) {
+        add(WARN, "T-TICKREG", modJsPath, null,
+            `doNotCallTheseFunctionsEveryTick lists ${dangling.length} name(s) no mod file defines: ${dangling.slice(0, 5).join(", ")} — the engine will call something that does not exist`,
+            "List only real layer action-functions (07 rule 4). Engine hook names do not belong in that array.");
+    }
+
+    // A hook slot pointing at a name that exists nowhere is a crash on the first tick.
+    let ghostHooks = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const text = rec.clean.slice(L.start, L.end);
+        for (const mm of text.matchAll(/(?:^|[,{\n])\s*([A-Za-z0-9_$]+)\s*:\s*([A-Za-z0-9_$]+)\s*[,}\n]/g)) {
+            const [, key, val] = mm;
+            if (!ENGINE_HOOK_NAMES.has(key)) continue;
+            if (defined.has(val) || ENGINE_HOOK_NAMES.has(val)) continue;
+            ghostHooks++;
+            add(FAIL, "T-TICKREG", L.file, L.start + mm.index,
+                `layer "${L.id}" hook "${key}" is set to "${val}", which no mod file defines and the engine does not provide`,
+                `Define ${val} in a mod file and register it in doNotCallTheseFunctionsEveryTick (07 rule 4), or point the hook at the right function.`);
+        }
+    }
+    if (!ghostHooks && !dangling.length) pass("T-TICKREG", "every custom tick hook is registered and defined");
 }
 
 // ---------------------------------------------------------------------------
@@ -1141,7 +1394,7 @@ function layerUpgradeSpans(rec, L, field) {
 // ===========================================================================
 // Phase-⑧ corpus rules (2026-10-03). Grounded in the full numeric archive of
 // 329 real TMT games / 1,156 layers / 13,746 upgrades
-// (E:\Idle-Skill\archive\TMT_生成式AI增量游戏数值设计指南.md).
+// (the numeric archive's generative-AI numeric design guide, §1.2).
 // ===========================================================================
 
 // N-UNWIRED — the headline defect this whole corpus study surfaced.
@@ -1216,7 +1469,7 @@ function layerUpgradeSpans(rec, L, field) {
         if (!rec) continue;
         const ups = layerUpgradeSpans(rec, L, "upgrades");
         const withEffect = ups.filter((s) => /(^|[{,])\s*effect\s*\(/.test(s.text));
-        if (withEffect.length < 3) continue;
+        if (withEffect.length < TH.localWireMinEffects) continue;
         const hookSrc = ["gainMult", "gainExp", "passiveGeneration", "update"]
             .map((kw) => { const m = L.code.match(new RegExp("\\b" + kw + "\\s*\\(")); return m ? functionBody(L.code, m.index) || "" : ""; })
             .join("\n");
@@ -1284,7 +1537,7 @@ function layerUpgradeSpans(rec, L, field) {
         const rec = fileRecs.get(L.file);
         if (!rec) continue;
         const withEffect = layerUpgradeSpans(rec, L, "upgrades").filter((s) => /(^|[{,])\s*effect\s*\(/.test(s.text));
-        if (withEffect.length < 5) continue;
+        if (withEffect.length < TH.effectShapeMinEffects) continue;
         const shaped = withEffect.filter((s) => /\.(pow|log10?|log)\s*\(|\bsqrt\s*\(|\bsoftcap\s*\(|\.sqrt\s*\(/.test(s.text));
         if (shaped.length === 0) {
             flagged++;
@@ -1312,15 +1565,15 @@ function layerUpgradeSpans(rec, L, field) {
 // nothing. Static layers therefore get a 1-order bar, which still catches a truly flat
 // ladder (every cost identical) without condemning the correct shape.
 {
-    const SPAN_BAR = 3;      // normal layers: corpus ladders span 6+ orders
-    const SPAN_BAR_STATIC = 1; // static layers: floors grow as log2(stardust), ~50-70 real range
+    const SPAN_BAR = TH.costSpanMinOrders;      // normal layers: corpus ladders span 6+ orders
+    const SPAN_BAR_STATIC = TH.costSpanMinOrdersStatic; // static layers: floors grow as log2(stardust), ~50-70 real range
     let flagged = 0;
     for (const L of layers) {
         if (L.isSide || L.isUtility) continue;
         const rec = fileRecs.get(L.file);
         if (!rec) continue;
         const ups = layerUpgradeSpans(rec, L, "upgrades");
-        if (ups.length < 8) continue;
+        if (ups.length < TH.costSpanMinUpgrades) continue;
         const logs = [];
         for (const s of ups) {
             const cm = s.text.match(/(^|[{,])\s*cost\s*:\s*new\s+Decimal\s*\(\s*("?[\d.]+(e[+-]?\d+)?)\s*\)/i);
@@ -1328,7 +1581,7 @@ function layerUpgradeSpans(rec, L, field) {
             const v = Number(cm[2].replace(/"/g, ""));
             if (isFinite(v) && v > 0) logs.push(Math.log10(v));
         }
-        if (logs.length < 8) continue;
+        if (logs.length < TH.costSpanMinUpgrades) continue;
         const span = Math.max(...logs) - Math.min(...logs);
         const isStatic = L.type === "static";
         const bar = isStatic ? SPAN_BAR_STATIC : SPAN_BAR;
@@ -1535,7 +1788,7 @@ function layerUpgradeSpans(rec, L, field) {
 
 // ===========================================================================
 // Lifecycle rules (2026-10-04) — from the The Galaxy Nebula postmortem
-// (E:\Idle-Skill\The-Galaxy-Nebula\FINDINGS.md).
+// (the Galaxy Nebula generated game's FINDINGS.md).
 //
 // Every defect below passed the ENTIRE existing rule set with 0 FAIL. They share one
 // shape: each part is individually reasonable, and the COMBINATION produces an

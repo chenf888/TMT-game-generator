@@ -6,6 +6,10 @@
  *   2. fixture-bad  : every injected defect must be caught by its tagged rule.
  *   3. scaffold     : scaffold.js must produce a fresh game that passes static_checks
  *                     with 0 FAIL (the template placeholder endgame WARN is allowed).
+ *   4. fixture-ghost: unread engine fields must be flagged, valid ones must not.
+ *   5. types.test.js: the game-type layer — classify.js routing, the registry contract,
+ *                     and the T-* type rules (run as a child process so its assertions
+ *                     stay independent of this file's).
  *
  * Usage: node tests/run_tests.js
  */
@@ -37,7 +41,7 @@ console.log("== test 1: fixture-good must pass clean ==");
 {
     const dir = path.join(ROOT, "tests", "fixture-good");
     const { status, parsed, stderr } = runChecks(dir);
-    if (!parsed) { ok(false, "static_checks produced JSON", stderr || r.stdout || ""); }
+    if (!parsed) { ok(false, "static_checks produced JSON", stderr || "(no stdout)"); }
     else {
         const fails = parsed.findings.filter((f) => f.level === "FAIL");
         const warns = parsed.findings.filter((f) => f.level === "WARN");
@@ -91,7 +95,7 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             "D-MECHQUOTA",     // 4 main layers, zero interactive components (10 §5)
             "M-CHARSET",       // fixture-bad index.html has no charset meta (phase-⑥ incident)
             "N-PGBOOL",        // layer a: passiveGeneration returns a boolean, not a number
-            // phase-⑧ corpus rules (E:\Idle-Skill\archive\ guide):
+            // phase-⑧ corpus rules (numeric archive guide):
             "D-LOCALWIRE",     // layers n/z: effect-bearing upgrades wired to nothing local
             "D-EFFECTSHAPE",   // layers n/z: all effects flat multiplies, no pow/log/softcap
             "D-COSTSPAN",      // layer z: 9 literal costs inside a 3-order band
@@ -166,6 +170,15 @@ console.log("== test 4: fixture-ghost flags every unread component key ==");
         ok(!warnRules.has("D-DUPKEY"), "ghost fixture has no accidental D-DUPKEY");
         ok(!parsed.findings.some((f) => f.rule === "N-UNWIRED" && f.level !== "PASS"), "the properly wired upgrade is not flagged unwired");
     }
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n== test 5: the game-type layer (types.test.js) ==");
+{
+    const r = spawnSync(process.execPath, [path.join(ROOT, "tests", "types.test.js")], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    // types.test.js prints its own ok/FAIL lines; echo them so one command shows everything.
+    for (const line of r.stdout.split(/\r?\n/)) if (/^\s+(ok|FAIL)|^(ALL|\d+ TYPE)/.test(line)) console.log("  " + line.trim().replace(/^ok\s*-\s*/, "ok  - ").replace(/^FAIL-\s*/, "FAIL- "));
+    ok(r.status === 0, "types.test.js passed", r.stderr);
 }
 
 // ---------------------------------------------------------------------------

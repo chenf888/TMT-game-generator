@@ -35,11 +35,20 @@ development — a 25-layer and a 10-layer generated game):
   (1,156 layers, 29,141 components, every figure traceable to file + line). This is what
   produced the wiring rule: **54.4% of real upgrades carry no `effect()` at all**, because
   their power is a branch in the layer's `gainMult()`. See `references/design/11`.
-- **58-rule static checker** — every hard rule and every regression caught in real
+- **Type recognition, then per-type generation** — the interview locks a *game type*
+  alongside the scale blueprint (interaction model, orthogonal to small/medium/large):
+  `passive-prestige`, `active-click`, `active-tick`, or `board-minigame`. The type decides
+  which components are mandatory, which are forbidden, and which acceptance rules apply —
+  a passive game is explicitly **exempt** from the "you need tick logic" rule, while an
+  active-click game must pass a clickable contract the old checker never checked. See
+  `references/design/13`.
+- **61-rule static checker** — every hard rule and every regression caught in real
   generated games is automated (`scripts/static_checks.js`): Decimal discipline, row
   contiguity, requires monotonicity, dead-end unlock upgrades, self-scaling compounding
   budgets, achievement visibility, **effects that nothing consumes**, unread engine fields,
-  flat cost ladders, and all-flat gain curves.
+  flat cost ladders, all-flat gain curves, and the three type rules
+  (`T-CLICKABLE`, `T-GRID`, `T-TICKREG`). Rules are gated per type: a game with no declared
+  type is checked exactly as before.
 
 ## Requirements
 
@@ -74,17 +83,18 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 
 | Stage | What happens |
 |---|---|
-| 1. Interview | ≤7 structured questions: theme-structure confirmation, scale (locks a small/medium/large blueprint), natural ceilings, pacing & interactivity, side content, automation/timewall tolerance, language & style |
-| 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 19 rules before any code exists |
-| 3. Scaffold | `node scripts/scaffold.js "Game Name" <dir>` copies the bundled TMT template, patches `js/mod.js` (unique permanent `modInfo.id`, name, author, modFiles, charset meta), self-verifies and syntax-checks the result |
+| 1. Interview | ≤7 structured questions: theme-structure confirmation, scale (locks a small/medium/large blueprint), natural ceilings, pacing & interactivity, side content, automation/timewall tolerance, language & style — then **Q4b locks the game type** via `node scripts/classify.js` (auto-routes, or asks one question when the intent is unclear) |
+| 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/type-registry.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 20 rules before any code exists |
+| 3. Scaffold | `node scripts/scaffold.js "Game Name" <dir> --type <id> --modifier a,b` copies the bundled TMT template, patches `js/mod.js` (unique permanent `modInfo.id`, name, author, modFiles, charset meta), writes `.tmt-profile.json`, self-verifies and syntax-checks the result. A modifier whose hard dependency is unmet is **downgraded with a reason, never silently dropped** |
 | 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M10 mechanics, automation ladder, softcaps, theming |
-| 5. Static checks | `node scripts/static_checks.js <game-folder>` — FAIL blocks manual testing; WARNs need a written justification in the brief |
+| 5. Static checks | `node scripts/static_checks.js <game-folder>` — reads `.tmt-profile.json` and applies that type's gates, exemptions and per-blueprint thresholds; FAIL blocks manual testing; WARNs need a written justification in the brief |
 | 6. Balance walkthrough | Era-by-era reachability estimate against the measured heuristics + multiplier-zone compounding audit; rebalance the brief, not the code |
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
 References load **on demand** (`references/core/00–08` engine handbook,
-`references/design/09–12` design patterns, fun mechanics, corpus-calibrated numeric
-design, and the engine author's own notes), keeping context small.
+`references/design/09–13` design patterns, fun mechanics, corpus-calibrated numeric
+design, the engine author's own notes, and the game-type judgment guide), keeping context
+small.
 
 ## Folder layout
 
@@ -94,21 +104,31 @@ tmt-game-generator/
 ├── references/
 │   ├── core/                 # 00–08: engine + coding handbook (Decimal rules, layers API,
 │   │                         #   components, UI, idioms, pitfalls checklist, real-game catalog)
-│   └── design/               # 09–10: 17 design patterns + blueprints, fun-mechanics handbook
+│   └── design/               # 09–13: design patterns + blueprints, fun-mechanics handbook,
+│                             #   corpus-calibrated numerics, author's notes, game-type guide
 ├── assets/
 │   ├── blueprints.json       # small/medium/large progress blueprints (per-field corpus sources)
+│   ├── type-registry.json    # game types: verdict signals, code contracts, rule exemptions,
+│   │                         #   modifiers + hard dependencies, routing weights (add a type here)
 │   ├── balance-defaults.json # measured balance defaults + when-to-deviate policy
-│   ├── fun-quota.json        # per-blueprint fun-density quotas + checker thresholds
+│   ├── fun-quota.json        # per-blueprint fun-density quotas + the thresholds the
+│   │                         #   checker READS AT RUN TIME
 │   └── design-brief-template.md
 ├── scripts/
-│   ├── scaffold.js           # template copy + mod.js patcher (self-verifying)
-│   └── static_checks.js      # 53-rule mod-code checker (FAIL/WARN/PASS report, --json)
+│   ├── classify.js           # game-type scorer (exit 0 routed / 3 ask / 1 error);
+│   │                         #   also reads an existing design brief
+│   ├── scaffold.js           # template copy + mod.js patcher + .tmt-profile.json writer
+│   └── static_checks.js      # 61-rule mod-code checker (FAIL/WARN/PASS report, --json,
+│                             #   --profile <typeId> | --no-profile)
 ├── tests/
-│   ├── run_tests.js          # smoke suite: fixtures + scaffold e2e  → node tests/run_tests.js
+│   ├── run_tests.js          # smoke suite: fixtures + scaffold e2e + the type layer
+│   ├── types.test.js         # type routing, registry contract, T-* rules
 │   ├── fixture-good/         # must pass with zero findings
 │   ├── fixture-bad/          # injects every rule's defect; each must be caught exactly
-│   └── fixture-ghost/        # unread engine fields (own fixture: adding a challenge here
-│                             # would mask fixture-bad's D-MECHQUOTA regression)
+│   ├── fixture-ghost/        # unread engine fields (own fixture: adding a challenge here
+│   │                         #   would mask fixture-bad's D-MECHQUOTA regression)
+│   └── fixture-types/        # interactive/ (one defect per T-* rule), passive/ (proves the
+│                             #   D-NOUPDATE exemption), unprofiled/ (byte-level control)
 └── template/                 # bundled TMT v2.7 engine template (upstream MIT licenses inside)
 ```
 
@@ -118,10 +138,13 @@ tmt-game-generator/
 node tests/run_tests.js
 ```
 
-Four smoke groups should all pass: good fixture clean, bad fixture catches every rule with
-zero false positives, the ghost fixture flags exactly the unread engine fields (and does NOT
-flag the valid ones — `completionLimit`, `canComplete`), and a freshly scaffolded game
-(from the bundled template) passes the checker. This works from any directory the skill is installed in — no environment variables
+Five smoke groups should all pass: good fixture clean, bad fixture catches every rule with
+zero false positives, a freshly scaffolded game (from the bundled template) passes the
+checker, the ghost fixture flags exactly the unread engine fields (and does NOT flag the
+valid ones — `completionLimit`, `canComplete`), and the type layer routes correctly and
+enforces its own rules. The last group includes the check that matters most for backwards
+compatibility: **a game with no declared type produces no `T-*` output at all**, so its
+report is byte-identical to what it was before types existed. This works from any directory the skill is installed in — no environment variables
 needed. To point the scaffolder at a different engine template anyway, use
 `--from <template-dir>` or the `TMT_TEMPLATE` environment variable.
 

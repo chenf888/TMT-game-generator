@@ -1,0 +1,359 @@
+{
+  "$comment": "Game-type registry. The type axis (interaction model) is ORTHOGONAL to the blueprint axis (small/medium/large = scale). Adding a type means adding an entry here plus a subsection in references/design/13-Types.md — never editing SKILL.md's pipeline. Schema: ./type-registry.schema.json",
+
+  "version": "1.0.0",
+
+  "axis": {
+    "primary": "interaction-model",
+    "orthogonalTo": "blueprint (Q2 scale)",
+    "rationale": "In the 329-file corpus only 17 files (5.2%) contain update() tick logic and 53.5% are pure-formula layers. Whether the player acts or not decides the whole component-generation path, so it is the strongest separating axis. Scale (blueprint) stays exactly as it is: Q2 -> blueprints.<key>, 1:1, 'do not mix blueprints' unchanged."
+  },
+
+  "corpus": {
+    "source": "E:/Idle-Skill/archive/data/tmt_index.json + direct source regex over E:/Idle-Skill/The-Modding-Tree-eg/",
+    "files": 329,
+    "layerBearingFiles": 297,
+    "caveats": [
+      "The corpus unit is a FILE, not a game: 171/329 are author_game__part.js fragments and 193/297 carry a single layer. Corpus shares are therefore a fallback prior only — never allowed to override stated user intent (weight 0.15, see routing.weights).",
+      "The index's `minified` flag is INVERTED (true = 68.6 bytes/line, median 691 lines; false = 689.8 bytes/line, median 29 lines). All genuine one-line vendor blobs are flagged false. Never stratify by it.",
+      "The index reports grids=0 because it only looked for addGrid(). Grids exist in 22 files as the declarative key `grid: {`; addGrid() has 0 call sites corpus-wide."
+    ]
+  },
+
+  "routing": {
+    "weights": {
+      "explicit": 0.75,
+      "verb": 0.35,
+      "keyword": 0.20,
+      "synergy": 0.10,
+      "q4Idle": 0.20,
+      "q4ActiveEach": 0.10,
+      "q4ActiveTiebreak": 0.25,
+      "q4IdlePenalty": 0.15,
+      "prior": 0.15
+    },
+    "thresholds": {
+      "autoRoute": 0.60,
+      "askDisambiguate": 0.45,
+      "minMargin": 0.20,
+      "strongKeywordFloor": 0.60
+    },
+    "notes": [
+      "`explicit` is a floor, not an addition: when the user names a type outright, that type's score is raised to at least 0.75 and no other signal can lower it.",
+      "The passive-prestige signal is ABSENCE-based: passive wins when no action-bearing verb matches AND the request reads as incremental/idle. Any action verb hit suppresses it, so 'idle mining' resolves to passive, not tick."
+    ],
+    "questions": {
+      "active-click|active-tick": {
+        "zh": "核心操作是离散点击(每次一下),还是持续进度(看着进度条走完)?",
+        "en": "Is the core action discrete clicks (one tap at a time), or continuous progress (watching a bar fill)?"
+      },
+      "active-click|passive-prestige": {
+        "zh": "点击是核心玩法,还是偶尔的加速手段?",
+        "en": "Is clicking the core of the game, or an occasional accelerator?"
+      },
+      "active-tick|passive-prestige": {
+        "zh": "进度条只是显示状态,还是玩家真正在推的进度?",
+        "en": "Does the bar just display state, or is it progress the player is actually pushing?"
+      },
+      "board-minigame|*": {
+        "zh": "需要二维棋盘/网格承载玩法,还是只要把升级排成网格?",
+        "en": "Do you need a real 2D board/grid to hold the gameplay, or just upgrades laid out in a grid?"
+      },
+      "*|passive-prestige": {
+        "zh": "你想要纯挂机体验,还是希望手上有事可做?",
+        "en": "Do you want a pure idle experience, or something to actively do?"
+      }
+    }
+  },
+
+  "modifiers": {
+    "sim": {
+      "label": "自定义模拟层",
+      "labelEn": "custom simulation layer",
+      "requiresType": [],
+      "requiresModifier": [],
+      "contract": "type:\"custom\" + hand-written update()",
+      "cost": "high",
+      "budget": { "maxLayers": 3 },
+      "evidence": { "customLayers": 123, "files": 28, "liftWithUpdate": 4.84, "note": "references/design/09:438 — Mining is 2.7MB/59k lines; keep this sparing" },
+      "checker": ["T-TICKREG"]
+    },
+    "score-attack": {
+      "label": "M2 分数攻击挑战枢纽",
+      "labelEn": "M2 score-attack challenge hub",
+      "requiresType": ["active-tick", "active-click"],
+      "requiresModifier": ["sim"],
+      "contract": "startData holds a maxpoints[] array; update() records the peak inside the challenge; challengeEffect() reads the peak",
+      "cost": "high",
+      "evidence": {
+        "scoreAttackApiHits": 0,
+        "note": "The engine has NO scoreAttack / maxScore / leaderboard API (0 corpus hits). M2 is a hand-rolled idiom, which is exactly why it depends on a tick.",
+        "source": "references/design/10:156-166"
+      },
+      "downgradeReason": "M2 needs update() to record a peak. Without a tick or a sim layer the pattern cannot be generated correctly."
+    },
+    "minigame": {
+      "label": "M3 风险收益小游戏",
+      "labelEn": "M3 risk-reward minigame",
+      "requiresType": ["active-click", "active-tick"],
+      "requiresModifier": [],
+      "contract": "a clickable group as pickable targets + style() state feedback + run state in startData",
+      "cost": "high",
+      "evidence": { "source": "references/design/10:167-174" },
+      "downgradeReason": "M3 is built on clickables. Without them there is nothing to click."
+    },
+    "board": {
+      "label": "网格板玩法",
+      "labelEn": "grid board",
+      "requiresType": [],
+      "requiresModifier": [],
+      "contract": "grid: { getStartData, rows, cols, getCanClick, getStyle, getUnlocked }; ids base-100",
+      "cost": "high",
+      "evidence": {
+        "files": 22,
+        "objects": 60,
+        "keyForm": "declarative grid: { — addGrid() has 0 call sites corpus-wide",
+        "hookCoverage": { "getStartData": "22/22", "rowsAndCols": "22/22", "getStyle": "21/22", "getCanClick": "20/22", "getUnlocked": "18/22" },
+        "source": "chipsams_The-Modding-Tree__crafting_layer.js:378"
+      },
+      "checker": ["T-GRID"]
+    },
+    "challenges": {
+      "label": "M1 经典挑战",
+      "labelEn": "M1 classic challenges",
+      "requiresType": [],
+      "requiresModifier": [],
+      "contract": "prefer canComplete() over goal:",
+      "cost": "medium",
+      "evidence": {
+        "files": 57,
+        "objects": 150,
+        "dialects": { "canCompletePredicate": "45/57 (78.9%)", "goalNumericOrFn": "20/57", "onEnterOnExitSnapshot": "31/57" },
+        "source": "qqqe308_The-Spring-Festival-Tree-2026.js:5697,5705,5711",
+        "note": "canComplete() is the corpus majority dialect; the goal:+rewardEffect shape the handbooks teach is the minority."
+      }
+    },
+    "caps": {
+      "label": "主题自然硬上限",
+      "labelEn": "themed hard ceilings",
+      "requiresType": [],
+      "requiresModifier": [],
+      "contract": "capped currency uses type:\"custom\" + softcap(x, cap, 0); its ladder STOPS at the cap",
+      "cost": "medium",
+      "evidence": { "source": "SKILL.md Q3; P8a references/design/09:241" }
+    }
+  },
+
+  "types": {
+    "passive-prestige": {
+      "id": "passive-prestige",
+      "name": "被动声望链",
+      "nameEn": "passive prestige chain",
+      "corpusShare": 0.535,
+      "actionBearing": false,
+      "decision": {
+        "verbs": [],
+        "keywords": ["增量", "idle", "incremental", "挂机", "自动", "prestige", "声望", "放置", "automation"],
+        "keywordsEn": ["incremental", "idle", "prestige", "automation", "incrementer"],
+        "strongKeywords": ["增量游戏", "挂机游戏", "放置游戏", "声望树", "prestige tree", "modding tree"],
+        "strongKeywordsEn": ["incremental game", "idle game", "incrementer"],
+        "signals": [
+          "No action-bearing verb appears in the Q1 structure recap.",
+          "The request reads as incremental/idle (see keywords).",
+          "Q4 answered 'Mostly idle' or 'Balanced' with no action verb."
+        ],
+        "antiSignals": [
+          "The theme's core verb is a direct player action (click / mine / chop / place).",
+          "The user explicitly asks for game feel or a minigame."
+        ],
+        "counterExamples": [
+          {
+            "desc": "Clickables exist but are only a garnish — 95% of the layers are still formula layers.",
+            "howToTell": "If clickables < mainLayers * 0.2, still classify passive-prestige.",
+            "source": "ArmeKnockedOut_the-element-tree.js:248"
+          }
+        ]
+      },
+      "requiredModules": ["layers:normal|static", "upgrades", "milestones", "mod.js"],
+      "optionalModules": ["buyables", "challenges", "achievements", "microtabs", "bars-as-hud"],
+      "codeContract": {
+        "layerTypes": ["normal", "static"],
+        "require": [
+          "startData() contains unlocked + points",
+          "normal/static layers carry baseResource + baseAmount() + requires",
+          "every static layer has canBuyMax()"
+        ],
+        "forbid": ["clickables", "grid", "update()"]
+      },
+      "process": ["standard 7-stage pipeline", "Stage 4.2 generates normal/static layers only", "no tick budget"],
+      "acceptance": {
+        "exemptRules": ["D-NOUPDATE"],
+        "exemptRationale": "Having no tick is the CORRECT shape for this type. Today D-NOUPDATE only guards games with >=4 main layers, so a 3-layer prestige chain is silently unchecked — exemption is what makes the type explicit.",
+        "requireRules": ["N-UNWIRED", "D-REQLADDER", "N-MSDESTROY"]
+      },
+      "failureModes": [
+        {
+          "symptom": "数字爆炸 / 几分钟通关",
+          "rules": ["N-CAPMULT", "N-SELFTOTAL", "missing-softcap"],
+          "fix": "Check the three causes in this order (SKILL.md:456)."
+        }
+      ]
+    },
+
+    "active-click": {
+      "id": "active-click",
+      "name": "点击驱动",
+      "nameEn": "click-driven",
+      "corpusShare": 0.112,
+      "actionBearing": true,
+      "decision": {
+        "verbs": ["点击", "戳", "拍", "砍", "拖", "敲", "戳破", "click", "tap", "chop", "swing", "drag", "punch"],
+        "keywords": ["点击", "手感", "手动", "click", "clicker", "tap"],
+        "strongKeywords": ["点击游戏", "点击器", "手感游戏", "clicker game", "click game"],
+        "signals": [
+          "Q4 = 'Mostly active' AND the recap verb is a discrete action.",
+          "The user explicitly asks for game feel / something to press."
+        ],
+        "antiSignals": [
+          "The core action is continuous progress (mining / charging / growing) -> active-tick.",
+          "Clicking is only an accelerator (see counterExamples)."
+        ],
+        "counterExamples": [
+          {
+            "desc": "Clickables as a garnish on a formula game.",
+            "howToTell": "clickables < mainLayers * 0.2, or every clickable is a one-off 'get N' button rather than a repeated verb.",
+            "source": "ArmeKnockedOut_the-element-tree.js:250"
+          }
+        ]
+      },
+      "requiredModules": ["clickables", "layers"],
+      "optionalModules": ["challenges", "microtabs", "minigame", "buyables", "bars"],
+      "codeContract": {
+        "require": [
+          "every clickable defines canClick() and onClick()",
+          "clickable state is initialised in startData (handbook 10 §6)",
+          "clickable state is a number or a string only (hard rule 11)"
+        ],
+        "forbid": ["Decimal in clickable state", "an arrow-function onClick that uses this"]
+      },
+      "process": ["standard 7-stage pipeline", "Stage 4.2 generates the clickable group before the layer", "new Stage 4.2.5 game-feel pass"],
+      "acceptance": {
+        "exemptRules": [],
+        "requireRules": ["T-CLICKABLE", "N-GHOSTFIELD", "D-MICROTABS"],
+        "gapNote": "T-CLICKABLE is new. Today the checker only COUNTS clickables (D-MECHQUOTA) and never checks one is usable."
+      },
+      "failureModes": [
+        { "symptom": "点击无反应", "cause": "onClick written as an arrow function using this", "rule": "N-ARROWTHIS", "evidence": "SC:1378" },
+        { "symptom": "刷新后点击状态丢失", "cause": "clickable state never entered startData", "rule": "T-CLICKABLE" }
+      ]
+    },
+
+    "active-tick": {
+      "id": "active-tick",
+      "name": "tick 生产循环",
+      "nameEn": "tick production loop",
+      "corpusShare": 0.100,
+      "actionBearing": true,
+      "decision": {
+        "verbs": ["生长", "充能", "生产", "进度", "累积", "运转", "发酵", "生产", "grow", "charge", "produce", "progress", "fill", "tick", "simulate", "brew", "cultivate"],
+        "keywords": ["进度条", "循环", "生产", "实时", "progress bar", "loop", "production", "real-time"],
+        "strongKeywords": ["进度条游戏", "实时循环", "生产循环", "progress bar game", "production loop"],
+        "signals": [
+          "Q4 = 'Mostly active' AND the recap verb is a continuous quantity.",
+          "The core action is watching a bar fill (mining / charging / growing)."
+        ],
+        "antiSignals": [
+          "Discrete tapping -> active-click.",
+          "The bar only displays state — in the corpus only 12.3% of bar files define progress(), the rest are decorative HUD -> passive-prestige."
+        ],
+        "counterExamples": [
+          {
+            "desc": "Bars as pure HUD: every bar defines width/height but no progress().",
+            "howToTell": "If no bar in the game defines progress(), the tick is not the core loop.",
+            "source": "BilboyX_The-Modding-Tree.js:1187"
+          }
+        ]
+      },
+      "requiredModules": ["update()", "bars", "doNotCallTheseFunctionsEveryTick registration"],
+      "optionalModules": ["clickables (as toggles)", "secondary currency (M5)", "location-dependent drops"],
+      "codeContract": {
+        "require": [
+          "update() uses addPoints() and never assigns player[layer].points directly",
+          "every custom action-function is listed in doNotCallTheseFunctionsEveryTick",
+          "bar.progress() never divides by zero (handbook 10 §6)"
+        ],
+        "forbid": ["Decimal.pow with a large exponent inside the tick"]
+      },
+      "process": ["standard 7-stage pipeline", "Stage 4.2 followed by a tick-budget step", "Stage 6 adds a performance walkthrough"],
+      "acceptance": {
+        "exemptRules": [],
+        "requireRules": ["N-POINTSWRITE", "M-DNC", "T-TICKREG"],
+        "gapNote": "T-TICKREG is new and mandatory here: M-DNC today (SC:460) only checks the declaration exists, never that it lists the hooks the game actually defines."
+      },
+      "failureModes": [
+        { "symptom": "每帧掉帧", "cause": "heavy math inside update()", "rule": null, "fix": "move the computation into gainMult / passiveGeneration" },
+        { "symptom": "进度条 NaN", "cause": "progress() divides by zero", "rule": "T-CLICKABLE", "fix": "handbook 10 §6" },
+        { "symptom": "离线后进度错乱", "cause": "update assigns points directly", "rule": "N-POINTSWRITE", "evidence": "SC:1777" }
+      ]
+    },
+
+    "board-minigame": {
+      "id": "board-minigame",
+      "name": "网格板玩法",
+      "nameEn": "grid board",
+      "corpusShare": 0.067,
+      "actionBearing": true,
+      "decision": {
+        "verbs": ["棋盘", "网格", "矩阵", "格子", "拼图", "消除", "board", "grid", "matrix", "tile", "puzzle", "match"],
+        "keywords": ["棋盘", "俄罗斯方块", "消除", "拼图", "board", "tetris", "match", "puzzle", "merge"],
+        "strongKeywords": ["俄罗斯方块", "棋盘游戏", "消除游戏", "tetris", "2048", "merge game", "board game"],
+        "signals": [
+          "The gameplay needs a 2D board or matrix.",
+          "Component ids need two-dimensional addressing."
+        ],
+        "antiSignals": [
+          "You only want upgrades laid out in a 5x5 grid — that is the `grid` LAYOUT on upgrades, not a grid COMPONENT."
+        ],
+        "counterExamples": [
+          {
+            "desc": "Upgrades arranged in a grid via addGrid on the layer, with no grid component.",
+            "howToTell": "No `grid: {` key inside a layer's component block.",
+            "source": "qqqe308_The-Spring-Festival-Tree-2026.js:5544"
+          }
+        ]
+      },
+      "requiredModules": ["grid", "startData.getStartData"],
+      "optionalModules": ["clickables (cell clicks)", "microtabs", "update()", "bars"],
+      "codeContract": {
+        "require": [
+          "declare `grid: {` (singular); `grids:` is a ghost field",
+          "ids follow the base-100 scheme (hard rule 10)",
+          "getStartData is defined (corpus: 22/22)"
+        ],
+        "forbid": ["imperative addGrid()"]
+      },
+      "process": ["standard 7-stage pipeline", "new Stage 4.2.6 cell-id allocation table"],
+      "acceptance": {
+        "exemptRules": [],
+        "requireRules": ["T-GRID", "N-GHOSTFIELD"],
+        "gapNote": "T-GRID is new and is the single biggest checker gap: 22 real files use grid and the checker covers none of it."
+      },
+      "failureModes": [
+        { "symptom": "格子全白", "cause": "declared as grids:", "rule": "T-GRID" },
+        { "symptom": "格子串行", "cause": "ids not allocated base-100", "rule": "T-GRID" }
+      ]
+    }
+  },
+
+  "fallback": {
+    "id": "passive-prestige",
+    "rationale": "53.5% of the corpus is pure-formula. It is the cheapest type to verify and its failure modes are the most predictable. Falling back to passive is safer than falling back to an interaction type that would force components the user never asked for."
+  },
+
+  "mixedPolicy": {
+    "maxInteractionPrimaryTypes": 1,
+    "rationale": "The skill already caps this: at most ONE type:\"none\" core-loop layer per game (SKILL.md:99; P15 warns Mining is 2.7MB/59k lines).",
+    "onHardDependencyMissing": "downgrade the modifier, and record the downgrade in brief §10 with the reason — never drop it silently.",
+    "unknownType": "Ask once; if the user cannot name one, fall back and record 'unrecognised, defaulted' in brief §10."
+  }
+}

@@ -3,7 +3,7 @@
  * scaffold.js — create a new TMT game folder from the engine template.
  *
  * Usage:
- *   node scaffold.js "Game Name" [output-dir] [--from <template-dir>] [--author <name>] [--points-name <name>] [--force]
+ *   node scaffold.js "Game Name" [output-dir] [--from <template-dir>] [--author <name>] [--points-name <name>] [--force] [--type <typeId>] [--modifier id,id]
  *
  * Template resolution order:
  *   1. --from flag
@@ -18,6 +18,9 @@
  *     set once, never change) / author / pointsName / modFiles, plus VERSION, changelog and
  *     winText placeholders. offlineLimit stays at the template default of 1 hour.
  *   - Verifies every patched field by re-parsing the result and runs `node --check` on it.
+ *   - With --type/--modifier, writes .tmt-profile.json recording the game type profile.
+ *     static_checks.js reads it and applies that type's gates and thresholds. Omitting
+ *     the flags changes nothing — the file is simply not written.
  *
  * No third-party dependencies. Node >= 18 (uses fs.cpSync).
  */
@@ -44,17 +47,26 @@ Options:
   --author <name>    modInfo.author (default: "AI")
   --points-name <n>  modInfo.pointsName (default: "points")
   --force            Overwrite the output directory if it exists (careful!)
+  --type <typeId>    Game type from assets/type-registry.json (see classify.js).
+                     Writes .tmt-profile.json so static_checks.js applies that
+                     type's gates. Optional: omitting it changes nothing.
+  --modifier <ids>   Comma-separated modifier ids from the registry's "modifiers".
+  --blueprint <key>   small | medium | large (Q2). Lets static_checks.js apply the
+                      per-blueprint thresholds in assets/fun-quota.json.
   -h, --help         Show this help`);
 }
 
 function parseArgs(argv) {
-    const opts = { name: null, outDir: null, from: null, author: "AI", pointsName: "points", force: false };
+    const opts = { name: null, outDir: null, from: null, author: "AI", pointsName: "points", force: false, type: null, modifiers: [], blueprint: null };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === "-h" || a === "--help") { printHelp(); process.exit(0); }
         else if (a === "--from") opts.from = argv[++i];
         else if (a === "--author") opts.author = argv[++i];
         else if (a === "--points-name") opts.pointsName = argv[++i];
+        else if (a === "--type") opts.type = argv[++i];
+        else if (a === "--blueprint") opts.blueprint = argv[++i];
+        else if (a === "--modifier") opts.modifiers = String(argv[++i] || "").split(",").map((s) => s.trim()).filter(Boolean);
         else if (a === "--force") opts.force = true;
         else if (a.startsWith("--")) { console.error(`Unknown option: ${a}`); process.exit(2); }
         else if (opts.name === null) opts.name = a;
@@ -255,6 +267,67 @@ function verifyPatchedModJs(content, opts, modId) {
 }
 
 // ---------------------------------------------------------------------------
+// game-type profile (.tmt-profile.json)
+// ---------------------------------------------------------------------------
+function writeProfile(outDir, opts) {
+    const registryPath = path.resolve(__dirname, "..", "assets", "type-registry.json");
+    if (!fs.existsSync(registryPath)) die("assets/type-registry.json is missing — cannot record a type profile");
+    const reg = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+
+    const BLUEPRINTS = ["small", "medium", "large"];
+    if (opts.blueprint && !BLUEPRINTS.includes(opts.blueprint)) {
+        die(`unknown --blueprint "${opts.blueprint}". Expected one of: ${BLUEPRINTS.join(", ")} (SKILL.md Q2)`);
+    }
+    if (!opts.type) {
+        // A profile with only a blueprint is still worth writing: it lets the checker apply
+        // the per-blueprint thresholds in assets/fun-quota.json. No type => no T-* rules.
+        if (!opts.blueprint) return null;
+        const bpOnly = {
+            $comment: "Written by scaffold.js. No --type was given, so no type gates apply.",
+            blueprint: opts.blueprint,
+            registryVersion: reg.version,
+        };
+        fs.writeFileSync(path.join(outDir, ".tmt-profile.json"), JSON.stringify(bpOnly, null, 2) + "\n", "utf8");
+        return bpOnly;
+    }
+
+    if (!reg.types[opts.type]) {
+        die(`unknown --type "${opts.type}". Known types: ${Object.keys(reg.types).join(", ")}\n` +
+            `Run: node classify.js --request "..." --recap "..." --q4 <idle|active|balanced>`);
+    }
+
+    const kept = [];
+    const dropped = [];
+    for (const id of opts.modifiers) {
+        const mod = reg.modifiers[id];
+        if (!mod) { dropped.push({ id, reason: `unknown modifier (registry has: ${Object.keys(reg.modifiers).join(", ")})` }); continue; }
+        // Hard dependencies: a modifier whose prerequisites are unmet is downgraded, never
+        // silently dropped — it lands in the profile and the caller must log it in brief §10.
+        const badType = (mod.requiresType || []).length && !(mod.requiresType || []).includes(opts.type);
+        const missingMods = (mod.requiresModifier || []).filter((r) => !opts.modifiers.includes(r));
+        if (badType) dropped.push({ id, reason: `requires type ${mod.requiresType.join(" or ")}, type is ${opts.type}` });
+        else if (missingMods.length) dropped.push({ id, reason: `requires modifier ${missingMods.join(" + ")}` });
+        else kept.push(id);
+    }
+
+    const profile = {
+        $comment: "Written by scaffold.js. Read by static_checks.js to apply this type's gates. Safe to edit or delete.",
+        type: opts.type,
+        typeName: reg.types[opts.type].name,
+        blueprint: opts.blueprint || null,
+        modifiers: kept,
+        droppedModifiers: dropped,
+        exemptRules: reg.types[opts.type].acceptance.exemptRules || [],
+        requiredModules: reg.types[opts.type].requiredModules || [],
+        forbiddenModules: (reg.types[opts.type].codeContract || {}).forbid || [],
+        requiredRules: (reg.types[opts.type].acceptance.requireRules || []),
+        registryVersion: reg.version,
+    };
+    fs.writeFileSync(path.join(outDir, ".tmt-profile.json"), JSON.stringify(profile, null, 2) + "\n", "utf8");
+    return profile;
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 function main() {
@@ -314,6 +387,26 @@ function main() {
     }
 
     console.log(`\nPatched js/mod.js: ${patches.join(", ")}`);
+
+    let profile = null;
+    if (opts.type || opts.blueprint) {
+        profile = writeProfile(outDir, opts);
+        console.log(`\nWrote .tmt-profile.json`);
+        if (profile.type) {
+            console.log(`  Type      : ${profile.type} (${profile.typeName})`);
+            console.log(`  Modifiers : ${profile.modifiers.length ? profile.modifiers.join(", ") : "(none)"}`);
+            console.log(`  Exempt    : ${profile.exemptRules.length ? profile.exemptRules.join(", ") : "(none)"}`);
+            if (profile.droppedModifiers.length) {
+                console.log(`  DROPPED   :`);
+                for (const d of profile.droppedModifiers) console.log(`    - ${d.id}: ${d.reason}`);
+                console.log(`  >>> Record each dropped modifier in the design brief §10 with this reason.`);
+            }
+        } else {
+            console.log(`  Type      : (none declared — no type gates apply)`);
+        }
+        if (profile.blueprint) console.log(`  Blueprint : ${profile.blueprint}`);
+    }
+
     console.log(`\n============================================================`);
     console.log(`  Game    : ${opts.name}`);
     console.log(`  modInfo.id = "${modId}"`);

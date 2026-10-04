@@ -32,6 +32,31 @@ Paste the Q1 theme-structure recap the user confirmed:
 - **Layer topology:** …
 - **Ceilings:** …
 
+## 2b. Game type profile (Q4b — required)
+
+Locked by `node scripts/classify.js`. **Orthogonal to Q2**: this row never changes the
+blueprint. Full contracts in `references/design/13`, machine-readable in
+`assets/type-registry.json`.
+
+| Field | Value |
+|---|---|
+| Type (`type-registry.json` id) | passive-prestige / active-click / active-tick / board-minigame |
+| Confidence + margin from classify.js | |
+| Components this type makes mandatory | |
+| Components this type forbids | |
+| Rules exempt for this type | (`passive-prestige` exempts `D-NOUPDATE`) |
+
+Modifiers (max **one interaction type**; everything else is a modifier here):
+
+| Modifier | Requires | Included? | Notes / why dropped |
+|---|---|---|---|
+| `sim` | — | | max 3 layers |
+| `score-attack` (M2) | type `active-*` + `sim` | | dropped if no tick — the engine has no score-attack API |
+| `minigame` (M3) | type `active-*` | | dropped if no clickables |
+| `board` | — | | |
+| `challenges` (M1) | — | | prefer `canComplete()` |
+| `caps` | — | | hard ceilings from Q3 |
+
 ## 3. Theme = structure mapping (P14 — required)
 
 How does the theme dictate the tree? (Which real-world concepts become layers/rows/hubs? Where do themed caps or phases come from?) For large games: list the phases and each phase's currency type.
@@ -120,6 +145,10 @@ Tick each after verifying the table above. Any FAIL → revise the table, not th
 - [ ] Fun density: K1 share within quota per layer, ≥3 non-K1 kinds per layer (10 §2)
 - [ ] Organization: tabFormat on every main layer, microtabs at quota threshold, context display-texts (10 §3)
 - [ ] Game-level fun quota met (10 §5 / fun-quota.json); every M-mechanic has a §4b "where"
+- [ ] **Type contract honoured (Q4b / 13-Types):** every component the locked type makes
+      mandatory is planned, every forbidden one is absent, and each modifier's hard
+      dependency holds (M2 needs a tick, M3 needs clickables)
+- [ ] Every modifier dropped in §2b has a reason recorded in §10 — none was dropped silently
 
 ## 10. Deviations & open questions
 

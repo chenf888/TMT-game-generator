@@ -44,17 +44,17 @@
     }
   },
   "staticCheckThresholds": {
-    "_comment": "Mirrors the D-*/N-* rules in scripts/static_checks.js - keep in sync when tuning.",
+    "_comment": "READ AT RUN TIME by scripts/static_checks.js. This block is the authority for the D-* thresholds; the literals in the checker are only a fallback for running without the assets folder. microtabsFailAtContentItems is derived as microtabsWarnAtContentItems + 2.",
     "effectMonoUpgradeFloor": 8,
     "effectMonoK1Share": 0.6,
-    "microtabsFailAtContentItems": 16,
     "microtabsWarnAtContentItems": 10,
     "mechQuotaMinMainLayers": 4,
     "effectShapeMinEffects": 5,
     "effectShapeNote": "D-EFFECTSHAPE fires when a layer has >=5 effect-bearing upgrades and NONE uses .pow()/.log()/.sqrt()/softcap(). Corpus op frequencies: pow 4,830 / add 3,364 / log10 3,350 / mul 1,652 - power-log shapes outnumber plain multiplies ~3:1.",
     "costSpanMinUpgrades": 8,
     "costSpanMinOrders": 3,
-    "costSpanNote": "D-COSTSPAN fires when a layer's literal costs span <3 orders of magnitude. Real ladders span 6+ (c0v1d layer 's': 5e3 -> Decimal.pow(10, 545766)).",
+    "costSpanMinOrdersStatic": 1,
+    "costSpanNote": "D-COSTSPAN fires when a layer's literal costs span <3 orders of magnitude. Real ladders span 6+ (c0v1d layer 's': 5e3 -> Decimal.pow(10, 545766)). Static layers get a 1-order bar: their currency is a floor COUNT growing as log2(stardust) (reference ladder 1,2,4,8,16,2,8,16,32,48,64 = 1.8 orders), so the 3-order bar would fire on correct shapes.",
     "localWireMinEffects": 3,
     "localWireNote": "D-LOCALWIRE fires when a main layer has >=3 effect-bearing upgrades and its gainMult/gainExp/passiveGeneration/update reference none of them."
   },
