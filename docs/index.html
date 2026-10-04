@@ -281,6 +281,7 @@
     <div class="nav-links">
       <a href="#pipeline" class="hide-m">How it works</a>
       <a href="#corpus" class="hide-m">The data</a>
+      <a href="#lifecycle" class="hide-m">Save safety</a>
       <a href="#install" class="hide-m">Install</a>
       <a href="#quality" class="hide-m">Quality bar</a>
       <a class="gh" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
@@ -338,7 +339,7 @@
   <div class="wrap stats-grid">
     <div class="stat"><div class="num">329</div><div class="lab">real TMT games fully extracted to build the balance data</div></div>
     <div class="stat"><div class="num">7</div><div class="lab">pipeline stages, from theme interview to test handoff</div></div>
-    <div class="stat"><div class="num">53</div><div class="lab">automated checks gating every generated build</div></div>
+    <div class="stat"><div class="num">58</div><div class="lab">automated checks gating every generated build</div></div>
     <div class="stat"><div class="num">6</div><div class="lab">complete games generated and play-tested during development</div></div>
   </div>
 </div>
@@ -350,10 +351,10 @@
   </div>
   <div class="rail">
     <div class="step"><div class="step-n">01</div><div class="step-verb">Interview</div><div class="step-desc">Seven questions lock theme, scale, natural ceilings, pacing, side content, and language. The theme dictates the tree, not just the names.</div></div>
-    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against fourteen rules before any code exists.</div></div>
+    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against nineteen rules before any code exists.</div></div>
     <div class="step"><div class="step-n">03</div><div class="step-verb">Scaffold</div><div class="step-desc">A fresh TMT v2.7 game folder with a permanent savefile id, patched and syntax-verified by a bundled script.</div></div>
     <div class="step"><div class="step-n">04</div><div class="step-verb">Generate</div><div class="step-desc">Decimal-safe layer code: upgrades with varied effects, milestones, challenges, buyables, automation ladders, softcaps, theming.</div></div>
-    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">53 static rules run over the source. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
+    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">58 static rules run over the source. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
     <div class="step"><div class="step-n">06</div><div class="step-verb">Balance</div><div class="step-desc">Era-by-era reachability math against the measured heuristics, with every compounding multiplier zone audited.</div></div>
     <div class="step"><div class="step-n">07</div><div class="step-verb">Hand off</div><div class="step-desc">You serve the folder, play it, and verify the checklist: clean console, working saves, reachable endgame.</div></div>
   </div>
@@ -369,7 +370,7 @@
     <div class="cstat"><div class="num">329</div><div class="lab">published games fully extracted, not sampled</div></div>
     <div class="cstat"><div class="num">1,156</div><div class="lab">layers, with their cost and gain formulas</div></div>
     <div class="cstat"><div class="num">29,141</div><div class="lab">components catalogued &mdash; upgrades, challenges, milestones, achievements, buyables</div></div>
-    <div class="cstat"><div class="num">53</div><div class="lab">static rules, every threshold measured from data or the engine author's own notes</div></div>
+    <div class="cstat"><div class="num">58</div><div class="lab">static rules, every threshold measured from data or the engine author's own notes</div></div>
   </div>
 
   <div class="corpus-note">
@@ -411,6 +412,79 @@
     <div class="ops-row"><span class="ops-name">.times()</span><span class="ops-track"><i class="ops-fill dim" style="width:34.2%"></i></span><span class="ops-val">1,652</span></div>
     <div class="ops-row"><span class="ops-name">softcap()</span><span class="ops-track"><i class="ops-fill dim" style="width:0.8%"></i></span><span class="ops-val">39</span></div>
     <p class="ops-cap">Operations used by real upgrade effects, out of 6,274 upgrades that have one. Power and log shapes outnumber plain multipliers about three to one &mdash; so a generator that only ever emits &times;2 produces something no human ships.</p>
+  </div>
+</section>
+
+<section id="lifecycle" class="wrap" style="padding-top: 0;">
+  <div class="sec-head">
+    <h2>The bugs you only find by playing</h2>
+    <p>One generated game was handed to a player. He reported three bugs. All three had the same
+    shape &mdash; <b>every part was individually reasonable, and the combination left a save that
+    could not be recovered.</b> Every one of the 53 rules at the time passed that game with
+    <b>zero failures</b>. They check how things are wired and how big they are. None of them asked
+    what survives a reset.</p>
+  </div>
+
+  <div class="corpus-note">
+    The engine prestiges straight from the game loop &mdash;
+    <code>if (tmp[layer].autoPrestige &amp;&amp; tmp[layer].canReset) doReset(layer)</code> &mdash;
+    with <b>no player toggle anywhere in that path</b>. So automation a player cannot stop has to
+    be safe by construction. The invariant: <b>what auto-prestige requires must imply what makes
+    the reset harmless.</b> Miss it and the automation spends the currency its own safety
+    milestone is priced in, so that milestone can never be bought and the wipe never stops.
+  </div>
+
+  <div class="wire-grid">
+    <div class="wire-col bad">
+      <div class="wire-tag">found in 52 of 98 automated layers</div>
+      <pre>autoPrestige() {
+  <b>if</b> (hasMilestone(this.layer, 2)) <b>return true</b>
+}
+resetsNothing() {
+  <b>if</b> (hasMilestone("sg2", 3)) <b>return true</b>
+}</pre>
+      <p>Auto-prestige turns on at milestone 2. The reset only stops hurting at <code>sg2</code>&nbsp;M3 &mdash;
+      6.5 orders of magnitude later. In between, the layer wipes itself every single frame.</p>
+    </div>
+    <div class="wire-col good">
+      <div class="wire-tag">the same layer, repaired</div>
+      <pre>autoPrestige() {
+  <b>if</b> (hasMilestone(this.layer, 2) &amp;&amp;
+      hasMilestone("sg2", 3)) <b>return true</b>
+}
+resetsNothing() {
+  <b>if</b> (hasMilestone("sg2", 3)) <b>return true</b>
+}</pre>
+      <p>The automation now arrives later. That is the honest price of safety &mdash; and the
+      checker proves the relation by comparing milestone <b>sets</b>, never their numbers.</p>
+    </div>
+  </div>
+
+  <div class="qual-grid">
+    <div class="qual-col">
+      <h3>What survives a reset</h3>
+      <ul>
+        <li>Milestones score on lifetime records, and the layer keeps them across an upper-row prestige</li>
+        <li>A layer with no <code>doReset</code> gets the engine&rsquo;s default keep list &mdash; which holds neither <code>best</code> nor <code>total</code></li>
+        <li>Version numbers are compared as text by the engine, so a downgrade silently rewrites every save</li>
+      </ul>
+    </div>
+    <div class="qual-col">
+      <h3>Counters are not prizes</h3>
+      <ul>
+        <li>Static layers need <code>canBuyMax()</code>, or every prestige banks exactly one floor</li>
+        <li>A static layer&rsquo;s counter <i>is</i> its banked total &mdash; trickling into it earns less every second</li>
+        <li>Awards go through the engine so lifetime records stay honest</li>
+      </ul>
+    </div>
+    <div class="qual-col">
+      <h3>Then it caught a fourth</h3>
+      <ul>
+        <li>Those 53 rules had already been used to fix 24 defects in that same game</li>
+        <li>The new rules found a 25th the repair had missed: a layer with milestones but no <code>doReset</code> hook at all</li>
+        <li>Six of 104 layers had none &mdash; the repair checked every hook that existed, never the ones that didn&rsquo;t</li>
+      </ul>
+    </div>
   </div>
 </section>
 
@@ -476,10 +550,11 @@
     <div class="qual-col">
       <h3>Verification</h3>
       <ul>
-        <li>53 static checks pass before manual testing starts</li>
+        <li>58 static checks pass before manual testing starts</li>
         <li>Zero console errors across the whole playthrough</li>
         <li>Saves, offline cap, and the win screen verified by hand</li>
         <li>Every effect is proven to be consumed by a formula somewhere</li>
+        <li>Prestige a high row with milestones earned, then confirm the ladder survived the reset</li>
         <li>Rules hardened by six full games, a 329-game corpus, and the engine author's own design notes</li>
       </ul>
     </div>

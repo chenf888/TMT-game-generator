@@ -35,7 +35,7 @@ development — a 25-layer and a 10-layer generated game):
   (1,156 layers, 29,141 components, every figure traceable to file + line). This is what
   produced the wiring rule: **54.4% of real upgrades carry no `effect()` at all**, because
   their power is a branch in the layer's `gainMult()`. See `references/design/11`.
-- **53-rule static checker** — every hard rule and every regression caught in real
+- **58-rule static checker** — every hard rule and every regression caught in real
   generated games is automated (`scripts/static_checks.js`): Decimal discipline, row
   contiguity, requires monotonicity, dead-end unlock upgrades, self-scaling compounding
   budgets, achievement visibility, **effects that nothing consumes**, unread engine fields,
@@ -75,7 +75,7 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | Stage | What happens |
 |---|---|
 | 1. Interview | ≤7 structured questions: theme-structure confirmation, scale (locks a small/medium/large blueprint), natural ceilings, pacing & interactivity, side content, automation/timewall tolerance, language & style |
-| 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 11 rules before any code exists |
+| 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 19 rules before any code exists |
 | 3. Scaffold | `node scripts/scaffold.js "Game Name" <dir>` copies the bundled TMT template, patches `js/mod.js` (unique permanent `modInfo.id`, name, author, modFiles, charset meta), self-verifies and syntax-checks the result |
 | 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M10 mechanics, automation ladder, softcaps, theming |
 | 5. Static checks | `node scripts/static_checks.js <game-folder>` — FAIL blocks manual testing; WARNs need a written justification in the brief |

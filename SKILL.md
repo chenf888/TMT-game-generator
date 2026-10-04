@@ -159,9 +159,11 @@ future game folder or in your notes) and fill every section:
 | 15 | **author pacing**: first boost reachable within 10 seconds; every reset longer than a minute pays something; a major reset speeds the game up from the first second; no hard resets ever | 12 §1; `authorPacingTargets` |
 | 16 | **upgrade discipline**: one production bonus per upgrade, never 3+; no upgrade boosts another upgrade's effect (boost resources or named mechanics); layers are gated by threshold, never behind a purchase you then also pay for | 12 §3 |
 | 17 | **cost before softcap**: shape with `cost()`/`requires`; use softcaps only for genuine runaway loops, and only sell a cap raise if the cap is visible | 12 §2; 09 P12 (revised) |
+| 18 | **row pacing written as two constants**: `per-row time = requires step ÷ output step`, target **×1.1–×1.6**. Both numbers appear in the brief with the resulting multiplier beside them. No static rule can check this — it spans layers and generator constants | 11 §4.1 |
+| 19 | **reset lifecycle**: every layer whose milestones read `best`/`total` keeps both in `doReset`; `autoPrestige` implies `resetsNothing` (compare milestone sets); no `update()` assigns `player[layer].points`; every static layer has `canBuyMax()` | 03 §4.1; N-MSDESTROY, N-AUTOWIPE, N-POINTSWRITE, N-STATICMAX |
 
 Also check no two milestones of the same layer claim the same automation grant (the Mario
-Maker 2 "conflict point" incident). Gate: proceed only when all 17 checks pass.
+Maker 2 "conflict point" incident). Gate: proceed only when all 19 checks pass.
 
 ---
 
@@ -335,7 +337,7 @@ node scripts/static_checks.js "<game-folder>"
   re-run until 0 FAIL. Manual testing is not allowed with open FAILs.
 - **WARN = needs a written reason** in brief §10 (e.g. a deliberate ×150 requires leap for a
   multi-row jump like Mario Maker's e86). Unexplained WARNs count as failures.
-- Rules cover: 53 rule ids across mod.js completeness (`M-*`), file registration (`M-UNREG`, 07 rule 2), banned
+- Rules cover: 58 rule ids across mod.js completeness (`M-*`), file registration (`M-UNREG`, 07 rule 2), banned
   calls (`.mod(`, `resetBuyables(`, `ExpantaNum`, raw numbers where Decimals belong,
   native-ops-on-currency suspects), layer integrity (`startData`, prestige fields), the
   corpus-derived design assertions: row contiguity (A2), requires-ladder monotonicity (A1) +
@@ -363,7 +365,28 @@ node scripts/static_checks.js "<game-folder>"
   (WARN, component keys the engine silently drops — `challenges.reward` renders blank per
   `template/js/components.js:148`; note `completionLimit` is VALID, challenges are repeatable),
   `D-EFFECTSHAPE` (WARN, all of a layer's effects are flat multiplies — corpus pow:times ≈ 3:1),
-  `D-COSTSPAN` (WARN, a layer's literal costs span <3 orders — real ladders span 6+).
+  `D-COSTSPAN` (WARN, a layer's literal costs span <3 orders — real ladders span 6+; static
+  layers get a 1-order bar, because their currency is a floor COUNT growing as log2(stardust)
+  and 6 orders would mean 2^1e6 stardust).
+- **Lifecycle rules** (2026-10-04, from the *The Galaxy Nebula* postmortem) — these check what
+  **survives a reset**, not how things are wired or how big they are. Every one of them caught
+  a real defect that the entire rule set above passed with 0 FAIL, and all three of that game's
+  player reports were of this shape: each part individually reasonable, the *combination*
+  unrecoverable. `N-MSDESTROY` (**FAIL**, a milestone condition reads a field a higher-row reset
+  erases — `layerDataReset` keeps only 4 engine fields plus your keep list, and `rowReset` fires
+  it on every lower-row layer with no `doReset`; score milestones on `.best`/`.total` and keep
+  both), `N-AUTOWIPE` (**FAIL**, automation that fires while the reset is still destructive —
+  the engine calls `doReset` from the game loop with **no player toggle** in the path, so
+  *autoPrestige's condition must imply resetsNothing's*; compare milestone **sets**, not
+  numbers. WARN, aggregated, for a keep list preserving an `"auto"` flag nothing reads —
+  "toggleable" is then an empty promise), `N-POINTSWRITE` (FAIL static / WARN normal, `update()`
+  assigning `player[layer].points` instead of `addPoints()` — the only writer of `best`/`total`;
+  on a static layer it is fatal, since the reset gain subtracts the counter), `N-STATICMAX`
+  (**FAIL**, a static layer with no `canBuyMax()` — `getResetGain` returns 1 and `doReset`
+  clamps the payout to 1, so it banks exactly one floor per prestige and its whole ladder is
+  dead). Plus `M-VERCMP` (WARN, `VERSION.num` is compared **as text** by `utils/save.js:301`:
+  a component ≥ 10 sorts below a single-digit one, and a num below what the changelog documents
+  downgrades every save the build opens).
 - **Author rules (handbook 12)** — from Acamaeda's own design notes, which outrank the corpus
   statistics where they disagree: `N-ARROWTHIS` (**FAIL**, a layer/component hook written as an
   arrow function whose body uses `this` — arrows have no own `this`), `N-CONTRAST` (WARN,
@@ -374,6 +397,13 @@ node scripts/static_checks.js "<game-folder>"
 - Use `--json` for machine-readable output. Fixture-proof: `tests/fixture-good` passes clean,
   `tests/fixture-bad` triggers every main rule, `tests/fixture-ghost` covers the ghost-field
   table (run `node tests/run_tests.js` to re-verify).
+- **Count the GENERATED code, not the generator edits.** When a fix is applied inside a
+  generator/template rather than to the output, verify by counting occurrences in the finished
+  files. Learned the hard way: a postmortem fixed a defect in 31 of 34 affected layers because
+  the generator had *two* code paths producing them and only one was patched — the 3-layer miss
+  only surfaced in a browser. After any bulk edit, re-run `static_checks.js` on the real game
+  folder and compare counts against the number you intended to change; a rule that reports the
+  same number after a "complete" fix is telling you the fix did not land everywhere.
 
 ---
 

@@ -74,6 +74,13 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
                                // reads — the phase-⑧ headline defect (54.4% of real upgrades
                                // have no effect() because their power lives in gainMult)
             "N-ARROWTHIS",     // layer w: gainMult is an arrow function using `this`
+            // lifecycle rules (2026-10-04, the The Galaxy Nebula postmortem):
+            "N-MSDESTROY",     // layer c: milestones read .best, but with no doReset() the
+                               // engine wipes the layer with its DEFAULT keep list
+            "N-AUTOWIPE",      // layer v: autoPrestige at M1 implies nothing about
+                               // resetsNothing at M2, so the automation wipes its own food
+            "N-STATICMAX",     // layer f: static with no canBuyMax() — banks exactly 1 floor
+                               // per prestige (game.js:21/:186)
         ];
         const expectedWarns = [
             "M-END-PLACEHOLDER",
@@ -92,6 +99,13 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             "N-CONTRAST",      // layer w: #141414 unreadable as text on the page background
             "N-UNLOCKPAYGATE", // layer w upgrade 12 unlocks layer "n", which still has requires
             "N-HOTKEYDESC",    // layer w hotkey "w" whose description omits the key
+            // lifecycle rules (2026-10-04):
+            "M-VERCMP",        // VERSION.num "0.10" — the engine compares versions as TEXT
+                               // (utils/save.js:301), so "0.10" sorts below "0.1"
+            "N-AUTOWIPE",      // layer v keeps an "auto" flag no code ever reads, so the
+                               // "toggleable" wording promises a switch that does not exist
+            "N-POINTSWRITE",   // layer c assigns player.c.points in update(), bypassing
+                               // addPoints() — the only writer of best/total
         ];
         ok(status === 1, "exit code 1 (FAILs present)", `status=${status}`);
         for (const rule of expectedFails)

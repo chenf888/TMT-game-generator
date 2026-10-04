@@ -188,6 +188,73 @@ addLayer("z", {
     },
 })
 
+// [N-STATICMAX][FAIL] a static layer with no canBuyMax().
+// getResetGain() short-circuits to `decimalOne` when `!tmp[layer].canBuyMax` (game.js:21)
+// and doReset() clamps the payout the same way (game.js:186), so this layer banks exactly
+// ONE floor per prestige no matter how deep the player digs — and getNextAt() drops
+// max-buy too (game.js:54), so the button stops even hinting "Next:". Every upgrade
+// priced in floors is unreachable.
+addLayer("f", {
+    name: "floors",
+    symbol: "F",
+    position: 0,
+    startData() { return { unlocked: true, points: new Decimal(0) } },
+    color: "#4BFF13",
+    resource: "floors",
+    row: 4,
+    baseResource: "wisdom shards",
+    baseAmount() { return player.w.points },
+    requires: new Decimal(2e6),
+    type: "static",
+    base: 10,
+    exponent: 0.5,
+    gainMult() { return new Decimal(1) },
+    gainExp() { return new Decimal(1) },
+    layerShown() { return true },
+    tabFormat: ["main-display", "prestige-button", "upgrades"],
+    upgrades: {
+        11: { title: "Deeper dig", description: "Dig one floor deeper per cycle.", cost: new Decimal(1e6) },
+    },
+})
+
+// [N-AUTOWIPE][FAIL] the automation fires a milestone before the reset is non-destructive.
+// autoPrestige() turns on at M1, but resetsNothing() only returns true at M2 — so between
+// those two milestones the engine calls doReset() every frame (game.js:369, no player
+// toggle in the path) and zeroes the very currency M2 is priced in. THE INVARIANT:
+// autoPrestige's condition must be at least as strict as resetsNothing's.
+// This layer shows the CORRECT doReset shape too: it keeps best/total, so its milestones
+// survive an upper-row reset (the N-MSDESTROY counterpart on layer "c").
+// [N-AUTOWIPE][WARN] and it preserves an "auto" flag that no code ever reads.
+addLayer("v", {
+    name: "vigil",
+    symbol: "V",
+    position: 0,
+    startData() { return { unlocked: true, points: new Decimal(0), best: new Decimal(0) } },
+    color: "#13D4FF",
+    resource: "vigil shards",
+    row: 4,
+    baseResource: "wisdom shards",
+    baseAmount() { return player.w.points },
+    requires: new Decimal(3e6),
+    type: "normal",
+    exponent: 0.5,
+    gainMult() { return new Decimal(1) },
+    gainExp() { return new Decimal(1) },
+    layerShown() { return true },
+    autoPrestige() { if (hasMilestone(this.layer, 1)) return true },
+    resetsNothing() { if (hasMilestone(this.layer, 2)) return true },
+    doReset() { layerDataReset(this.layer, ["unlocked", "milestones", "best", "total", "auto"]) },
+    tabFormat: ["main-display", "prestige-button", "upgrades"],
+    milestones: {
+        0: { requirementDescription: "Start automating", effectDescription: "Nothing yet.", done() { return player[this.layer].best.gte(1) } },
+        1: { requirementDescription: "1e3 vigil shards", effectDescription: "Automates this layer.", unlocked() { return hasMilestone(this.layer, 0) }, done() { return player[this.layer].best.gte(1e3) } },
+        2: { requirementDescription: "1e4 vigil shards", effectDescription: "Resets stop costing you your currency.", unlocked() { return hasMilestone(this.layer, 1) }, done() { return player[this.layer].best.gte(1e4) } },
+    },
+    upgrades: {
+        11: { title: "Keen edge", description: "Vigil shards per dig.", cost: new Decimal(1e5) },
+    },
+})
+
 // Handbook-12 rule injections (2026-10-03, design notes by the TMT author):
 //   [N-ARROWTHIS]  gainMult written as an arrow function that uses `this`
 //   [N-CONTRAST]   color too dark to read as text on the page background #0f0f0f

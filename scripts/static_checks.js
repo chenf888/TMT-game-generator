@@ -21,6 +21,10 @@
  *     M-DNC         (WARN) doNotCallTheseFunctionsEveryTick declared
  *     M-FILES       every modInfo.modFiles entry exists on disk
  *     M-UNREG       a modder-scope js file defines addLayer/addNode but is not in modFiles (07 rule 2)
+ *     M-VERCMP      (WARN) VERSION.num is unsafe for the engine's STRING comparison (utils/save.js:301):
+ *                   a component >= 10 sorts below a single-digit one ("0.10" < "0.9"), and a num
+ *                   below what the changelog documents is a downgrade that rewrites every save it
+ *                   opens and skips fixOldSave()
  *     C-MOD         `.mod(` call — this engine's Decimal has no .mod (07 Part A 1)
  *     C-RESETBUY    `resetBuyables(` — nonexistent engine function, official-demo bug (07 Part B)
  *     C-EXPANTA     `ExpantaNum` reference — framework-swap mod code copied into a standard game (09 §6)
@@ -114,6 +118,34 @@
  *                   also have to pay to use", 2022-06-26). Use a threshold instead.
  *     N-HOTKEYDESC  (WARN) a hotkey whose description text omits the key itself
  *                   ("You need to have the key in the description", 2020-10-07).
+ * Lifecycle rules (2026-10-04) — from the The Galaxy Nebula postmortem
+ * (E:\Idle-Skill\The-Galaxy-Nebula\FINDINGS.md). All three of that game's player reports were
+ * of ONE shape — each part individually reasonable, the COMBINATION unrecoverable — and all
+ * three passed the entire rule set above with 0 FAIL. The rules above check wiring and
+ * magnitude; these check what SURVIVES a reset:
+ *     N-MSDESTROY   (FAIL) a milestone condition reads a field an upper-row reset erases.
+ *                   layerDataReset() (game.js:140) rebuilds the layer from startData() and keeps
+ *                   only {unlocked, forceTooltip, noRespecConfirm, prevTab} + the caller's keep
+ *                   list; rowReset() (game.js:136) fires it for every lower-row layer with no
+ *                   doReset hook. A milestone demanding 1e8 lifetime floors can never fire,
+ *                   because the resets that reach it erase the record it is scored against.
+ *     N-AUTOWIPE    (FAIL) an automation hook that can fire while the reset is still
+ *                   destructive. The engine calls doReset() from the game loop with NO player
+ *                   toggle in the path (game.js:369/:378), and resetsNothing() (game.js:211) is
+ *                   the only brake. THE INVARIANT: autoPrestige's condition must IMPLY
+ *                   resetsNothing's — compare milestone SETS, not numbers. 52 of 98 automated
+ *                   layers in that game wiped their own supply every frame. (WARN) a keep list
+ *                   preserving an "auto" flag that no code ever reads, so "toggleable" is an
+ *                   empty promise.
+ *     N-POINTSWRITE (FAIL static / WARN normal) update() assigning player[layer].points instead
+ *                   of going through addPoints() (game.js:165), the only writer of best/total.
+ *                   On a static layer it is far worse: the reset gain is
+ *                   `…floor().sub(player[layer].points).add(1)` (game.js:24), so every trickled
+ *                   floor is one the next prestige cannot bank. Only ASSIGNMENT is a defect —
+ *                   TMT's Decimal is immutable, so `points.add(1).pow(0.5)` is a read.
+ *     N-STATICMAX   (FAIL) a static layer with no canBuyMax(): getResetGain() short-circuits to 1
+ *                   (game.js:21) and doReset() clamps the payout to 1 (game.js:186), so the layer
+ *                   banks exactly ONE floor per prestige and its whole upgrade ladder is dead.
  *
  * The scanner is comment/string/template-literal aware (same pitfalls catalogued in
  * crawl/extract_metrics.js: apostrophes in comments, CR line endings, interpolation braces).
@@ -428,6 +460,54 @@ if (!/doNotCallTheseFunctionsEveryTick/.test(modRec.clean))
     add(WARN, "M-DNC", modJsPath, null, "doNotCallTheseFunctionsEveryTick not declared", "Declare it (even empty) — any custom layer action-function must be listed there (07 rule 4).");
 else pass("M-DNC", "doNotCallTheseFunctionsEveryTick declared");
 
+// M-VERCMP — VERSION.num is compared to the save's stored version as a STRING.
+// utils/save.js:301 reads `if (player.versionType == getModID() && VERSION.num > player.version)`,
+// and JS `>` on two strings is lexicographic: "0.10" < "0.9", "0.1.10" < "0.1.9". So a version
+// with a component >= 10 makes every later release look OLDER, the migration guard never
+// fires, and — worse — line 307 then writes the bogus version back into the player's save.
+// The mirror failure is a DOWNGRADE: a build whose VERSION.num is below what the changelog
+// already documents rewrites every save it opens and skips fixOldSave(). Both happened in a
+// real generated game (regeneration silently re-stamped the mod from 0.3.1 back to 0.1).
+{
+    const verObj = /\bVERSION\s*=\s*\{/.exec(modRec.clean);
+    const numM = verObj ? new RegExp("\\bnum\\s*:\\s*(\"[^\"]*\"|'[^']*'|[0-9][0-9.]*)").exec(modRec.clean.slice(verObj.index, verObj.index + 400)) : null;
+    if (!numM) {
+        add(WARN, "M-VERCMP", modJsPath, verObj ? verObj.index : null, "VERSION.num not found — save migration cannot be reasoned about", "Set VERSION = { num: \"0.1\", name: \"...\" }.");
+    } else {
+        const at = verObj.index + numM.index;
+        const raw = numM[1];
+        const problems = [];
+        if (raw[0] !== "\"" && raw[0] !== "'") {
+            problems.push(`VERSION.num is the bare number ${raw}, not a string — the engine stores and re-reads it as a string (save.js:307), so the two can disagree about which is newer`);
+        }
+        const ver = raw.replace(/["']/g, "");
+        const parts = ver.split(".");
+        for (const p of parts) {
+            if (/^\d+$/.test(p) && parseInt(p, 10) >= 10)
+                problems.push(`component "${p}" in VERSION.num "${ver}" is >= 10 — the engine compares as text, and "0.1.10" sorts BELOW "0.1.9", so every release after this one would look older and skip fixOldSave()`);
+        }
+        // downgrade: the changelog already documents a version newer than VERSION.num.
+        // Only version-SHAPED tokens count (a "v" prefix, or a dotted number in a
+        // heading) — bare numbers in prose ("97 pay-to-enter gates", "10 of 11 upgrades")
+        // are not versions, and reading them as one invented phantom downgrades.
+        const chM = /let\s+changelog\s*=/.exec(modRec.clean);
+        if (chM) {
+            const chBody = modRec.src.slice(chM.index, chM.index + 8000);
+            const seen = new Set();
+            for (const mm of chBody.matchAll(/\bv(\d+(?:\.\d+)+)\b/g)) seen.add(mm[1]);
+            for (const mm of chBody.matchAll(/<h[1-6][^>]*>\s*v?(\d+(?:\.\d+)+)\s*</gi)) seen.add(mm[1]);
+            const newest = [...seen].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).pop();
+            if (newest && newest.localeCompare(ver, undefined, { numeric: true }) > 0)
+                problems.push(`VERSION.num is "${ver}" but the changelog already documents v${newest} — this build is a DOWNGRADE. It rewrites every save it opens (save.js:307) and skips fixOldSave(), because the text compare "${ver}" > "${newest}" is false`);
+        }
+        if (problems.length)
+            add(WARN, "M-VERCMP", modJsPath, at,
+                `VERSION.num is not safe for the engine's string comparison (utils/save.js:301): ${problems.join("; ")}. Version bumps are load-bearing — they gate fixOldSave() and decide whether an old save is migrated or silently overwritten.`,
+                'Keep VERSION.num a dot-separated string with every component < 10 and at most two components ("0.1" → "0.9" → "1.0"). Never regenerate a mod without re-reading its changelog: a lower num than the changelog documents downgrades every save that opens the game.');
+        else pass("M-VERCMP", `VERSION.num "${ver}" compares correctly as a string`);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // file registration
 // ---------------------------------------------------------------------------
@@ -670,14 +750,22 @@ if (rows.length > 0) {
         add(WARN, "D-ROWNEG", layers[0] ? layers[0].file : modJsPath, null, `negative row ${rows[0]} in use — corpus games start at row 0`, "Prefer rows 0..N; use displayRow for visual offsets.");
 
     // requires ladder (A1): min numeric requires per row must not decrease
+    //
+    // `unresolved` counts layers in the row whose `requires` is a function, so their
+    // value is not statically known. Comparing the remaining layers produces a ratio
+    // against the wrong denominator — a real generated game reported a phantom ×7.2
+    // this way while the engine's actual adjacent-row ratios were all ×18. When either
+    // row has an unresolved layer, skip the comparison instead of guessing.
     const rowReq = [];
     for (const r of rows) {
-        const reqs = rowSet.get(r).filter((L) => L.requiresNum != null).map((L) => L.requiresNum);
-        rowReq.push({ row: r, req: reqs.length ? Math.min(...reqs) : null });
+        const inRow = rowSet.get(r);
+        const reqs = inRow.filter((L) => L.requiresNum != null).map((L) => L.requiresNum);
+        rowReq.push({ row: r, req: reqs.length ? Math.min(...reqs) : null, unresolved: inRow.length - reqs.length });
     }
     for (let i = 1; i < rowReq.length; i++) {
         const prev = rowReq[i - 1], cur = rowReq[i];
         if (prev.req == null || cur.req == null) continue;
+        if (prev.unresolved > 0 || cur.unresolved > 0) continue;
         const ratio = cur.req / prev.req;
         if (ratio < 1)
             add(FAIL, "D-REQLADDER", layers[0] ? layers[0].file : modJsPath, null, `backwards requires ladder (A1): row ${cur.row} requires ${fmtNum(cur.req)} but row ${prev.row} requires ${fmtNum(prev.req)} — later rows must require MORE (The Click Tree incident: 100000→50→30→…)`, "Raise the deeper row's requires; adjacent rows should sit x10–x100 apart (P2).");
@@ -1214,7 +1302,18 @@ function layerUpgradeSpans(rec, L, field) {
 // magnitude has a flat ladder: no sense of escalating stakes, and no room for the
 // exponential tail that late-game layers need. (D-REQRATIO covers the LAYER ladder;
 // this covers the COST ladder INSIDE a layer.)
+//
+// The 3-order bar is only meaningful for NORMAL layers. A static layer's currency is a
+// floor COUNT, and the count grows as log2(stardust) (getResetGain, game.js:22) — a real
+// game tops out around 50-70 floors, so 6 orders would mean 2^1e6 stardust, unreachable at
+// any stage. Measured on that game's 34 static layers: every cost ladder was 11 entries
+// spanning 1 → 64, i.e. 1.80 orders — the deliberate shape 1,2,4,8,16,2,8,16,32,48,64,
+// with a key upgrade dropping back to 2. The 3-order bar fired on all 34 and meant
+// nothing. Static layers therefore get a 1-order bar, which still catches a truly flat
+// ladder (every cost identical) without condemning the correct shape.
 {
+    const SPAN_BAR = 3;      // normal layers: corpus ladders span 6+ orders
+    const SPAN_BAR_STATIC = 1; // static layers: floors grow as log2(stardust), ~50-70 real range
     let flagged = 0;
     for (const L of layers) {
         if (L.isSide || L.isUtility) continue;
@@ -1231,11 +1330,13 @@ function layerUpgradeSpans(rec, L, field) {
         }
         if (logs.length < 8) continue;
         const span = Math.max(...logs) - Math.min(...logs);
-        if (span < 3) {
+        const isStatic = L.type === "static";
+        const bar = isStatic ? SPAN_BAR_STATIC : SPAN_BAR;
+        if (span < bar) {
             flagged++;
             add(WARN, "D-COSTSPAN", L.file, L.start,
-                `layer "${L.id}": ${logs.length} literal upgrade costs span only ${span.toFixed(1)} orders of magnitude (${Math.pow(10, Math.min(...logs)).toExponential(1)} → ${Math.pow(10, Math.max(...logs)).toExponential(1)}) — a flat ladder with no escalating stakes. Real layers span 6+ orders (corpus: 38.7% of literal costs are ≥1e10)`,
-                "Spread the ladder across orders — first upgrade ~1, last a hard ticket (`Decimal.pow(10, n)` with a hand-picked exponent). Non-monotonic drops are fine and are a real rhythm device (a cheap key upgrade amid an expensive chain).");
+                `layer "${L.id}": ${logs.length} literal upgrade costs span only ${span.toFixed(1)} orders of magnitude (${Math.pow(10, Math.min(...logs)).toExponential(1)} → ${Math.pow(10, Math.max(...logs)).toExponential(1)}) — a flat ladder with no escalating stakes.${isStatic ? " This is a STATIC layer, so its currency is a floor COUNT growing as log2(stardust) and the bar is 1 order, not 3 — but a ladder that does not move at all still buys nothing with escalation" : " Real layers span 6+ orders (corpus: 38.7% of literal costs are ≥1e10)"}`,
+                "Spread the ladder across orders — first upgrade ~1, last a hard ticket (`Decimal.pow(10, n)` with a hand-picked exponent). Non-monotonic drops are fine and are a real rhythm device (a cheap key upgrade amid an expensive chain). A static layer's reference ladder is 1,2,4,8,16,2,8,16,32,48,64 (1.8 orders).");
         }
     }
     if (flagged === 0) pass("D-COSTSPAN", "layer cost ladders span escalating orders of magnitude");
@@ -1346,9 +1447,24 @@ function layerUpgradeSpans(rec, L, field) {
         const m = /(?:title|description)\s*:\s*(["'])([^"']*)\1/.exec(txt);
         return m ? m[2] : "";
     };
+    // Only the PLAYER-FACING text can promise an unlock. Every component carries an
+    // `unlocked()` gate field, and /unlock/i matches "unlocked" — so testing the whole
+    // entry flagged `unlocked() { return hasUpgrade("ps", 12) }` as an unlock promise and
+    // then read the entry's `player.fu.points` as "unlocking fu". On a real generated game
+    // that produced 97 phantom pairs (0 genuine: the flagged upgrade's own title and
+    // description never mentioned unlocking anything). Restrict to title/description/name
+    // literals — the same trap classifyUpgrade() already sidesteps for D-EFFECTMONO.
+    const promoText = (entryText) => {
+        const out = [];
+        const re = /(?:^|[,{]\s*|\n\s*)(?:title|description|name)\s*:\s*(["'`])([\s\S]*?)\1/g;
+        let m;
+        while ((m = re.exec(entryText))) out.push(m[2]);
+        return out.join(" \n ");
+    };
     // A layer id like "wall", "n" or "gh" also occurs as an ordinary English word, so a bare
     // \bid\b test produces garbage. Require an actual REFERENCE: quoted, dotted (player.x),
-    // parenthesised in the description, or written as "<id> layer/wing".
+    // parenthesised in the description, or written next to the noun that names it — in
+    // either order, because upgrade text says both "the n wing" and "unlocks layer n".
     const referencesLayer = (txt, id) => {
         const e = escapeRe(id);
         return new RegExp(
@@ -1356,7 +1472,9 @@ function layerUpgradeSpans(rec, L, field) {
             "|\\bplayer\\." + e + "\\b" +           // player.x
             "|\\blayers\\." + e + "\\b" +           // layers.x
             "|\\(\\s*" + e + "\\s*\\)" +            // "... wing (x)"
-            "|\\b" + e + "\\s+(?:wing|layer|tree|tab)\\b", "i").test(txt);
+            "|\\b" + e + "\\s+(?:wing|layer|tree|tab)\\b" +   // "the n wing"
+            "|\\b(?:wing|layer|tree|tab)\\s+" + e + "\\b",     // "unlocks layer n"
+            "i").test(txt);
     };
     let gateHits = [];
     for (const L of layers) {
@@ -1364,10 +1482,11 @@ function layerUpgradeSpans(rec, L, field) {
         const rec = fileRecs.get(L.file);
         if (!rec) continue;
         for (const s of layerUpgradeSpans(rec, L, "upgrades")) {
-            if (!/\bunlock/i.test(s.text)) continue;
+            const promo = promoText(s.text);
+            if (!promo || !/\bunlock/i.test(promo)) continue;
             for (const t of layers) {
                 if (t.id === L.id) continue;
-                if (!referencesLayer(s.text, t.id)) continue;
+                if (!referencesLayer(promo, t.id)) continue;
                 if (!hasRequires(t)) continue;   // free to enter -> onPurchase is fine
                 gateHits.push({ file: L.file, at: s.start, from: L.id, key: s.key, to: t.id, title: titleOf(s.text) });
             }
@@ -1412,6 +1531,288 @@ function layerUpgradeSpans(rec, L, field) {
     }
     if (hotkeys === 0) pass("N-HOTKEYDESC", "no hotkeys declared");
     else pass("N-HOTKEYDESC", `${labelled}/${hotkeys} hotkeys name their key in the description`);
+}
+
+// ===========================================================================
+// Lifecycle rules (2026-10-04) — from the The Galaxy Nebula postmortem
+// (E:\Idle-Skill\The-Galaxy-Nebula\FINDINGS.md).
+//
+// Every defect below passed the ENTIRE existing rule set with 0 FAIL. They share one
+// shape: each part is individually reasonable, and the COMBINATION produces an
+// unrecoverable save. The older rules check wiring and magnitude; these check what
+// SURVIVES a reset. All three player reports in that postmortem were of this shape,
+// and all three predated any automated check.
+// ===========================================================================
+
+const maskOf = (L) => {
+    const rec = fileRecs.get(L.file);
+    return rec ? rec.mask.slice(L.start, L.end + 1) : null;
+};
+
+// Body of a layer-level hook in any of the spellings the engine accepts:
+// `foo() {}`, `foo: function() {}`, `foo: () => {}`. "" when the hook is absent.
+// (A bare `doReset(this.layer)` call inside a hotkey is not a definition: it is not
+// preceded by a key position, so the defRe below does not match it.)
+function layerHookBody(L, name) {
+    const mask = maskOf(L);
+    if (!mask) return "";
+    // the `g` flag is REQUIRED: codeMatches() drives lastIndex itself, and a non-global
+    // exec() restarts at 0 forever.
+    const defs = codeMatches(L.code, mask, new RegExp("(?:^|[,{\\n])\\s*" + name + "\\s*[(:]", "g"));
+    if (!defs.length) return "";
+    const open = L.code.indexOf("(", defs[0].index);
+    if (open < 0) return "";
+    let i = open, d = 0;
+    for (; i < L.code.length; i++) {
+        const c = L.code[i];
+        if (c === "(") d++;
+        else if (c === ")") { d--; if (d === 0) { i++; break; } }
+    }
+    while (i < L.code.length && /\s/.test(L.code[i])) i++;
+    if (L.code[i] !== "{") return ""; // expression-bodied arrow or a variable ref
+    const end = matchBracketFrom(L.code, i);
+    return end < 0 ? L.code.slice(i) : L.code.slice(i, end + 1);
+}
+
+// The set of milestones a hook demands, as "layerId:n". `hasMilestone(this.layer, n)`
+// resolves to the layer that owns the hook — which is how most layers gate their own
+// automation. Compare these as SETS: milestone NUMBERS only approximate an ordering,
+// so "autoPrestige needs a higher number" is not the same claim as "autoPrestige
+// implies resetsNothing".
+function milestoneSetFrom(body, selfId) {
+    const s = new Set();
+    const re = /hasMilestone\s*\(\s*(?:"([^"]+)"|'([^']+)'|this\s*\.\s*layer)\s*,\s*(\d+)\s*\)/g;
+    let m;
+    while ((m = re.exec(body))) s.add((m[1] || m[2] || selfId) + ":" + m[3]);
+    return s;
+}
+
+// Fields layerDataReset() preserves with no argument (game.js:141).
+const ALWAYS_KEPT = new Set(["unlocked", "forceTooltip", "noRespecConfirm", "prevTab"]);
+
+// Resolve the keep list a doReset() hands to layerDataReset(). Handles the two shapes
+// real code uses: an inline array, and `let kept = [...]` plus later `kept.push(...)`.
+function resolveKeepList(doResetBody) {
+    const call = /layerDataReset\s*\(/.exec(doResetBody);
+    if (!call) return { calls: false, known: true, names: new Set() };
+    const open = doResetBody.indexOf("(", call.index);
+    const close = matchBracketFrom(doResetBody, open);
+    if (close < 0) return { calls: true, known: false, names: new Set() };
+    const args = doResetBody.slice(open + 1, close);
+    const parts = [];
+    let d = 0, cur = "";
+    for (const ch of args) {
+        if (ch === "(" || ch === "[" || ch === "{") d++;
+        else if (ch === ")" || ch === "]" || ch === "}") d--;
+        if (ch === "," && d === 0) { parts.push(cur); cur = ""; } else cur += ch;
+    }
+    if (cur.trim()) parts.push(cur);
+    const keepArg = (parts[1] || "").trim();
+    const names = new Set();
+    const quoted = (txt) => { for (const mm of txt.matchAll(/["']([^"']+)["']/g)) names.add(mm[1]); };
+    if (!keepArg) return { calls: true, known: true, names };
+    if (keepArg.startsWith("[")) { quoted(keepArg); return { calls: true, known: true, names }; }
+    if (/^[A-Za-z_$][\w$]*$/.test(keepArg)) {
+        const init = new RegExp("\\b" + keepArg + "\\s*=\\s*\\[([\\s\\S]*?)\\]").exec(doResetBody);
+        if (!init) return { calls: true, known: false, names };
+        quoted(init[1]);
+        const pushRe = new RegExp("\\b" + keepArg + "\\s*\\.\\s*push\\s*\\(([^)]*)\\)", "g");
+        let pm;
+        while ((pm = pushRe.exec(doResetBody))) quoted(pm[1]);
+        return { calls: true, known: true, names };
+    }
+    return { calls: true, known: false, names };
+}
+
+// N-MSDESTROY — a milestone whose condition reads a field that an upper-row reset erases.
+// layerDataReset() (game.js:140-161) rebuilds the layer from startData() and keeps ONLY
+// {unlocked, forceTooltip, noRespecConfirm, prevTab} plus whatever keep list it is given.
+// rowReset() (game.js:129-138) fires it for every lower-row layer that has NO doReset hook
+// of its own, and for those that do, the hook decides. So the lifetime record a late
+// milestone is supposed to read back is destroyed by the very act of progressing — the
+// milestone demands 1e8 layers, and the resets it needs to reach there are what erase it.
+// The only way to find this by hand is to play far enough to hit it.
+{
+    const rowNums = mainLayers.filter((L) => L.row != null).map((L) => L.row);
+    let hits = 0, unknownKeep = 0;
+    for (const L of layers) {
+        if (L.isSide || L.isUtility || L.row == null) continue;
+        if (!rowNums.some((r) => r > L.row)) continue; // nothing above it: safe by position
+        const mask = maskOf(L);
+        if (!mask) continue;
+        let kept;
+        const definesDoReset = codeMatches(L.code, mask, /(?:^|[,{\n])\s*doReset\s*[(:]/g).length > 0;
+        if (!definesDoReset) {
+            // rowReset() takes the else-branch: the engine wipes this layer itself, and it
+            // passes no keep list at all.
+            kept = new Set();
+        } else {
+            const r = resolveKeepList(layerHookBody(L, "doReset"));
+            if (!r.calls) continue; // its own doReset wipes nothing of itself
+            kept = r.names;
+            if (!r.known) unknownKeep++;
+        }
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const fieldRe = new RegExp(
+            "player\\s*(?:\\[\\s*this\\s*\\.\\s*layer\\s*\\]|\\.\\s*" + escapeRe(L.id) + ")\\s*\\.\\s*(points|best|total)\\b", "g");
+        const liveHits = [], recordHits = [];
+        for (const ms of layerUpgradeSpans(rec, L, "milestones")) {
+            const dm = /(?:^|[,{]\s*|\n\s*)done\s*\(/.exec(ms.text);
+            if (!dm) continue;
+            const body = functionBody(ms.text, dm.index);
+            if (!body) continue;
+            for (const fm of body.matchAll(fieldRe)) {
+                const field = fm[1];
+                const survives = ALWAYS_KEPT.has(field) || kept.has(field);
+                if (survives) continue;
+                (field === "points" ? liveHits : recordHits).push(`M${ms.key} reads .${field}`);
+            }
+        }
+        if (!liveHits.length && !recordHits.length) continue;
+        hits++;
+        const keptDesc = definesDoReset
+            ? `its doReset() keeps [${[...kept].join(", ") || "nothing"}]`
+            : "it defines no doReset(), so rowReset() calls layerDataReset() with the default keep list";
+        const detail = [...liveHits, ...recordHits].slice(0, 5).join("; ");
+        const why = liveHits.length
+            ? `A milestone reading the LIVE counter is checked against a number an upper reset zeroes — in a real game a milestone demanding 1e8 floors could never fire, because the resets needed to reach it wiped the counter every time.`
+            : `The lifetime record is exactly what the reset destroys: layerDataReset() rebuilds the layer from startData(), so the threshold the milestone is scored against is erased by the progression that is supposed to earn it.`;
+        add(FAIL, "N-MSDESTROY", L.file, L.start,
+            `layer "${L.id}" (row ${L.row}) has ${liveHits.length + recordHits.length} milestone condition(s) reading a field that a higher-row reset erases — ${keptDesc} (${detail}). ${why}`,
+            `Keep the lifetime fields: give the layer \`doReset() { layerDataReset(this.layer, ["unlocked", "best", "total"]) }\`, and score milestones on \`.best\` / \`.total\`, never the live \`.points\`. (TMT author wisdom: milestones are persistent — engine/game.js:140. Found via player reports on a generated game, invisible to every wiring/magnitude rule.)`);
+    }
+    if (hits === 0) pass("N-MSDESTROY", "no milestone reads a field that an upper-row reset erases");
+    else if (unknownKeep) add(WARN, "N-MSDESTROY", modJsPath, null, `${unknownKeep} layer(s) pass a keep list this scanner could not resolve statically — their milestone/reset interaction is unverified`, "Build the keep list from a literal array, or `const kept = [...]` plus `kept.push(...)`, so the preserved set is readable.");
+}
+
+// N-AUTOWIPE — an automation hook that can fire while the reset is still destructive.
+// The engine calls doReset() straight from the game loop with NO player toggle in the
+// path: `if (tmp[layer].autoPrestige && tmp[layer].canReset) doReset(layer)` (game.js:369
+// and :378). Inside, `if (run(layers[layer].resetsNothing, layers[layer])) return`
+// (game.js:211) is the only thing standing between the player and a wipe. So the invariant
+// is a set relation: autoPrestige's condition must IMPLY resetsNothing's. Compare the
+// milestone sets, not the numbers — a layer that automatises before its own safety
+// milestone is a currency wipe the player can neither stop nor outrun. In a real game 52
+// of 98 automated layers were in this state, wiping their own food supply every frame.
+{
+    let violations = 0, okAuto = 0;
+    const falseToggleLayers = [];
+    const anyAutoRead = allModderCandidates.some((f) => {
+        const rec = loadRec(f);
+        return codeMatches(rec.clean, rec.mask,
+            /player\s*(?:\[\s*this\s*\.\s*layer\s*\]|\.\s*[A-Za-z_$][\w$]*)\s*\.\s*auto\b/g).length > 0;
+    });
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const autoBody = layerHookBody(L, "autoPrestige");
+        if (!autoBody) continue;
+        const auto = milestoneSetFrom(autoBody, L.id);
+        const fmt = (s) => [...s].map((k) => { const [id, n] = k.split(":"); return `${id} M${n}`; }).join(" + ") || "(no milestone gate)";
+        if (auto.size === 0) {
+            violations++;
+            add(FAIL, "N-AUTOWIPE", L.file, L.start,
+                `layer "${L.id}" autoPrestige() is not gated by any milestone — as soon as canReset() is true the engine calls doReset() every frame (game.js:369), and nothing in that path consults the player`,
+                "Gate it: `autoPrestige() { if (hasMilestone(this.layer, 2)) return true }` — and read N-AUTOWIPE's other half below: the gate must also imply resetsNothing().");
+            continue;
+        }
+        const rnBody = layerHookBody(L, "resetsNothing");
+        if (!rnBody) {
+            violations++;
+            add(FAIL, "N-AUTOWIPE", L.file, L.start,
+                `layer "${L.id}" auto-prestiges at ${fmt(auto)} but defines NO resetsNothing() — doReset() therefore zeroes its own baseAmount and sweeps every lower row (game.js:211-224), automatically and irreversibly`,
+                "Add `resetsNothing() { if (<the milestone that makes this reset safe>) return true }`, and make autoPrestige() require that same milestone (see the invariant below).");
+            continue;
+        }
+        const safe = milestoneSetFrom(rnBody, L.id);
+        if (safe.size === 0) {
+            add(WARN, "N-AUTOWIPE", L.file, L.start,
+                `layer "${L.id}" resetsNothing() has no hasMilestone() gate, so its condition cannot be compared against autoPrestige()'s (${fmt(auto)})`,
+                "Express resetsNothing() as milestone checks so the two can be compared as sets — an automation you cannot prove safe is an automation you cannot ship.");
+            continue;
+        }
+        const missing = [...safe].filter((k) => !auto.has(k));
+        const fmtMissing = missing.map((k) => { const [id, n] = k.split(":"); return `${id} M${n}`; }).join(", ");
+        if (missing.length) {
+            violations++;
+            add(FAIL, "N-AUTOWIPE", L.file, L.start,
+                `layer "${L.id}" auto-prestiges at ${fmt(auto)} but the reset only becomes non-destructive at ${fmt(safe)} — so the automation runs ${missing.length} milestone(s) early (${fmtMissing}). Every one of those frames wipes what the safety milestone is priced in, so the milestone can never be bought and the wipe never stops. THE INVARIANT: autoPrestige's condition must be at least as strict as resetsNothing's.`,
+                `Widen the auto gate: \`autoPrestige() { if (${[...auto, ...missing].map((k) => { const [id, n] = k.split(":"); return `hasMilestone(${JSON.stringify(id)}, ${n})`; }).join(" && ")}) return true }\`. Automation that eats its own supply is not automation — accept that it arrives later.`);
+        } else okAuto++;
+        // the empty promise: a keep list that preserves "auto" which nothing ever reads
+        const kr = resolveKeepList(layerHookBody(L, "doReset"));
+        if (kr.calls && kr.names.has("auto") && !anyAutoRead) falseToggleLayers.push(L);
+    }
+    if (violations === 0) pass("N-AUTOWIPE", `autoPrestige implies resetsNothing on every automated layer (${okAuto} checked)`);
+    // Reported once for the whole game: this is a systemic wording/state problem, and one
+    // WARN per layer buries the FAILs above. (A real game preserved "auto" on all 98 layers.)
+    if (falseToggleLayers.length && !anyAutoRead) {
+        const ex = falseToggleLayers.slice(0, 4).map((L) => `"${L.id}"`).join(", ");
+        add(WARN, "N-AUTOWIPE", falseToggleLayers[0].file, falseToggleLayers[0].start,
+            `${falseToggleLayers.length} layer(s) preserve an "auto" flag across resets (${ex}${falseToggleLayers.length > 4 ? "; …" : ""}), but NO code anywhere in the mod files ever reads player[layer].auto — the engine calls doReset() from the game loop with no toggle in the path (game.js:369). The flag is dead state, and any milestone text calling this automation "toggleable" promises a switch the player does not have.`,
+            "Either implement the toggle (a hasMilestone/achievement gate the player controls, checked in autoPrestige()) or stop describing it as toggleable and tell the player plainly that it is always on. Note this WARN is systemic by design — record the decision in the brief if the game means it to be always-on.");
+    }
+}
+
+// N-POINTSWRITE — update() writing a layer's own points directly instead of through
+// addPoints(). addPoints() (game.js:165-169) is the only thing that maintains `best` and
+// `total`, so a direct assignment leaves every milestone scored on those two reading a
+// stale number. On a STATIC layer it is far worse: the reset gain is
+// `…floor().sub(player[layer].points).add(1)` (game.js:24) — every floor trickled in is a
+// floor the next prestige cannot bank. A real game trickled 0.02 floors/sec into a static
+// layer, and one hour of idling silently ate ~72 floors of income, decaying to the engine's
+// floor of 1. (Only ASSIGNMENT is a defect: TMT's Decimal is immutable, so
+// `player.x.points.add(1).pow(0.5)` is a read, and is the single most common gain shape.)
+{
+    const PTS_ASSIGN = (id) => new RegExp(
+        "player\\s*(?:\\[\\s*this\\s*\\.\\s*layer\\s*\\]|\\.\\s*" + escapeRe(id) + ")\\s*\\.\\s*points\\s*(?:[-+*/%]?=)(?!=)");
+    let staticHits = [], normalHits = [];
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const um = /(?:^|[,{\n])\s*update\s*\(/.exec(L.code);
+        const body = um ? functionBody(L.code, um.index) : "";
+        if (!body) continue;
+        const re = PTS_ASSIGN(L.id);
+        if (!re.exec(body)) continue;
+        (L.type === "static" ? staticHits : normalHits).push(L);
+    }
+    // Aggregated: a game that trickles everywhere would otherwise bury the static
+    // (fatal) half under dozens of normal-layer WARNs.
+    if (staticHits.length) {
+        const ex = staticHits.slice(0, 4).map((L) => `"${L.id}"`).join(", ");
+        add(FAIL, "N-POINTSWRITE", staticHits[0].file, staticHits[0].start,
+            `${staticHits.length} STATIC layer(s) assign player[layer].points inside update() (${ex}${staticHits.length > 4 ? "; …" : ""}) — the static reset gain is \`gain.floor().sub(player[layer].points).add(1)\` (game.js:24), so every floor added by hand is a floor the next prestige cannot bank. The layer fills itself while producing less and less, decaying to the engine's floor of 1. In a real game this idled away ~72 floors of income per hour with no error anywhere.`,
+            "Do not trickle a static layer's counter — for a static layer the counter IS the banked total. Move the reward to the production side: a `directMult` upgrade (the engine divides it back out in getNextAt, so the displayed next-floor price stays honest) or a multiplier on the dig itself.");
+    }
+    if (normalHits.length) {
+        const ex = normalHits.slice(0, 4).map((L) => `"${L.id}"`).join(", ");
+        add(WARN, "N-POINTSWRITE", normalHits[0].file, normalHits[0].start,
+            `${normalHits.length} layer(s) assign player[layer].points inside update() (${ex}${normalHits.length > 4 ? "; …" : ""}), bypassing addPoints() (game.js:165) — the only writer of \`best\` and \`total\`. Milestones and achievements scored on those two read a stale number, so unspent trickle income never counts toward a lifetime threshold.`,
+            "Award through the engine: `addPoints(this.layer, amount)` inside update(), or express the trickle as a gain multiplier. Keep direct assignment for genuine state changes (resets, refunds, unlocking) only.");
+    }
+    if (!staticHits.length && !normalHits.length) pass("N-POINTSWRITE", "no update() writes a layer's points directly");
+}
+
+// N-STATICMAX — a static layer with no canBuyMax(). getResetGain() short-circuits to
+// `decimalOne` when `!tmp[layer].canBuyMax` (game.js:21) and doReset() clamps the payout
+// the same way (game.js:186), so such a layer banks EXACTLY ONE floor per prestige, no
+// matter how much is banked — and getNextAt() disables its max-buy too (game.js:54), so
+// the prestige button's "Next:" hint quietly reverts to "Req:". Every upgrade priced in
+// those floors becomes unreachable. 34 layers / 340 upgrades were dead this way in a real
+// generated game.
+{
+    let hits = 0;
+    for (const L of layers) {
+        if (L.isUtility || L.type !== "static") continue;
+        const mask = maskOf(L);
+        if (!mask) continue;
+        if (codeMatches(L.code, mask, /(?:^|[,{\n])\s*canBuyMax\s*[(:]/g).length) continue;
+        hits++;
+        add(FAIL, "N-STATICMAX", L.file, L.start,
+            `STATIC layer "${L.id}" has no canBuyMax() — getResetGain() returns 1 whenever tmp[layer].canBuyMax is falsy (game.js:21) and doReset() clamps the payout to 1 (game.js:186), so every prestige banks exactly ONE floor no matter how deep the player goes. getNextAt() drops max-buy too (game.js:54), so the button stops even hinting "Next:".`,
+            "Add `canBuyMax() { return player[this.layer].unlocked }` (or any condition you like). Until it exists the layer's whole upgrade ladder is unreachable, because the floors it prices them in never accumulate.");
+    }
+    if (hits === 0) pass("N-STATICMAX", "every static layer can bank more than one floor per prestige");
 }
 
 // ---------------------------------------------------------------------------
