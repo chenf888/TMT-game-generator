@@ -195,7 +195,7 @@
         {
           "symptom": "数字爆炸 / 几分钟通关",
           "rules": ["N-CAPMULT", "N-SELFTOTAL", "missing-softcap"],
-          "fix": "Check the three causes in this order (SKILL.md:456)."
+          "fix": "Check the three causes in this order (SKILL.md, Failure playbook → numbers explode)."
         }
       ]
     },
@@ -352,7 +352,7 @@
 
   "mixedPolicy": {
     "maxInteractionPrimaryTypes": 1,
-    "rationale": "The skill already caps this: at most ONE type:\"none\" core-loop layer per game (SKILL.md:99; P15 warns Mining is 2.7MB/59k lines).",
+    "rationale": "The skill already caps this: at most ONE type:\"none\" core-loop layer per game (SKILL.md Q4 \"Mostly active\"; P15 warns Mining is 2.7MB / 59k lines).",
     "onHardDependencyMissing": "downgrade the modifier, and record the downgrade in brief §10 with the reason — never drop it silently.",
     "unknownType": "Ask once; if the user cannot name one, fall back and record 'unrecognised, defaulted' in brief §10."
   }

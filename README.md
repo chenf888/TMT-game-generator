@@ -1,7 +1,7 @@
 # TMT Game Generator — an agent skill for The Modding Tree
 
 A [SKILL.md-format](https://agentskills.io) agent skill that generates **complete, playable,
-balanced [The Modding Tree](https://github.com/Acamaeda/The-Modding-Tree) (TMT v2.7) incremental
+balanced [The Modding Tree](https://github.com/Acamaeda/Modding-Tree) (TMT v2.7) incremental
 games** from a short conversation. Load it into any agent tool that supports skills
 (ZCode, Claude Code, Codex, Cursor, …), say "make me an incremental game about X", and the
 agent runs the full pipeline: interview → data-driven design brief → scaffold → code
@@ -42,7 +42,10 @@ development — a 25-layer and a 10-layer generated game):
   a passive game is explicitly **exempt** from the "you need tick logic" rule, while an
   active-click game must pass a clickable contract the old checker never checked. See
   `references/design/13`.
-- **61-rule static checker** — every hard rule and every regression caught in real
+- **The pipeline verifies the game, not just the source.** A 68-rule static checker reads the
+  code; a load-time harness runs it and a pacing simulator plays it. All three were added because
+  real briefs kept passing every text-level rule and then failing in play.
+- **68-rule static checker** — every hard rule and every regression caught in real
   generated games is automated (`scripts/static_checks.js`): Decimal discipline, row
   contiguity, requires monotonicity, dead-end unlock upgrades, self-scaling compounding
   budgets, achievement visibility, **effects that nothing consumes**, unread engine fields,
@@ -53,16 +56,26 @@ development — a 25-layer and a 10-layer generated game):
 ## Requirements
 
 - Any agent tool that loads SKILL.md skills (see Install).
-- **Node.js ≥ 18** on PATH — used by `scripts/scaffold.js` (scaffolding) and
-  `scripts/static_checks.js` (post-generation checks). No npm packages; both scripts are
+- **Node.js ≥ 18** on PATH — used by `scripts/scaffold.js` (scaffolding),
+  `scripts/static_checks.js` (post-generation checks), `scripts/i18n_check.js` (text-layer
+  integrity) and the two harness scripts under `assets/harness/`. No npm packages; all five are
   dependency-free.
 - Any static file server to play the result (`npx http-server <folder>`,
   `python -m http.server`, VS Code Live Server, …).
 
 ## Install
 
-The folder **is** the skill — copy it (keeping the folder name) into your tool's skills
-directory:
+Build the package first, then install it:
+
+```bash
+node scripts/pack.js          # -> dist/tmt-game-generator/  (fails if name ≠ directory name)
+```
+
+The package **is** the skill: copy that directory, keeping its name, into your tool's skills
+directory. `pack.js` exists because the platform requires `SKILL.md`'s `name` to equal the
+shipped directory name, and a development checkout is rarely named that way — the script builds
+the conformant directory and refuses to build one where the two disagree. It also reports the
+size against the 3 MB package limit and the 64 KB body limit.
 
 | Tool | User-level (all projects) | Project-level (this repo only) |
 |---|---|---|
@@ -87,8 +100,9 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/type-registry.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 20 rules before any code exists |
 | 3. Scaffold | `node scripts/scaffold.js "Game Name" <dir> --type <id> --modifier a,b` copies the bundled TMT template, patches `js/mod.js` (unique permanent `modInfo.id`, name, author, modFiles, charset meta), writes `.tmt-profile.json`, self-verifies and syntax-checks the result. A modifier whose hard dependency is unmet is **downgraded with a reason, never silently dropped** |
 | 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M10 mechanics, automation ladder, softcaps, theming |
-| 5. Static checks | `node scripts/static_checks.js <game-folder>` — reads `.tmt-profile.json` and applies that type's gates, exemptions and per-blueprint thresholds; FAIL blocks manual testing; WARNs need a written justification in the brief |
-| 6. Balance walkthrough | Era-by-era reachability estimate against the measured heuristics + multiplier-zone compounding audit; rebalance the brief, not the code |
+| 5. Static checks | `node scripts/static_checks.js <game-folder>` — reads `.tmt-profile.json` and applies that type's gates, exemptions and per-blueprint thresholds; FAIL blocks manual testing; WARNs need a written justification in the brief. Plus `node scripts/i18n_check.js` when the game has a `js/lang/` text layer |
+| 5.5 Load-time smoke | `node tools/smoke.js` (copied from `assets/harness/`) — the real mod files loaded in Node: load-time throws, duplicate layer ids, `startData` contract, NaN/undefined hooks against a fresh save. 0 FAIL before the browser opens |
+| 6. Balance walkthrough | **Measured, not estimated.** `node tools/simulate.js` drives the real economy and reports the first-purchase time, each layer's first prestige and the total to `isEndgame()`. Three real briefs passed every static rule and were then overturned by play (8–18 h promised → 2.5 h delivered; 28-second detonation; six automation steps with unreachable thresholds). Rebalance the brief, not the code |
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
 References load **on demand** (`references/core/00–08` engine handbook,
@@ -104,8 +118,10 @@ tmt-game-generator/
 ├── references/
 │   ├── core/                 # 00–08: engine + coding handbook (Decimal rules, layers API,
 │   │                         #   components, UI, idioms, pitfalls checklist, real-game catalog)
-│   └── design/               # 09–13: design patterns + blueprints, fun-mechanics handbook,
-│                             #   corpus-calibrated numerics, author's notes, game-type guide
+│   └── design/               # 09–15: design patterns + blueprints, fun-mechanics handbook,
+│                             #   corpus-calibrated numerics, author's notes, game-type guide,
+│                             #   14 measurement & harness (stage 6 is a measurement),
+│                             #   15 the text layer / localisation beyond a two-way ternary
 ├── assets/
 │   ├── blueprints.json       # small/medium/large progress blueprints (per-field corpus sources)
 │   ├── type-registry.json    # game types: verdict signals, code contracts, rule exemptions,
@@ -113,18 +129,33 @@ tmt-game-generator/
 │   ├── balance-defaults.json # measured balance defaults + when-to-deviate policy
 │   ├── fun-quota.json        # per-blueprint fun-density quotas + the thresholds the
 │   │                         #   checker READS AT RUN TIME
-│   └── design-brief-template.md
+│   ├── design-brief-template.md
+│   └── harness/              # copy into <game>/tools/ — these RUN the game, they don't read it
+│       ├── smoke.js          #   load-time harness (stage 5.5): loads the real mod files with
+│       │                     #   engine stubs; catches load-time throws, duplicate ids,
+│       │                     #   startData contract breaks, NaN hooks on a fresh save
+│       └── simulate.js       #   headless greedy playthrough (stage 6): ports js/game.js's
+│                             #   prestige formulas and reports real pacing numbers
 ├── scripts/
 │   ├── classify.js           # game-type scorer (exit 0 routed / 3 ask / 1 error);
 │   │                         #   also reads an existing design brief
 │   ├── scaffold.js           # template copy + mod.js patcher + .tmt-profile.json writer
-│   └── static_checks.js      # 61-rule mod-code checker (FAIL/WARN/PASS report, --json,
-│                             #   --profile <typeId> | --no-profile)
+│   ├── pack.js               # builds dist/<name>/ — the shippable package the platform
+│   │                         #   requires (frontmatter + directory name must match `name`)
+│   ├── static_checks.js      # 68-rule mod-code checker (FAIL/WARN/PASS report, --json,
+│   │                         #   --profile <typeId> | --no-profile)
+│   └── i18n_check.js         # text-layer integrity (missing keys, duplicate language codes,
+│                             #   duplicate endonyms, pack parity, placeholder tokens);
+│                             #   silent no-op when the game has no js/lang/ directory
 ├── tests/
 │   ├── run_tests.js          # smoke suite: fixtures + scaffold e2e + the type layer
 │   ├── types.test.js         # type routing, registry contract, T-* rules
 │   ├── fixture-good/         # must pass with zero findings
 │   ├── fixture-bad/          # injects every rule's defect; each must be caught exactly
+│   ├── fixture-bad/js/defects.js  # the phase-⑨ structural defects: a runtime factory, a
+│   │                         #   duplicate component id, a self-funding buyable, a
+│   │                         #   componentStyles `this`, a lying display, a dead automation
+│   │                         #   promise, a sub-1e-4 price, untranslatable engine chrome
 │   ├── fixture-ghost/        # unread engine fields (own fixture: adding a challenge here
 │   │                         #   would mask fixture-bad's D-MECHQUOTA regression)
 │   └── fixture-types/        # interactive/ (one defect per T-* rule), passive/ (proves the

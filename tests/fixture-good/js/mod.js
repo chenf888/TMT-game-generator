@@ -3,7 +3,7 @@
 let modInfo = {
     name: "Fixture Good",
     id: "fixture-good-test-aaaaaa",
-    author: "TMT-Skill",
+    author: "TMT GG",
     pointsName: "points",
     modFiles: ["layers.js", "tree.js"],
     discordName: "",

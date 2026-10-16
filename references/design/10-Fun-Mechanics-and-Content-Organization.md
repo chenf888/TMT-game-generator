@@ -235,7 +235,7 @@ tile-based mechanics — powerful but highest effort; optional for generated gam
 
 ---
 
-## §5 Fun quotas by blueprint (machine-readable: `TMT-Skill/assets/fun-quota.json`)
+## §5 Fun quotas by blueprint (machine-readable: `assets/fun-quota.json`)
 
 | Quota (per game unless noted) | small (5–7 layers) | medium (10–16) | large (25+) |
 |---|---|---|---|

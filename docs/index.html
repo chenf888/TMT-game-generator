@@ -1,398 +1,747 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="A self-contained SKILL.md agent skill that turns one conversation into a complete, balanced, playable The Modding Tree incremental game. Works in ZCode, Claude Code, and any SKILL.md tool.">
+<meta name="description" content="An agent skill that turns one conversation into a complete, balanced, playable The Modding Tree incremental game. 68 static rules, a load-time harness, and a pacing simulator measured against 329 published TMT games.">
 <meta property="og:title" content="TMT Game Generator: an agent skill for The Modding Tree">
-<meta property="og:description" content="Your agent interviews you, designs the tree, writes and checks the code, then hands you a balanced game.">
+<meta property="og:description" content="Your agent interviews you, designs the tree, writes the layer code, measures the pacing, then hands you a game.">
 <meta property="og:type" content="website">
 <title>TMT Game Generator: an agent skill for The Modding Tree</title>
+
+<script>
+/* Runs before first paint: resolves theme + language so nothing flashes. */
+(function () {
+  var root = document.documentElement;
+  var theme = null, lang = null;
+  try {
+    theme = localStorage.getItem("tmt-theme");
+    lang = localStorage.getItem("tmt-lang");
+  } catch (e) {}
+  var dark = theme
+    ? theme === "dark"
+    : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.setAttribute("data-theme", dark ? "dark" : "light");
+  root.setAttribute("data-lang", lang === "zh" ? "zh" : "en");
+  root.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+})();
+</script>
+
 <style>
   :root {
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --mono: ui-monospace, "Cascadia Code", "SF Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
-    --radius: 10px;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Display", "Segoe UI", Roboto,
+            "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", "JetBrains Mono", "Roboto Mono", Consolas,
+            "Courier New", monospace;
+    --radius: 3px;
+    --wrap: 1140px;
+    color-scheme: light;
+    --bg: #fcf8f4; --surface: #ffffff; --surface-2: #f6efe8;
+    --ink: #1e1a17; --muted: #6b5f57; --border: #e5d9cd; --hairline: #ded0c2;
+    --accent: #c62f1e; --accent-ink: #ffffff; --accent-wash: #fdf3f0;
+    --code-bg: #f7f1ea;
+    --track: #ece0d5;
   }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #fafafa; --surface: #ffffff; --surface2: #f4f4f5;
-      --text: #1b1b1f; --muted: #52525b; --border: #e4e4e7; --hairline: #d4d4d8;
-      --accent: #b45309; --accent-ink: #ffffff; --accent-soft: #fef3e2;
-      --node-fill: #f59e0b; --node-ink: #231303; --bar-track: #e4e4e7;
-      --code-bg: #f4f4f5; --ok: #1a7f37;
-    }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #16120f; --surface: #1e1916; --surface-2: #251f1b;
+    --ink: #f2ebe4; --muted: #b3a49a; --border: #332b26; --hairline: #2b241f;
+    --accent: #ff6a4d; --accent-ink: #1a0f0b; --accent-wash: #2c1a14;
+    --code-bg: #1b1613;
+    --track: #2f2722;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e0e10; --surface: #161619; --surface2: #1d1d21;
-      --text: #e6e6e9; --muted: #a1a1aa; --border: #2a2a2f; --hairline: #26262b;
-      --accent: #fbbf24; --accent-ink: #201302; --accent-soft: #2b2110;
-      --node-fill: #f59e0b; --node-ink: #231303; --bar-track: #2a2a2f;
-      --code-bg: #1d1d21; --ok: #4ade80;
-    }
-  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--ink);
+    font-size: 16px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+    overflow-wrap: break-word;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    body { transition: background-color .25s ease, color .25s ease; }
+  }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+  a { color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .skip {
+    position: absolute; left: 12px; top: -60px; z-index: 40; background: var(--accent);
+    color: var(--accent-ink); padding: 10px 16px; border-radius: var(--radius);
+    text-decoration: none; font-weight: 650;
+  }
+  .skip:focus { top: 12px; }
+
+  /* -------------------------------------------------- language switching */
+  html[data-lang="en"] .lang-zh { display: none; }
+  html[data-lang="zh"] .lang-en { display: none; }
+
+  /* ---------------------------------------------------------------- nav */
+  nav {
+    position: sticky; top: 0; z-index: 20; background: var(--bg);
+    border-bottom: 1px solid var(--hairline);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    nav { transition: background-color .25s ease, border-color .25s ease; }
+  }
+  .nav-inner { height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+  .wordmark {
+    font-family: var(--mono); font-weight: 700; font-size: 15px; letter-spacing: -0.02em;
+    color: var(--ink); text-decoration: none; white-space: nowrap;
+  }
+  .wordmark i { font-style: normal; color: var(--accent); }
+  .nav-links { display: flex; gap: 20px; align-items: center; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap;
+    transition: color .18s ease;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links a.gh { color: var(--ink); font-weight: 650; }
+
+  /* ----------------------------------------------------- nav tools */
+  .nav-tools { display: flex; gap: 8px; align-items: center; }
+  .toggle {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 650; line-height: 1;
+    height: 30px; min-width: 34px; padding: 0 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--ink); cursor: pointer;
+    transition: border-color .18s ease, color .18s ease, background-color .18s ease;
+  }
+  .toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+  .toggle svg { display: block; }
+  html[data-theme="light"] .icon-sun { display: none; }
+  html[data-theme="dark"] .icon-moon { display: none; }
+
+  /* Language button: show the language you would switch TO. */
+  html[data-lang="en"] .lt-en { display: none; }
+  html[data-lang="zh"] .lt-zh { display: none; }
+
+  /* --------------------------------------------------------------- hero */
+  .hero {
+    display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 60px; align-items: center;
+    padding: 76px 0 68px;
+  }
+  .hero > * { min-width: 0; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 20px;
+  }
+  h1 {
+    font-size: clamp(2.3rem, 4.4vw, 3.7rem); line-height: 1.1; letter-spacing: -0.032em;
+    font-weight: 760; margin-bottom: 20px; text-wrap: balance;
+    padding-bottom: 0.06em;
+  }
+  h1 em, h2 em { font-style: italic; }
+  html[data-lang="zh"] h1 em,
+  html[data-lang="zh"] h2 em { font-style: normal; color: var(--accent); }
+
+  .hero-sub { color: var(--muted); font-size: 1.11rem; max-width: 44ch; margin-bottom: 30px; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 12px 24px; border-radius: var(--radius); font-size: 15px;
+    font-weight: 650; text-decoration: none; border: 1px solid transparent; white-space: nowrap;
+    transition: transform .14s ease, background-color .18s ease, border-color .18s ease, color .18s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { background: var(--ink); color: var(--bg); }
+  .btn-ghost { border-color: var(--border); color: var(--ink); background: var(--surface); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* --------------------------------------------------- the real output */
+  .treecard {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 22px 20px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .treecard, .band, .pair-col, .install-block, .copyline, .chip { transition: background-color .25s ease, border-color .25s ease; }
+  }
+  .treecard-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding-bottom: 14px; border-bottom: 1px solid var(--hairline);
+  }
+  .treecard-title { font-weight: 700; font-size: 15px; }
+  .treecard-note { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+  .treecard svg { display: block; width: 100%; height: auto; margin: 14px 0 4px; }
+  .tree-edges { fill: none; stroke: var(--ink); stroke-width: 1; opacity: 0.38; }
+  .tree-nodes text {
+    text-anchor: middle; fill: var(--accent-ink);
+    font-family: var(--mono); font-size: 17px; font-weight: 700;
+  }
+  .tree-nodes circle { fill: var(--accent); }
+  .treecard-counts {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px;
+    border-top: 1px solid var(--hairline); padding-top: 14px;
+  }
+  .count-pair { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .count-pair dt { color: var(--muted); font-size: 13px; }
+  .count-pair dd { font-family: var(--mono); font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .treecard-cap { margin-top: 14px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  /* --------------------------------------------------------- stat band */
+  .band { border-block: 1px solid var(--hairline); padding: 32px 0; background: var(--surface-2); }
+  .band-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px; }
+  .stat .num {
+    font-family: var(--mono); font-size: 33px; font-weight: 700; line-height: 1;
+    color: var(--accent); font-variant-numeric: tabular-nums;
+  }
+  .stat .lab { margin-top: 9px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+  /* ----------------------------------------------------------- sections */
+  section { padding: 82px 0 0; }
+  .sec-head h2 {
+    font-size: clamp(1.65rem, 2.9vw, 2.2rem); letter-spacing: -0.022em; font-weight: 740;
+    line-height: 1.2; max-width: 30ch; padding-bottom: 0.06em;
+  }
+  .sec-head p { color: var(--muted); margin-top: 12px; max-width: 64ch; }
+  .sec-note {
+    margin-top: 26px; border-left: 2px solid var(--accent); padding: 2px 0 2px 16px;
+    font-size: 15px; max-width: 74ch;
+  }
+  .sec-note b { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sec-note code { font-family: var(--mono); font-size: 13px; }
+  #data .band-grid { margin-top: 38px; }
+
+  /* --------------------------------------------------- pipeline rail */
+  .rail { margin-top: 40px; position: relative; }
+  .rail::before { content: ""; position: absolute; left: 23px; top: 10px; bottom: 10px; width: 1px; background: var(--hairline); }
+  .step { display: grid; grid-template-columns: 52px 178px 1fr; gap: 18px; padding: 13px 0; position: relative; }
+  .step-n { font-family: var(--mono); font-size: 12.5px; color: var(--accent); background: var(--bg); padding-top: 3px; font-variant-numeric: tabular-nums; }
+  .step-verb { font-weight: 680; font-size: 15.5px; }
+  .step-desc { color: var(--muted); font-size: 15px; max-width: 64ch; }
+
+  /* ------------------------------------------------------ code panels */
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 36px; }
+  .pair-col { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; min-width: 0; background: var(--surface); }
+  .pair-col.good { border-color: var(--accent); }
+  .pair-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; color: var(--muted); }
+  .pair-col.good .pair-tag { color: var(--accent); }
+  .pair-col pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.62; color: var(--muted);
+    background: var(--code-bg); border-radius: var(--radius); padding: 13px 14px;
+    overflow-x: auto; white-space: pre; margin: 0;
+  }
+  .pair-col pre b { color: var(--ink); font-weight: 650; }
+  .pair-col pre i { font-style: normal; color: var(--accent); }
+  .pair-col p { margin-top: 13px; font-size: 13.5px; color: var(--muted); }
+  .pair-col p b { color: var(--ink); font-weight: 650; }
+
+  /* -------------------------------------------- operation distribution */
+  .ops { margin-top: 34px; max-width: 620px; }
+  .ops-row { display: grid; grid-template-columns: 92px 1fr 74px; gap: 14px; align-items: center; padding: 4px 0; }
+  .ops-name { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .ops-bar { height: 8px; background: var(--track); border-radius: 1px; }
+  .ops-bar i { display: block; height: 100%; background: var(--accent); border-radius: 1px; }
+  .ops-val { font-family: var(--mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+  .ops-cap { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+  /* ------------------------------------------------- type distribution */
+  .splitbar { display: flex; gap: 3px; margin-top: 38px; }
+  .splitbar i { display: block; height: 14px; background: var(--accent); border-radius: 1px; }
+  .split-cap { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .typelist { margin-top: 26px; }
+  .typerow {
+    display: grid; grid-template-columns: 170px 66px 1fr; gap: 20px; align-items: baseline;
+    padding: 15px 0; border-top: 1px solid var(--hairline);
+  }
+  .typerow:last-child { border-bottom: 1px solid var(--hairline); }
+  .type-name { font-family: var(--mono); font-size: 13px; font-weight: 650; }
+  .type-share { font-family: var(--mono); font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .type-contract { color: var(--muted); font-size: 14.5px; }
+  .type-contract code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+
+  /* ------------------------------------------------------- tool rows */
+  .tools { margin-top: 36px; border-top: 1px solid var(--hairline); }
+  .tool {
+    display: grid; grid-template-columns: 232px 1fr; gap: 28px; padding: 20px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .tool-name { font-family: var(--mono); font-size: 13px; font-weight: 650; word-break: break-all; }
+  .tool-stage { display: block; margin-top: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 400; }
+  .tool-body p { color: var(--muted); font-size: 14.5px; max-width: 66ch; }
+  .tool-run {
+    display: inline-block; margin-top: 10px; font-family: var(--mono); font-size: 12.5px;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 6px 10px; color: var(--ink);
+    max-width: 100%; overflow-x: auto; white-space: nowrap; vertical-align: bottom;
+  }
+
+  /* ---------------------------------------------------------- install */
+  .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 54px; margin-top: 38px; align-items: start; }
+  .install-grid > * { min-width: 0; }
+  .install-block {
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+    padding: 18px 20px;
+  }
+  .install-block + .install-block { margin-top: 14px; }
+  .install-block h3 { font-size: 15px; margin-bottom: 6px; font-weight: 680; }
+  .install-block p { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; }
+  .copyline {
+    display: block; width: 100%; text-align: left; cursor: pointer; font-family: var(--mono);
+    font-size: 13px; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 9px 12px; color: var(--ink);
+    overflow-x: auto; white-space: pre; transition: border-color .18s ease, background-color .18s ease;
+  }
+  .copyline:hover { border-color: var(--accent); background: var(--accent-wash); }
+  .copyline.wrap { white-space: normal; word-break: break-all; }
+  .prompt-label { font-weight: 680; font-size: 15.5px; }
+  .prompt-hint { color: var(--muted); font-size: 13.5px; margin: 4px 0 14px; }
+  .chip {
+    display: block; width: 100%; text-align: left; font-family: var(--mono); font-size: 12.5px;
+    padding: 12px 15px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink); cursor: pointer;
+    transition: border-color .18s ease, color .18s ease, background-color .18s ease;
+  }
+  .chip + .chip { margin-top: 9px; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+  .verify { margin-top: 22px; font-size: 13.5px; color: var(--muted); }
+  .copyline + .verify { margin-top: 12px; }
+  .verify + .copyline { margin-top: 10px; }
+  .expect { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+
+  /* ---------------------------------------------------------- quality */
+  .qual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 38px; margin-top: 38px; }
+  .qual-grid > * { min-width: 0; }
+  .qual-col h3 {
+    font-size: 13px; font-family: var(--mono); font-weight: 650; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--accent); padding-bottom: 12px;
+    border-bottom: 1px solid var(--hairline); margin-bottom: 14px;
+  }
+  .qual-col ul { list-style: none; }
+  .qual-col li { color: var(--muted); font-size: 14.5px; padding: 7px 0; }
+  .qual-col li b { color: var(--ink); font-weight: 650; }
+  .qual-col code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+
+  /* ----------------------------------------------------------- footer */
+  footer { margin-top: 84px; border-top: 1px solid var(--hairline); padding: 28px 0 44px; }
+  .foot-inner { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
+  .foot-inner a { color: var(--ink); text-decoration: none; font-weight: 600; }
+  .foot-inner a:hover { color: var(--accent); }
+  .foot-links { display: flex; gap: 18px; }
+  .author {
+    margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--hairline);
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  .author-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .author-name {
+    font-family: var(--mono); font-size: 19px; font-weight: 700; letter-spacing: -0.01em;
+    color: var(--accent); text-decoration: none;
+  }
+  .author-name:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .author-note { font-size: 13px; color: var(--muted); }
+
+  /* ------------------------------------------------------ load-in / a11y */
+  @media (prefers-reduced-motion: no-preference) {
+    .hero > * { animation: rise .5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .hero > *:nth-child(2) { animation-delay: .08s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
-  body {
-    font-family: var(--sans); background: var(--bg); color: var(--text);
-    line-height: 1.6; font-size: 16px;
-    -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
 
-  /* ---------- nav ---------- */
-  nav { border-bottom: 1px solid var(--hairline); background: var(--bg); }
-  .nav-inner { height: 64px; display: flex; align-items: center; justify-content: space-between; }
-  .wordmark { font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--text); text-decoration: none; }
-  .wordmark span { color: var(--accent); }
-  .nav-links { display: flex; gap: 28px; align-items: center; }
-  .nav-links a { color: var(--muted); text-decoration: none; font-size: 14.5px; transition: color .15s; }
-  .nav-links a:hover { color: var(--text); }
-  .nav-links a.gh { color: var(--text); font-weight: 600; }
-
-  /* ---------- hero ---------- */
-  .hero { padding: 72px 0 64px; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; }
-  .hero > * { min-width: 0; }
-  .eyebrow {
-    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--accent); margin-bottom: 18px;
-  }
-  h1 {
-    font-size: clamp(2.4rem, 4.6vw, 3.9rem); line-height: 1.06; letter-spacing: -0.03em;
-    font-weight: 760; margin-bottom: 20px; text-wrap: balance;
-  }
-  .hero-sub { color: var(--muted); font-size: 1.13rem; max-width: 46ch; margin-bottom: 32px; }
-  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
-  .btn {
-    display: inline-block; padding: 13px 26px; border-radius: var(--radius);
-    font-size: 15.5px; font-weight: 650; text-decoration: none; border: 1px solid transparent;
-    transition: transform .12s, background .15s, border-color .15s;
-  }
-  .btn:active { transform: translateY(1px) scale(0.99); }
-  .btn-primary { background: var(--accent); color: var(--accent-ink); }
-  .btn-primary:hover { filter: brightness(1.08); }
-  .btn-ghost { border-color: var(--border); color: var(--text); background: var(--surface); }
-  .btn-ghost:hover { border-color: var(--accent); }
-
-  /* ---------- live demo panel ---------- */
-  .demo {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 22px 22px 18px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
-  }
-  .demo-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
-  .demo-title { font-weight: 700; font-size: 15px; }
-  .demo-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ok); }
-  .tree { display: flex; align-items: flex-start; justify-content: center; gap: 0; padding: 10px 0 4px; }
-  .node { width: 120px; text-align: center; position: relative; }
-  .node-circle {
-    width: 64px; height: 64px; border-radius: 50%; margin: 0 auto;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--mono); font-weight: 700; font-size: 22px;
-    background: var(--node-fill); color: var(--node-ink); border: 3px solid var(--node-fill);
-    cursor: pointer; transition: transform .12s; user-select: none;
-  }
-  .node-circle:active { transform: scale(0.96); }
-  .node.locked .node-circle { background: transparent; color: var(--muted); border: 2px dashed var(--border); cursor: default; }
-  .node-bar { height: 5px; border-radius: 3px; background: var(--bar-track); margin: 10px auto 0; width: 84px; overflow: hidden; }
-  .node-bar i { display: block; height: 100%; background: var(--node-fill); border-radius: 3px; }
-  .node-label { margin-top: 8px; font-size: 13px; color: var(--muted); }
-  .node-label b { color: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; }
-  .tree-link { width: 56px; height: 2px; background: var(--hairline); margin-top: 32px; }
-  .sap-stat { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 2px 12px; }
-  .sap-stat .big { font-family: var(--mono); font-size: 26px; font-weight: 700; }
-  .sap-stat .rate { font-family: var(--mono); font-size: 13px; color: var(--muted); }
-  .prestige-btn {
-    width: 100%; padding: 11px; border-radius: var(--radius); border: 1px solid var(--border);
-    background: var(--surface2); color: var(--text); font-size: 14.5px; font-weight: 650;
-    cursor: pointer; transition: border-color .15s, background .15s, transform .12s;
-  }
-  .prestige-btn.ready { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-  .prestige-btn:disabled { cursor: default; opacity: 0.75; }
-  .prestige-btn:not(:disabled):active { transform: translateY(1px); }
-  .upg-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-  .upg {
-    padding: 9px 8px; border-radius: var(--radius); border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); font-family: inherit;
-    cursor: pointer; text-align: center; font-size: 12.5px;
-    transition: border-color .15s, opacity .15s;
-  }
-  .upg b { display: block; font-size: 13px; }
-  .upg small { color: var(--muted); font-family: var(--mono); font-size: 11px; }
-  .upg.owned { border-color: var(--accent); color: var(--accent); cursor: default; }
-  .upg.owned small { color: var(--accent); opacity: 0.8; }
-  .upg:not(.owned):hover { border-color: var(--accent); }
-  .milestone {
-    margin-top: 12px; padding: 10px 12px; border-radius: var(--radius);
-    background: var(--surface2); font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  }
-  .milestone .m-label b { color: var(--accent); }
-  .milestone .m-label small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; }
-  .auto-toggle {
-    font-family: var(--mono); font-size: 11.5px; padding: 5px 10px; border-radius: var(--radius);
-    border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
-  }
-  .auto-toggle.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
-  .demo-cap { margin-top: 12px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-
-  /* ---------- stats band ---------- */
-  .stats { border-block: 1px solid var(--hairline); padding: 34px 0; }
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
-  .stat .num { font-family: var(--mono); font-size: 34px; font-weight: 700; color: var(--accent); line-height: 1; }
-  .stat .lab { margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.45; }
-
-  /* ---------- sections ---------- */
-  section { padding: 84px 0; }
-  .sec-head h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); letter-spacing: -0.02em; font-weight: 740; }
-  .sec-head p { color: var(--muted); margin-top: 10px; max-width: 60ch; }
-
-  /* pipeline: vertical rail */
-  .rail { margin-top: 44px; position: relative; }
-  .rail::before { content: ""; position: absolute; left: 19px; top: 8px; bottom: 8px; width: 1px; background: var(--hairline); }
-  .step { display: grid; grid-template-columns: 40px 190px 1fr; gap: 18px; padding: 13px 0; position: relative; }
-  .step-n { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--bg); width: 40px; padding-top: 3px; }
-  .step-verb { font-weight: 680; font-size: 16px; }
-  .step-desc { color: var(--muted); font-size: 15px; max-width: 62ch; }
-
-  /* install: split */
-  .install-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; margin-top: 44px; align-items: start; }
-  .install-grid > * { min-width: 0; }
-  .install-block { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 18px 20px; }
-  .install-block + .install-block { margin-top: 14px; }
-  .install-block h3 { font-size: 15px; margin-bottom: 6px; }
-  .install-block p { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; }
-  code.path {
-    display: block; font-family: var(--mono); font-size: 13px; background: var(--code-bg);
-    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; overflow-x: auto; white-space: nowrap;
-  }
-  code.clone {
-    display: block; font-family: var(--mono); font-size: 12.5px; background: var(--code-bg);
-    border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
-    word-break: break-all; margin-top: 14px; cursor: pointer;
-  }
-  .side-label { font-weight: 680; font-size: 16px; margin-bottom: 14px; }
-  .chip {
-    display: block; width: 100%; text-align: left; font-family: var(--mono); font-size: 13px;
-    padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); cursor: pointer; transition: border-color .15s;
-  }
-  .chip + .chip { margin-top: 10px; }
-  .chip:hover { border-color: var(--accent); }
-  .chip .hint { color: var(--muted); font-size: 11px; margin-left: 8px; }
-  .verify { margin-top: 22px; font-size: 13.5px; color: var(--muted); }
-  .verify code {
-    font-family: var(--mono); font-size: 12.5px; background: var(--code-bg);
-    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: inline-block; margin-top: 6px; cursor: pointer;
-  }
-  .verify .expect { color: var(--ok); font-family: var(--mono); font-size: 12px; }
-
-  /* quality: grouped columns */
-  .qual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 44px; }
-  .qual-grid > * { min-width: 0; }
-  .qual-col h3 { font-size: 15px; font-weight: 700; padding-bottom: 12px; border-bottom: 1px solid var(--hairline); margin-bottom: 14px; }
-  .qual-col li { list-style: none; color: var(--muted); font-size: 14.5px; padding: 7px 0 7px 18px; position: relative; }
-  .qual-col li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: 0.85; }
-
-  /* ---------- corpus section ---------- */
-  .corpus-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; }
-  .cstat .num { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1; }
-  .cstat .lab { margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.45; }
-
-  .wire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 44px; }
-  .wire-col { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 18px 20px; min-width: 0; }
-  .wire-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
-  .wire-col.bad .wire-tag { color: #b42318; }
-  .wire-col.good .wire-tag { color: var(--ok); }
-  @media (prefers-color-scheme: dark) { .wire-col.bad .wire-tag { color: #ff7b72; } }
-  .wire-col pre {
-    font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: var(--muted);
-    background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto;
-    white-space: pre; margin: 0;
-  }
-  .wire-col pre b { color: var(--text); font-weight: 600; }
-  .wire-col pre i { font-style: normal; color: var(--accent); }
-  .wire-col p { margin-top: 12px; font-size: 13.5px; color: var(--muted); }
-  .wire-col p b { color: #b42318; font-weight: 650; }
-  @media (prefers-color-scheme: dark) { .wire-col p b { color: #ff7b72; } }
-
-  .corpus-note {
-    margin-top: 24px; border-left: 2px solid var(--accent); padding: 2px 0 2px 16px;
-    font-size: 15px; color: var(--text); max-width: 74ch;
-  }
-  .corpus-note b { font-family: var(--mono); font-weight: 700; }
-
-  .ops { margin-top: 40px; max-width: 640px; }
-  .ops-row { display: grid; grid-template-columns: 132px 1fr 76px; gap: 14px; align-items: center; padding: 5px 0; }
-  .ops-name { font-family: var(--mono); font-size: 13px; color: var(--muted); }
-  .ops-track { height: 9px; background: var(--bar-track); border-radius: 5px; overflow: hidden; }
-  .ops-fill { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
-  .ops-fill.dim { opacity: 0.4; }
-  .ops-val { font-family: var(--mono); font-size: 13px; color: var(--text); text-align: right; }
-  .ops-cap { margin-top: 12px; font-size: 13px; color: var(--muted); }
-
-  /* footer */
-  footer { border-top: 1px solid var(--hairline); padding: 30px 0 40px; }
-  .foot-inner { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
-  .foot-inner a { color: var(--text); text-decoration: none; font-weight: 600; }
-  .foot-inner a:hover { color: var(--accent); }
-
-  /* copied feedback */
-  .copied { color: var(--ok) !important; }
-
-  /* load-in */
-  @media (prefers-reduced-motion: no-preference) {
-    .hero > * { animation: rise .55s cubic-bezier(0.16, 1, 0.3, 1) both; }
-    .hero > *:nth-child(2) { animation-delay: 0.08s; }
-    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-  }
-
-  /* ---------- responsive ---------- */
-  @media (max-width: 940px) {
-    .corpus-stats { grid-template-columns: repeat(2, 1fr); }
-    .wire-grid { grid-template-columns: 1fr; }
-    .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 52px; }
-    .demo { max-width: 480px; }
+  /* ------------------------------------------------------- responsive */
+  @media (max-width: 1000px) {
+    .hero { grid-template-columns: 1fr; gap: 40px; padding: 56px 0 60px; }
+    .treecard { max-width: 520px; }
     .install-grid { grid-template-columns: 1fr; gap: 40px; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); row-gap: 32px; }
+    .band-grid { grid-template-columns: repeat(2, 1fr); row-gap: 30px; }
     .qual-grid { grid-template-columns: 1fr; gap: 32px; }
-    .step { grid-template-columns: 40px 1fr; }
+    .pair { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 52px 1fr; }
     .step-desc { grid-column: 2; }
+    .tool { grid-template-columns: 1fr; gap: 12px; }
+    .nav-links { gap: 16px; }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 720px) {
+    section { padding: 60px 0 0; }
+    .hero { padding-top: 44px; }
+    nav .nav-inner { height: 56px; }
+    .nav-links { gap: 10px; }
     .nav-links a.hide-m { display: none; }
-    section { padding: 60px 0; }
-    .hero { padding-top: 40px; }
-    .upg-row { grid-template-columns: 1fr; }
-    .upg { display: flex; justify-content: space-between; align-items: center; }
-    .upg b { display: inline; }
+    .typerow { grid-template-columns: 1fr; gap: 4px; }
+  }
+
+  /* --------------------------------------------- small phones (≤560px) */
+  @media (max-width: 560px) {
+    .wrap { padding: 0 18px; }
+    section { padding: 5px 0 0; }
+    .hero { padding: 36px 0 48px; gap: 32px; }
+
+    h1 { font-size: clamp(1.85rem, 6.5vw, 2.3rem); }
+    .sec-head h2 { font-size: clamp(1.5rem, 4.5vw, 1.65rem); }
+    .hero-sub { font-size: 1.03rem; }
+    .eyebrow { font-size: 10.5px; letter-spacing: 0.13em; margin-bottom: 16px; }
+    .cta-row { gap: 10px; }
+    .btn { padding: 11px 20px; font-size: 14.5px; }
+
+    .nav-inner { gap: 10px; }
+    .nav-links { gap: 10px; }
+    .toggle { height: 32px; min-width: 36px; padding: 0 8px; font-size: 11px; }
+
+    .treecard { padding: 16px 16px 14px; }
+    .treecard-head { padding-bottom: 12px; }
+    .treecard-counts { gap: 5px 14px; padding-top: 12px; }
+    .tree-nodes text { font-size: 19px; }
+
+    .band { padding: 26px 0; }
+    .band-grid { gap: 22px 16px; }
+    .stat .num { font-size: 28px; }
+    .stat .lab { font-size: 12.5px; margin-top: 7px; }
+
+    .step { grid-template-columns: 40px 1fr; gap: 12px; }
+    .step-n { font-size: 11.5px; }
+    .step-verb { font-size: 15px; }
+    .step-desc { font-size: 14px; }
+    .rail::before { left: 19px; }
+
+    .pair { gap: 16px; }
+    .pair-col { padding: 15px 16px; }
+    .pair-col pre { font-size: 12px; padding: 11px 12px; }
+
+    .ops-row { grid-template-columns: 72px 1fr 58px; gap: 10px; }
+    .ops-name, .ops-val { font-size: 11.5px; }
+
+    .typerow { padding: 13px 0; }
+    .type-name, .type-share { font-size: 12.5px; }
+    .type-contract { font-size: 14px; }
+
+    .tool { padding: 18px 0; }
+    .tool-name { font-size: 12.5px; }
+    .tool-body p { font-size: 14px; }
+
+    .install-grid { gap: 32px; }
+    .install-block { padding: 16px 16px; }
+    .copyline { font-size: 12.5px; padding: 9px 11px; }
+    .chip { font-size: 12px; padding: 11px 13px; }
+
+    .qual-grid { gap: 28px; }
+    .qual-col li { font-size: 14px; }
+
+    .foot-inner { flex-direction: column; gap: 10px; }
+    .author { gap: 10px; }
+    .author-name { font-size: 17px; }
+  }
+
+  /* --------------------------------------------- very small phones (≤400px) */
+  @media (max-width: 400px) {
+    .wrap { padding: 0 14px; }
+    h1 { font-size: 1.75rem; }
+    .sec-head h2 { font-size: 1.4rem; }
+    .hero-sub { font-size: 0.98rem; }
+
+    .nav-inner { gap: 8px; }
+    .nav-links { gap: 8px; }
+    .wordmark { font-size: 14px; }
+    .nav-links a.gh { font-size: 13px; }
+    .toggle { height: 30px; min-width: 32px; padding: 0 7px; }
+
+    .band-grid { gap: 20px 12px; }
+    .stat .num { font-size: 25px; }
+
+    .ops-row { grid-template-columns: 64px 1fr 52px; gap: 8px; }
+    .ops-name, .ops-val { font-size: 11px; }
+
+    .treecard-counts { gap: 4px 12px; }
+    .count-pair dt { font-size: 12px; }
+    .count-pair dd { font-size: 12.5px; }
+  }
+
+  /* --------------------------------------------- touch: kill sticky hover */
+  @media (hover: none) {
+    .nav-links a:hover { color: var(--muted); }
+    .nav-links a.gh:hover { color: var(--ink); }
+    .toggle:hover { border-color: var(--border); color: var(--ink); background: var(--surface); }
+    .btn-primary:hover { background: var(--accent); color: var(--accent-ink); }
+    .btn-ghost:hover { border-color: var(--border); color: var(--ink); background: var(--surface); }
+    .copyline:hover { border-color: var(--border); background: var(--code-bg); }
+    .chip:hover { border-color: var(--border); color: var(--ink); background: var(--surface); }
+    .foot-inner a:hover { color: var(--ink); }
+    .author-name:hover { text-decoration: none; }
   }
 </style>
 </head>
 <body>
 
-<nav>
+<a class="skip" href="#main"><span class="lang-en">Skip to content</span><span class="lang-zh">跳到正文</span></a>
+<span id="copyStatus" class="sr-only" role="status" aria-live="polite"></span>
+
+<nav aria-label="Main">
   <div class="wrap nav-inner">
-    <a class="wordmark" href="#">tmt<span>gg</span></a>
+    <a class="wordmark" href="#"><i>tmt</i>gg</a>
     <div class="nav-links">
-      <a href="#pipeline" class="hide-m">How it works</a>
-      <a href="#corpus" class="hide-m">The data</a>
-      <a href="#types" class="hide-m">Game types</a>
-      <a href="#lifecycle" class="hide-m">Save safety</a>
-      <a href="#install" class="hide-m">Install</a>
-      <a href="#quality" class="hide-m">Quality bar</a>
+      <a href="#pipeline" class="hide-m"><span class="lang-en">How it works</span><span class="lang-zh">工作原理</span></a>
+      <a href="#data" class="hide-m"><span class="lang-en">The data</span><span class="lang-zh">数据</span></a>
+      <a href="#types" class="hide-m"><span class="lang-en">Game types</span><span class="lang-zh">游戏类型</span></a>
+      <a href="#safety" class="hide-m"><span class="lang-en">Save safety</span><span class="lang-zh">存档安全</span></a>
+      <a href="#install" class="hide-m"><span class="lang-en">Install</span><span class="lang-zh">安装</span></a>
       <a class="gh" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
+
+      <div class="nav-tools">
+        <button type="button" class="toggle" id="langToggle" aria-label="Switch language / 切换语言">
+          <span class="lt-zh" lang="zh">中文</span>
+          <span class="lt-en" lang="en">EN</span>
+        </button>
+        <button type="button" class="toggle" id="themeToggle" aria-label="Toggle dark mode / 切换深色模式">
+          <svg class="icon-moon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.4 14.2A8.4 8.4 0 0 1 9.8 3.6a8.6 8.6 0 1 0 10.6 10.6Z"/>
+          </svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.2"/>
+            <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 </nav>
 
+<main id="main">
+
 <header class="wrap hero">
   <div>
-    <p class="eyebrow">Agent skill &middot; The Modding Tree v2.7</p>
-    <h1>One conversation, one playable game.</h1>
-    <p class="hero-sub">Your agent interviews you, works out what kind of game you actually asked for, designs the tree, writes and checks the code, then hands you a balanced game to play.</p>
+    <p class="eyebrow">
+      <span class="lang-en">Agent skill for The Modding Tree</span>
+      <span class="lang-zh">The Modding Tree 的 Agent 技能</span>
+    </p>
+    <h1>
+      <span class="lang-en">One sentence <em>in</em>. A playable tree <em>out</em>.</span>
+      <span class="lang-zh">一句话<em>输入</em>，一棵可玩的树<em>输出</em>。</span>
+    </h1>
+    <p class="hero-sub">
+      <span class="lang-en">Your agent interviews you, designs the tree, writes the layer code, then measures the pacing before handing you a game.</span>
+      <span class="lang-zh">你的智能体会先访谈你、设计树结构、编写层级代码，再把游戏交给你之前先实测一遍节奏。</span>
+    </p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">Get the skill</a>
-      <a class="btn btn-ghost" href="#pipeline">See the pipeline</a>
+      <a class="btn btn-primary" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">
+        <span class="lang-en">Get the skill</span><span class="lang-zh">获取技能</span>
+      </a>
+      <a class="btn btn-ghost" href="#pipeline">
+        <span class="lang-en">See the pipeline</span><span class="lang-zh">查看流水线</span>
+      </a>
     </div>
   </div>
 
-  <div class="demo" id="demo">
-    <div class="demo-head">
-      <span class="demo-title">The Sapling Tree</span>
-      <span class="demo-tag">live demo</span>
+  <aside class="treecard">
+    <div class="treecard-head">
+      <span class="treecard-title">The True Color Tree</span>
+      <span class="treecard-note"><span class="lang-en">generated by this skill</span><span class="lang-zh">由本技能生成</span></span>
     </div>
-    <div class="tree">
-      <div class="node">
-        <div class="node-circle" id="sNode" title="Sap fills over time. Click Prestige to convert it.">S</div>
-        <div class="node-bar"><i id="sBar" style="width:0%"></i></div>
-        <div class="node-label">sap <b id="sAmt">0.0</b></div>
-      </div>
-      <div class="tree-link"></div>
-      <div class="node locked" id="aNode">
-        <div class="node-circle" id="aCircle">?</div>
-        <div class="node-bar"><i id="aBar" style="width:0%"></i></div>
-        <div class="node-label"><span id="aName">locked</span> <b id="aAmt"></b></div>
-      </div>
-    </div>
-    <div class="sap-stat">
-      <span class="big" id="sapCount">0.0</span>
-      <span class="rate" id="sapRate">1.0 / sec</span>
-    </div>
-    <button class="prestige-btn" id="prestigeBtn" disabled>Prestige</button>
-    <div class="upg-row" id="upgRow"></div>
-    <div class="milestone">
-      <div class="m-label">
-        <b>Squirrels</b>
-        <small id="mDesc">auto-prestige unlocks at 12 total amber</small>
-      </div>
-      <button class="auto-toggle" id="autoBtn" hidden>AUTO OFF</button>
-    </div>
-    <p class="demo-cap">A real little game running on this page: prestige loop, upgrades, one automation milestone &mdash; and it is wired the way the corpus says real games are, with the producer reading each upgrade flag. Games from the full pipeline grow 10 to 25 layers.</p>
-  </div>
+
+    <svg class="tree" viewBox="0 0 460 296" role="img" aria-labelledby="treeTitle treeDesc">
+      <title id="treeTitle">Layer tree of The True Color Tree</title>
+      <desc id="treeDesc">Four rows. Row one holds one normal layer, The True Color Tree's white layer. Rows two and three hold three static layers each. Row four holds a static layer with six challenges, another static layer, and the closing normal prestige layer.</desc>
+      <g class="tree-edges">
+        <path d="M230 65 V 78 M90 78 H370 M90 78 V 91 M230 78 V 91 M370 78 V 91"/>
+        <path d="M90 137 V 163 M230 137 V 163 M370 137 V 163"/>
+        <path d="M90 209 V 235 M230 209 V 235 M370 209 V 235"/>
+      </g>
+      <g class="tree-nodes">
+        <circle class="n0" cx="230" cy="42" r="23"/>
+        <text class="n0" x="230" y="48">W</text>
+
+        <circle class="n1" cx="90" cy="114" r="23"/>
+        <circle class="n1" cx="230" cy="114" r="23"/>
+        <circle class="n1" cx="370" cy="114" r="23"/>
+        <text class="n1" x="90" y="120">R</text>
+        <text class="n1" x="230" y="120">G</text>
+        <text class="n1" x="370" y="120">B</text>
+
+        <circle class="n2" cx="90" cy="186" r="23"/>
+        <circle class="n2" cx="230" cy="186" r="23"/>
+        <circle class="n2" cx="370" cy="186" r="23"/>
+        <text class="n2" x="90" y="192">C</text>
+        <text class="n2" x="230" y="192">H</text>
+        <text class="n2" x="370" y="192">S</text>
+
+        <circle class="n3" cx="90" cy="258" r="23"/>
+        <circle class="n3" cx="230" cy="258" r="23"/>
+        <circle class="n3" cx="370" cy="258" r="23"/>
+        <text class="n3" x="90" y="264">X</text>
+        <text class="n3" x="230" y="264">T</text>
+        <text class="n3" x="370" y="264">P</text>
+      </g>
+    </svg>
+
+    <dl class="treecard-counts">
+      <div class="count-pair"><dt><span class="lang-en">layers</span><span class="lang-zh">层级</span></dt><dd>10</dd></div>
+      <div class="count-pair"><dt><span class="lang-en">upgrades</span><span class="lang-zh">升级</span></dt><dd>121</dd></div>
+      <div class="count-pair"><dt><span class="lang-en">milestones</span><span class="lang-zh">里程碑</span></dt><dd>47</dd></div>
+      <div class="count-pair"><dt><span class="lang-en">buyables</span><span class="lang-zh">可购买项</span></dt><dd>8</dd></div>
+      <div class="count-pair"><dt><span class="lang-en">challenges</span><span class="lang-zh">挑战</span></dt><dd>6</dd></div>
+      <div class="count-pair"><dt><span class="lang-en">achievements</span><span class="lang-zh">成就</span></dt><dd>50</dd></div>
+    </dl>
+
+    <p class="treecard-cap">
+      <span class="lang-en">Four rows, ten layers, 182 content components in the tree plus 50 achievements in the side layer. Read straight out of the game's own layer definitions.</span>
+      <span class="lang-zh">四行、十个层级，树内 182 个内容组件，外加侧层 50 个成就。全部直接读取自游戏自身的层级定义。</span>
+    </p>
+  </aside>
 </header>
 
-<div class="stats">
-  <div class="wrap stats-grid">
-    <div class="stat"><div class="num">329</div><div class="lab">real TMT games fully extracted to build the balance data</div></div>
-    <div class="stat"><div class="num">7</div><div class="lab">pipeline stages, from theme interview to test handoff</div></div>
-    <div class="stat"><div class="num">61</div><div class="lab">automated checks gating every generated build</div></div>
-    <div class="stat"><div class="num">4</div><div class="lab">game types, each with its own generation rules and acceptance bar</div></div>
+<div class="band">
+  <div class="wrap band-grid">
+    <div class="stat">
+      <div class="num">329</div>
+      <div class="lab"><span class="lang-en">published TMT games parsed to build the balance data</span><span class="lang-zh">款已发布的 TMT 游戏被解析，用于构建平衡数据</span></div>
+    </div>
+    <div class="stat">
+      <div class="num">68</div>
+      <div class="lab"><span class="lang-en">static rules gating every generated build</span><span class="lang-zh">条静态规则，拦截每一个生成的构建</span></div>
+    </div>
+    <div class="stat">
+      <div class="num">8</div>
+      <div class="lab"><span class="lang-en">pipeline stages, including a load-time harness before the first browser open</span><span class="lang-zh">个流水线阶段，包括首次打开浏览器之前的加载期测试工具</span></div>
+    </div>
+    <div class="stat">
+      <div class="num">4</div>
+      <div class="lab"><span class="lang-en">game types, each with its own components and its own acceptance bar</span><span class="lang-zh">种游戏类型，各有自己的组件与验收标准</span></div>
+    </div>
   </div>
 </div>
 
 <section id="pipeline" class="wrap">
   <div class="sec-head">
-    <h2>How a game gets made</h2>
-    <p>Every run follows the same measured pipeline. Nothing skips a stage, and nothing ships before the checks pass.</p>
+    <h2>
+      <span class="lang-en">How a game <em>gets made</em></span>
+      <span class="lang-zh">一个游戏是<em>如何做出来的</em></span>
+    </h2>
+    <p>
+      <span class="lang-en">Every run walks the same eight stages and nothing skips ahead. The first two are design, the middle three are code and verification, and the last two are measurement rather than estimate.</span>
+      <span class="lang-zh">每次运行都走同样的八个阶段，绝不跳步。前两个是设计，中间三个是编码与校验，最后两个是实测而非估算。</span>
+    </p>
   </div>
+
   <div class="rail">
-    <div class="step"><div class="step-n">01</div><div class="step-verb">Interview</div><div class="step-desc">Seven questions lock theme, scale, natural ceilings, pacing, side content, and language &mdash; then a scorer decides what kind of game this is. The theme dictates the tree, not just the names.</div></div>
-    <div class="step"><div class="step-n">02</div><div class="step-verb">Design brief</div><div class="step-desc">A layer-by-layer table filled from measured blueprints and balance defaults, self-checked against twenty rules before any code exists.</div></div>
-    <div class="step"><div class="step-n">03</div><div class="step-verb">Scaffold</div><div class="step-desc">A fresh TMT v2.7 game folder with a permanent savefile id, patched and syntax-verified by a bundled script.</div></div>
-    <div class="step"><div class="step-n">04</div><div class="step-verb">Generate</div><div class="step-desc">Decimal-safe layer code: upgrades with varied effects, milestones, challenges, buyables, automation ladders, softcaps, theming.</div></div>
-    <div class="step"><div class="step-n">05</div><div class="step-verb">Check</div><div class="step-desc">61 static rules run over the source, gated by the locked type. Every FAIL is a blocker; every WARN needs a written justification in the brief.</div></div>
-    <div class="step"><div class="step-n">06</div><div class="step-verb">Balance</div><div class="step-desc">Era-by-era reachability math against the measured heuristics, with every compounding multiplier zone audited.</div></div>
-    <div class="step"><div class="step-n">07</div><div class="step-verb">Hand off</div><div class="step-desc">You serve the folder, play it, and verify the checklist: clean console, working saves, reachable endgame.</div></div>
+    <div class="step">
+      <div class="step-n">01</div>
+      <div class="step-verb"><span class="lang-en">Interview</span><span class="lang-zh">访谈</span></div>
+      <div class="step-desc">
+        <span class="lang-en">Seven questions lock the theme, the scale, the natural ceilings, the pacing target, the side content, and the language tier. A scorer then works out which kind of game this actually is, because that decides which components are allowed to exist at all.</span>
+        <span class="lang-zh">七个问题锁定主题、规模、自然上限、节奏目标、支线内容和语言层级。随后一个评分器判断这究竟是什么类型的游戏，因为它决定了哪些组件被允许存在。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">02</div>
+      <div class="step-verb"><span class="lang-en">Design brief</span><span class="lang-zh">设计简报</span></div>
+      <div class="step-desc">
+        <span class="lang-en">A layer-by-layer table filled from measured blueprints and the corpus defaults, then self-checked against twenty-one rules. This stage has to pass before anyone types a line of game code.</span>
+        <span class="lang-zh">逐层填写的表格，数据来自实测蓝图与语料库默认值，再对照二十一条规则自检。任何一行游戏代码动笔之前，这一阶段必须先通过。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">03</div>
+      <div class="step-verb"><span class="lang-en">Scaffold</span><span class="lang-zh">脚手架</span></div>
+      <div class="step-desc">
+        <span class="lang-en">A fresh TMT v2.7 folder with a permanent savefile id, patched by a bundled script that also syntax-checks what it wrote.</span>
+        <span class="lang-zh">生成一套全新的 TMT v2.7 文件夹并写入永久存档 id，再由捆绑脚本打补丁，同时对自己写入的内容做语法检查。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">04</div>
+      <div class="step-verb"><span class="lang-en">Generate</span><span class="lang-zh">生成</span></div>
+      <div class="step-desc">
+        <span class="lang-en">Layer code that keeps every number inside a Decimal: upgrades with genuinely varied effects, milestones, challenges, buyables, automation ladders, softcaps, and the theming.</span>
+        <span class="lang-zh">层级代码让每个数字都保持在 Decimal 之内：效果真正有差异的升级、里程碑、挑战、可购买项、自动化阶梯、软上限，以及主题化。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">05</div>
+      <div class="step-verb"><span class="lang-en">Static checks</span><span class="lang-zh">静态检查</span></div>
+      <div class="step-desc">
+        <span class="lang-en">68 rules read the source, gated by the locked game type. A FAIL blocks testing outright. A WARN has to be answered in writing in the brief, or it counts as a failure.</span>
+        <span class="lang-zh">68 条规则阅读源码，由已锁定的游戏类型决定是否触发。FAIL 直接阻断测试。WARN 必须在简报中书面回应，否则视同失败。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">05.5</div>
+      <div class="step-verb"><span class="lang-en">Load-time smoke</span><span class="lang-zh">加载期冒烟测试</span></div>
+      <div class="step-desc">
+        <span class="lang-en">The real mod files are loaded in Node against engine stubs. Loading throws, duplicate layer ids, broken startData contracts, and hooks that return NaN are all caught here, before the browser ever opens.</span>
+        <span class="lang-zh">真实的 mod 文件会在 Node 里对着引擎桩加载。加载抛错、层级 id 重复、startData 契约损坏、钩子返回 NaN，全部在这里被抓住，浏览器还没打开。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">06</div>
+      <div class="step-verb"><span class="lang-en">Balance</span><span class="lang-zh">平衡</span></div>
+      <div class="step-desc">
+        <span class="lang-en">A headless simulator plays the build and reports the real timeline, hour by hour. The brief's numbers are checked against that measurement instead of against arithmetic on paper.</span>
+        <span class="lang-zh">无头模拟器实际游玩这个构建，逐小时汇报真实时间线。简报里的数字要拿它来核对，而不是拿纸面算术核对。</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">07</div>
+      <div class="step-verb"><span class="lang-en">Hand off</span><span class="lang-zh">交付</span></div>
+      <div class="step-desc">
+        <span class="lang-en">You serve the folder and play it, working down a checklist for the console, the saves, the offline cap, and whether the endgame actually fires.</span>
+        <span class="lang-zh">你启动这个文件夹来玩，按清单逐项检查控制台、存档、离线上限，以及终局是否真的触发。</span>
+      </div>
+    </div>
   </div>
 </section>
 
-<section id="corpus" class="wrap" style="padding-top: 0;">
+<section id="data" class="wrap">
   <div class="sec-head">
-    <h2>Every number came from a real game</h2>
-    <p>The balance data is not intuition. It is a full numeric archive of every component in 329 published TMT games &mdash; 36&nbsp;MB of source, each value traceable back to a file and a line number.</p>
+    <h2>
+      <span class="lang-en">The numbers come from games people <em>already shipped</em></span>
+      <span class="lang-zh">这些数字来自别人<em>已经发布</em>的游戏</span>
+    </h2>
+    <p>
+      <span class="lang-en">None of the thresholds in this skill are opinion. They come from a numeric archive of every component in 329 published TMT games: 36 MB of source, parsed component by component, each figure traceable to a file and a line.</span>
+      <span class="lang-zh">这项技能里没有一个阈值是拍脑袋定的。它们来自一份数字档案，收录了 329 款已发布 TMT 游戏的每一个组件：36 MB 源码，逐组件解析，每个数字都能追溯到某个文件的某一行。</span>
+    </p>
   </div>
 
-  <div class="corpus-stats">
-    <div class="cstat"><div class="num">329</div><div class="lab">published games fully extracted, not sampled</div></div>
-    <div class="cstat"><div class="num">1,156</div><div class="lab">layers, with their cost and gain formulas</div></div>
-    <div class="cstat"><div class="num">29,141</div><div class="lab">components catalogued &mdash; upgrades, challenges, milestones, achievements, buyables</div></div>
-    <div class="cstat"><div class="num">61</div><div class="lab">static rules, every threshold measured from data or the engine author's own notes</div></div>
+  <div class="band-grid">
+    <div class="stat">
+      <div class="num">329</div>
+      <div class="lab"><span class="lang-en">games extracted in full, not sampled</span><span class="lang-zh">款游戏完整提取，而非抽样</span></div>
+    </div>
+    <div class="stat">
+      <div class="num">1,156</div>
+      <div class="lab"><span class="lang-en">layers with their cost and gain formulas</span><span class="lang-zh">个层级，含其成本与收益公式</span></div>
+    </div>
+    <div class="stat">
+      <div class="num">29,141</div>
+      <div class="lab"><span class="lang-en">components catalogued: upgrades, milestones, challenges, achievements, buyables</span><span class="lang-zh">个组件被编目：升级、里程碑、挑战、成就、可购买项</span></div>
+    </div>
+    <div class="stat">
+      <div class="num">13,746</div>
+      <div class="lab"><span class="lang-en">upgrades, the largest single pool for numeric analysis</span><span class="lang-zh">个升级，数值分析中最大的单一池</span></div>
+    </div>
   </div>
 
-  <div class="corpus-note">
-    <b>54.4%</b> of the 13,746 real upgrades carry no <code>effect()</code> of their own at all.
-    Their power is a branch inside the layer&rsquo;s <code>gainMult()</code>. That is the single
-    most common way a generated incremental game runs perfectly and does nothing.
+  <div class="sec-note">
+    <span class="lang-en"><b>54.4%</b> of those upgrades carry no <code>effect()</code> of their own. Their power is a branch inside the layer's <code>gainMult()</code> instead. That one shape is how a generated incremental game runs perfectly, sells everything, prints its multipliers, and changes nothing.</span>
+    <span class="lang-zh">这些升级里有 <b>54.4%</b> 根本没有自己的 <code>effect()</code>。它们的力量其实是层级 <code>gainMult()</code> 里的一条分支。正是这种形态，让一个生成的增量游戏跑得完美无缺、卖光所有东西、把倍率打印得漂漂亮亮，却什么都没有改变。</span>
   </div>
 
-  <div class="wire-grid">
-    <div class="wire-col bad">
-      <div class="wire-tag">generated, unwired</div>
+  <div class="pair">
+    <div class="pair-col">
+      <div class="pair-tag"><span class="lang-en">generated, unwired</span><span class="lang-zh">生成结果：未接线</span></div>
       <pre>upgrades: {
   11: {
-    <b>effect()</b>() { return new Decimal(2) },
+    <b>effect()</b> { return new Decimal(2) },
     <i>effectDisplay</i>() { return format(this.effect()) }
   }
 }</pre>
-      <p>It loads. It sells. It prints &times;2. <b>Nothing in the game changes</b> &mdash; and no rule anywhere fails.</p>
+      <p>
+        <span class="lang-en">It loads. It sells. It prints a doubling. <b>No number anywhere in the game moves</b>, and not one of the 68 rules has anything to say about it.</span>
+        <span class="lang-zh">它能加载，能卖，能打印出翻倍。但<b>游戏里没有任何一个数字会动</b>，而 68 条规则没有一条能说得出话。</span>
+      </p>
     </div>
-    <div class="wire-col good">
-      <div class="wire-tag">what real games do</div>
+    <div class="pair-col good">
+      <div class="pair-tag"><span class="lang-en">what the corpus does</span><span class="lang-zh">语料库里是怎么做的</span></div>
       <pre>upgrades: {
   11: { <i>unlocked</i>() { return player.p.points.gte(1e6) } }
 }
@@ -402,124 +751,120 @@
   <b>if</b> (hasUpgrade("p", 11)) ret = ret.times(2)
   <b>return</b> ret
 }</pre>
-      <p>The upgrade is a token; the layer owns the arithmetic. Now the number is real &mdash; and the checker can prove it.</p>
+      <p>
+        <span class="lang-en">The upgrade is a token; the layer owns the arithmetic. Now the doubling is real, and a rule can prove that something consumes it.</span>
+        <span class="lang-zh">升级只是一个凭证；算术归层级所有。现在这个翻倍是真的了，规则也能证明有东西在消费它。</span>
+      </p>
     </div>
   </div>
 
   <div class="ops">
-    <div class="ops-row"><span class="ops-name">.pow()</span><span class="ops-track"><i class="ops-fill" style="width:100%"></i></span><span class="ops-val">4,830</span></div>
-    <div class="ops-row"><span class="ops-name">.add()</span><span class="ops-track"><i class="ops-fill" style="width:69.6%"></i></span><span class="ops-val">3,364</span></div>
-    <div class="ops-row"><span class="ops-name">.log10()</span><span class="ops-track"><i class="ops-fill" style="width:69.3%"></i></span><span class="ops-val">3,350</span></div>
-    <div class="ops-row"><span class="ops-name">.times()</span><span class="ops-track"><i class="ops-fill dim" style="width:34.2%"></i></span><span class="ops-val">1,652</span></div>
-    <div class="ops-row"><span class="ops-name">softcap()</span><span class="ops-track"><i class="ops-fill dim" style="width:0.8%"></i></span><span class="ops-val">39</span></div>
-    <p class="ops-cap">Operations used by real upgrade effects, out of 6,274 upgrades that have one. Power and log shapes outnumber plain multipliers about three to one &mdash; so a generator that only ever emits &times;2 produces something no human ships.</p>
+    <div class="ops-row"><span class="ops-name">.pow()</span><span class="ops-bar"><i style="width:100%"></i></span><span class="ops-val">4,830</span></div>
+    <div class="ops-row"><span class="ops-name">.add()</span><span class="ops-bar"><i style="width:69.6%"></i></span><span class="ops-val">3,364</span></div>
+    <div class="ops-row"><span class="ops-name">.log10()</span><span class="ops-bar"><i style="width:69.3%"></i></span><span class="ops-val">3,350</span></div>
+    <div class="ops-row"><span class="ops-name">.times()</span><span class="ops-bar"><i style="width:34.2%"></i></span><span class="ops-val">1,652</span></div>
+    <div class="ops-row"><span class="ops-name">softcap()</span><span class="ops-bar"><i style="width:0.8%"></i></span><span class="ops-val">39</span></div>
+    <p class="ops-cap">
+      <span class="lang-en">Every operation used inside the 6,274 corpus upgrades that do have an effect. Power and log shapes outnumber plain multipliers roughly three to one, so a generator that only ever emits a flat doubling produces something no human has ever shipped.</span>
+      <span class="lang-zh">这是 6,274 个真正带效果的语料库升级中出现的每一种运算。幂与对数形态的数量大约是纯倍率的三倍，所以一个只会输出平直翻倍的生成器，产出的是没人真正发布过的东西。</span>
+    </p>
   </div>
 </section>
 
-<section id="types" class="wrap" style="padding-top: 0;">
+<section id="types" class="wrap">
   <div class="sec-head">
-    <h2>It knows which kind of game you asked for</h2>
-    <p>Size and shape are two different questions, and they were being answered by the same one.
-    Scale is locked by Q2 &mdash; 5 to 7 layers, or 25+. Shape is locked separately, from the same
-    corpus: of the 329 real games, how many let the player act, and how? That ratio is not a guess.
-    It decides which components are mandatory, which are forbidden outright, and which checks
-    the build has to pass.</p>
+    <h2>
+      <span class="lang-en">Size and shape are <em>two different questions</em></span>
+      <span class="lang-zh">规模与形态是<em>两个不同的问题</em></span>
+    </h2>
+    <p>
+      <span class="lang-en">Scale is settled by Q2: five to seven layers, or twenty-five and up. Shape is settled separately, by counting how many of those 329 games let the player act at all, and how. That ratio is not a guess. It decides which components are mandatory, which are forbidden outright, and which checks the build has to survive.</span>
+      <span class="lang-zh">规模由 Q2 决定：五到七层，或者二十五层以上。形态则单独决定，方法是统计那 329 款游戏里有多少让玩家真正动手，以及怎么动手。这个比例不是猜的。它决定了哪些组件是必需的、哪些被直接禁止、以及这个构建必须通过哪些检查。</span>
+    </p>
   </div>
 
-  <div class="corpus-stats">
-    <div class="cstat">
-      <div class="num">53.5%</div>
-      <div class="lab"><b>passive-prestige</b><br>the player accumulates and resets, never acts. <code>normal</code> and <code>static</code> layers only &mdash; no tick, no clickables, no grid.</div>
-    </div>
-    <div class="cstat">
-      <div class="num">11.2%</div>
-      <div class="lab"><b>active-click</b><br>discrete taps. Every clickable must define <code>canClick()</code> and <code>onClick()</code>, and its state must live in <code>startData</code>.</div>
-    </div>
-    <div class="cstat">
-      <div class="num">10.0%</div>
-      <div class="lab"><b>active-tick</b><br>a continuous quantity the player pushes. Needs <code>update()</code>, bars with a real <code>progress()</code>, and tick-hook registration.</div>
-    </div>
-    <div class="cstat">
-      <div class="num">6.7%</div>
-      <div class="lab"><b>board-minigame</b><br>the playfield is a 2D board. Grid contract: <code>getStartData</code>, a rows/cols spec, base-100 cell ids.</div>
-    </div>
+  <div class="splitbar" role="img" aria-label="Share of the 329-file corpus: passive-prestige 53.5 percent, active-click 11.2 percent, active-tick 10.0 percent, board-minigame 6.7 percent, remaining files 18.6 percent.">
+    <i style="width:53.5%; opacity:1"></i>
+    <i style="width:11.2%; opacity:.72"></i>
+    <i style="width:10%; opacity:.5"></i>
+    <i style="width:6.7%; opacity:.34"></i>
+    <i style="width:18.6%; opacity:.13"></i>
   </div>
+  <p class="split-cap">
+    <span class="lang-en">Share of the 329-file corpus. The last segment is the files where no single interaction model dominates, 18.6% of the set.</span>
+    <span class="lang-zh">占 329 份语料库的比例。最后一段是没有任何单一交互模型占主导的文件，占全集的 18.6%。</span>
+  </p>
 
-  <div class="wire-grid">
-    <div class="wire-col bad">
-      <div class="wire-tag">one bar for every game</div>
-      <pre>58 rules &mdash; the same rules
-for a clicker and a prestige chain
-
-A 3-layer prestige chain was
-  never checked for tick logic:
-  the floor sat at 4 layers
-
-A clickable with no onClick():
-  the rule counted the button
-  and never opened it</pre>
+  <div class="typelist">
+    <div class="typerow">
+      <span class="type-name">passive-prestige</span><span class="type-share">53.5%</span>
+      <span class="type-contract">
+        <span class="lang-en">Accumulate and reset, never act. <code>normal</code> and <code>static</code> layers only, with no tick, no clickables and no grid. Having no tick here is correct, and the rule set exempts it rather than flagging it.</span>
+        <span class="lang-zh">积累与重置，从不主动操作。只有 <code>normal</code> 和 <code>static</code> 层级，没有 tick、没有可点击项、没有网格。这里没有 tick 是正确的，规则集会豁免它而不是标记它。</span>
+      </span>
     </div>
-    <div class="wire-col good">
-      <div class="wire-tag">gated by the locked type</div>
-      <pre>61 rules &mdash; each type gets
-the ones that apply to it
-
-passive-prestige is EXEMPT from
-  "needs tick logic" &mdash; having
-  no tick is CORRECT there
-
-active-click: a clickable with
-  no onClick() is a FAIL,
-  not a count
-
-board-minigame: a grid missing
-  getStartData is a FAIL</pre>
+    <div class="typerow">
+      <span class="type-name">active-click</span><span class="type-share">11.2%</span>
+      <span class="type-contract">
+        <span class="lang-en">Discrete taps. Every clickable defines <code>canClick()</code> and <code>onClick()</code>, and its state lives in <code>startData</code>. A clickable missing its handler is a FAIL, not a headline count.</span>
+        <span class="lang-zh">离散点击。每个可点击项都定义 <code>canClick()</code> 和 <code>onClick()</code>，其状态存放在 <code>startData</code> 中。缺少处理器的可点击项是 FAIL，不是一个用来充数的标题数字。</span>
+      </span>
+    </div>
+    <div class="typerow">
+      <span class="type-name">active-tick</span><span class="type-share">10.0%</span>
+      <span class="type-contract">
+        <span class="lang-en">A continuous quantity the player pushes. Needs <code>update()</code>, bars with a real <code>progress()</code>, and tick-hook registration.</span>
+        <span class="lang-zh">玩家持续推动的连续量。需要 <code>update()</code>、带真实 <code>progress()</code> 的进度条，以及 tick 钩子注册。</span>
+      </span>
+    </div>
+    <div class="typerow">
+      <span class="type-name">board-minigame</span><span class="type-share">6.7%</span>
+      <span class="type-contract">
+        <span class="lang-en">The playfield is a 2D board. Grid contract: a <code>getStartData</code> hook, a rows and columns spec, and base-100 cell ids.</span>
+        <span class="lang-zh">操作场是一块 2D 棋盘。网格契约：一个 <code>getStartData</code> 钩子、行列规格，以及百进制单元格 id。</span>
+      </span>
     </div>
   </div>
 
-  <div class="corpus-note">
-    Mechanics that depend on an interaction model are <b>gated, not dropped</b>. The score-attack
-    challenge hub (M2) records a peak inside <code>update()</code> &mdash; and the engine has no
-    score-attack API at all, so the pattern is hand-rolled and needs a tick to exist. Ask for it
-    on a passive game and the skill says so, records the reason in the design brief, and moves on.
-    A game with no declared type at all is checked exactly as it was before types existed: the
-    extra rules stay silent and every threshold falls back to its old value.
+  <div class="sec-note">
+    <span class="lang-en">A mechanic that needs an interaction model is gated, never quietly dropped. The score-attack challenge hub records its peak inside <code>update()</code>, and this engine has no score-attack API, so that pattern is hand-rolled and genuinely needs a tick. Ask for it on a passive game and the skill says so, writes the reason into the brief, and carries on. A game that declares no type at all is checked exactly the way it was checked before types existed.</span>
+    <span class="lang-zh">需要交互模型的机制会被门控，而不会被悄悄丢掉。积分挑战中心把峰值记录在 <code>update()</code> 里，而这个引擎没有积分 API，所以那种模式是手写的，确实需要 tick。你在一个被动游戏里要求它，技能会直接说明，把理由写进简报，然后继续。一个完全不声明类型的游戏，检查方式与类型出现之前完全一致。</span>
   </div>
 </section>
 
-<section id="lifecycle" class="wrap" style="padding-top: 0;">
+<section id="safety" class="wrap">
   <div class="sec-head">
-    <h2>The bugs you only find by playing</h2>
-    <p>One generated game was handed to a player. He reported three bugs. All three had the same
-    shape &mdash; <b>every part was individually reasonable, and the combination left a save that
-    could not be recovered.</b> Every one of the 53 rules at the time passed that game with
-    <b>zero failures</b>. They check how things are wired and how big they are. None of them asked
-    what survives a reset.</p>
+    <h2>
+      <span class="lang-en">The bugs a text checker <em>cannot see</em></span>
+      <span class="lang-zh">文本检查器<em>看不见</em>的 bug</span>
+    </h2>
+    <p>
+      <span class="lang-en">Three defects reached a real player before any of the 53 rules in force at the time could say a word. That rule set reported zero failures on that build, because it asks whether things are wired and how big they are, while all three bugs were about what survives a reset.</span>
+      <span class="lang-zh">有三个缺陷到达了真实玩家手里，而当时生效的 53 条规则一声都没吭。那套规则在那个构建上报了零失败，因为它问的是东西接没接上、有多大，而这三个 bug 全都是关于重置后什么能活下来。</span>
+    </p>
   </div>
 
-  <div class="corpus-note">
-    The engine prestiges straight from the game loop &mdash;
-    <code>if (tmp[layer].autoPrestige &amp;&amp; tmp[layer].canReset) doReset(layer)</code> &mdash;
-    with <b>no player toggle anywhere in that path</b>. So automation a player cannot stop has to
-    be safe by construction. The invariant: <b>what auto-prestige requires must imply what makes
-    the reset harmless.</b> Miss it and the automation spends the currency its own safety
-    milestone is priced in, so that milestone can never be bought and the wipe never stops.
+  <div class="sec-note">
+    <span class="lang-en">The engine prestiges straight out of the game loop, <code>if (tmp[layer].autoPrestige &amp;&amp; tmp[layer].canReset) doReset(layer)</code>, with no player toggle anywhere in that path, and <code>resetsNothing()</code> is the only brake. So automation a player cannot switch off has to be safe by construction. The invariant is short: <b>what auto-prestige requires must imply what makes the reset harmless.</b></span>
+    <span class="lang-zh">引擎直接从游戏循环里触发转生，<code>if (tmp[layer].autoPrestige &amp;&amp; tmp[layer].canReset) doReset(layer)</code>，这条路径上没有任何玩家开关，<code>resetsNothing()</code> 是唯一的刹车。所以玩家关不掉的自动化，必须在构造上就是安全的。不变式很短：<b>自动转生所需的条件，必须蕴含使重置无害的条件。</b></span>
   </div>
 
-  <div class="wire-grid">
-    <div class="wire-col bad">
-      <div class="wire-tag">found in 52 of 98 automated layers</div>
+  <div class="pair">
+    <div class="pair-col">
+      <div class="pair-tag"><span class="lang-en">as generated</span><span class="lang-zh">生成时的样子</span></div>
       <pre>autoPrestige() {
   <b>if</b> (hasMilestone(this.layer, 2)) <b>return true</b>
 }
 resetsNothing() {
   <b>if</b> (hasMilestone("sg2", 3)) <b>return true</b>
 }</pre>
-      <p>Auto-prestige turns on at milestone 2. The reset only stops hurting at <code>sg2</code>&nbsp;M3 &mdash;
-      6.5 orders of magnitude later. In between, the layer wipes itself every single frame.</p>
+      <p>
+        <span class="lang-en">Automation turns on at this layer's second milestone. The reset only stops hurting orders of magnitude later, at <code>sg2</code>'s third. In between, the layer wipes its own supply every frame. <b>52 of the 98 automated layers in that game behaved this way.</b></span>
+        <span class="lang-zh">自动化在这一层的第二个里程碑开启。而重置要等到 <code>sg2</code> 的第三个里程碑才不再造成伤害，那已经晚了好几个数量级。中间这段时间，这一层每一帧都在清空自己的供给。<b>那款游戏 98 个自动化层级里有 52 个是这种行为。</b></span>
+      </p>
     </div>
-    <div class="wire-col good">
-      <div class="wire-tag">the same layer, repaired</div>
+    <div class="pair-col good">
+      <div class="pair-tag"><span class="lang-en">after the repair</span><span class="lang-zh">修复之后</span></div>
       <pre>autoPrestige() {
   <b>if</b> (hasMilestone(this.layer, 2) &amp;&amp;
       hasMilestone("sg2", 3)) <b>return true</b>
@@ -527,242 +872,314 @@ resetsNothing() {
 resetsNothing() {
   <b>if</b> (hasMilestone("sg2", 3)) <b>return true</b>
 }</pre>
-      <p>The automation now arrives later. That is the honest price of safety &mdash; and the
-      checker proves the relation by comparing milestone <b>sets</b>, never their numbers.</p>
+      <p>
+        <span class="lang-en">Automation now arrives later, and that delay is the honest price of safety. Four rules encode the whole class: <code>N-AUTOWIPE</code>, <code>N-MSDESTROY</code>, <code>N-POINTSWRITE</code> and <code>N-STATICMAX</code>. They compare milestone <b>sets</b>, never their numbers.</span>
+        <span class="lang-zh">自动化来得更晚了，而这段延迟就是安全要付的诚实代价。四条规则编码了这一整类问题：<code>N-AUTOWIPE</code>、<code>N-MSDESTROY</code>、<code>N-POINTSWRITE</code> 和 <code>N-STATICMAX</code>。它们比较的是里程碑<b>集合</b>，从不比较里程碑编号。</span>
+      </p>
     </div>
   </div>
 
   <div class="qual-grid">
     <div class="qual-col">
-      <h3>What survives a reset</h3>
+      <h3><span class="lang-en">What survives a reset</span><span class="lang-zh">重置之后还剩什么</span></h3>
       <ul>
-        <li>Milestones score on lifetime records, and the layer keeps them across an upper-row prestige</li>
-        <li>A layer with no <code>doReset</code> gets the engine&rsquo;s default keep list &mdash; which holds neither <code>best</code> nor <code>total</code></li>
-        <li>Version numbers are compared as text by the engine, so a downgrade silently rewrites every save</li>
+        <li>
+          <span class="lang-en">Milestones score on lifetime records. After the repair, <b>385 milestones read a career record and none reads a live counter.</b></span>
+          <span class="lang-zh">里程碑判定基于生涯记录。修复之后，<b>385 个里程碑读取的是生涯记录，没有任何一个读取实时计数器。</b></span>
+        </li>
+        <li>
+          <span class="lang-en">A layer with no <code>doReset</code> hook silently gets the engine's default keep list, which holds neither <code>best</code> nor <code>total</code>. That is the mechanism behind all three reports, and it applies to <b>all 104 layers</b>, not the one the player noticed.</span>
+          <span class="lang-zh">一个没有 <code>doReset</code> 钩子的层级会静默拿到引擎的默认保留清单，而那份清单里既没有 <code>best</code> 也没有 <code>total</code>。这就是那三份报告背后的机制，而且它适用于<b>全部 104 个层级</b>，不只是玩家注意到的那一个。</span>
+        </li>
+        <li>
+          <span class="lang-en">Version numbers are compared as text by the engine, so a downgrade quietly rewrites every save it opens.</span>
+          <span class="lang-zh">引擎把版本号当作文本来比较，所以一次降级会悄悄改写它打开的每一份存档。</span>
+        </li>
       </ul>
     </div>
     <div class="qual-col">
-      <h3>Counters are not prizes</h3>
+      <h3><span class="lang-en">Counters are not prizes</span><span class="lang-zh">计数器不是奖励</span></h3>
       <ul>
-        <li>Static layers need <code>canBuyMax()</code>, or every prestige banks exactly one floor</li>
-        <li>A static layer&rsquo;s counter <i>is</i> its banked total &mdash; trickling into it earns less every second</li>
-        <li>Awards go through the engine so lifetime records stay honest</li>
+        <li>
+          <span class="lang-en">A static layer needs <code>canBuyMax()</code>. Without it the reset payout clamps to one floor, so each prestige banks exactly one and the entire upgrade ladder is unreachable.</span>
+          <span class="lang-zh">静态层级需要 <code>canBuyMax()</code>。没有它，重置发放会被夹到一层，于是每次转生刚好只存下一个，整条升级阶梯都够不着。</span>
+        </li>
+        <li>
+          <span class="lang-en">A static layer's counter <i>is</i> its banked total, so trickling points into it earns less every second and hands back floors the next prestige cannot bank.</span>
+          <span class="lang-zh">静态层级的计数器<i>就是</i>它存下的总量，所以把点数一点点滴进去，每秒收益越来越低，还会退回下一次转生存不下的零头。</span>
+        </li>
+        <li>
+          <span class="lang-en">Every currency award goes through the engine helper that writes lifetime records, because achievements and endgame conditions read those.</span>
+          <span class="lang-zh">每一笔货币发放都走那个会写入生涯记录的引擎辅助函数，因为成就和终局条件读的就是它。</span>
+        </li>
       </ul>
     </div>
     <div class="qual-col">
-      <h3>Then it caught a fourth</h3>
+      <h3><span class="lang-en">Why the old rules stayed quiet</span><span class="lang-zh">为什么旧规则保持沉默</span></h3>
       <ul>
-        <li>Those 53 rules had already been used to fix 24 defects in that same game</li>
-        <li>The new rules found a 25th the repair had missed: a layer with milestones but no <code>doReset</code> hook at all</li>
-        <li>Six of 104 layers had none &mdash; the repair checked every hook that existed, never the ones that didn&rsquo;t</li>
+        <li>
+          <span class="lang-en">Each part of the failure was reasonable on its own. <b>24 defects</b> were repaired across 104 layers, 1,087 upgrades, 403 milestones and 8 challenges.</span>
+          <span class="lang-zh">失败的每一部分单看都合理。<b>24 个缺陷</b>被修复，横跨 104 个层级、1,087 个升级、403 个里程碑和 8 个挑战。</span>
+        </li>
+        <li>
+          <span class="lang-en">After the repair the build reported <b>370 PASS, 36 WARN, 0 FAIL</b>, every warning verified line by line. The player reports had all come in first.</span>
+          <span class="lang-zh">修复后这个构建报告 <b>370 PASS、36 WARN、0 FAIL</b>，每条警告都逐行核实过。而玩家的报告早就先到了。</span>
+        </li>
+        <li>
+          <span class="lang-en">One report guessed that other layers shared the bug. All of them did, across 104 layers at once. The repair then checked every hook that existed, and confirmed it.</span>
+          <span class="lang-zh">有一份报告猜其他层级也有同样的 bug。确实全都有，104 个层级一次中招。修复随后检查了每一个存在的钩子，并确认了这一点。</span>
+        </li>
       </ul>
     </div>
   </div>
 </section>
 
-<section id="install" class="wrap" style="padding-top: 0;">
+<section id="measured" class="wrap">
   <div class="sec-head">
-    <h2>Drop it in, then say go</h2>
-    <p>The folder is the skill. Copy it into your tool's skills directory; it ships its own handbook, scripts, and engine template.</p>
+    <h2>
+      <span class="lang-en">The checks that need a <em>real build</em></span>
+      <span class="lang-zh">那些需要<em>真实构建</em>才能做的检查</span>
+    </h2>
+    <p>
+      <span class="lang-en">Three briefs passed all twenty-one design self-checks and were then overturned as soon as anyone measured the result. Paper reachability is a consistency argument, not a prediction. So the skill ships three tools that only have something to say once a build exists.</span>
+      <span class="lang-zh">有三份简报通过了全部二十一项设计自检，却在任何人真正实测结果的那一刻被推翻。纸面可达性是一种一致性论证，不是预测。所以这项技能附带了三个工具，只有在构建存在之后它们才有话可说。</span>
+    </p>
   </div>
+
+  <div class="tools">
+    <div class="tool">
+      <div><div class="tool-name">assets/harness/smoke.js</div><span class="tool-stage"><span class="lang-en">stage 5.5</span><span class="lang-zh">阶段 5.5</span></span></div>
+      <div class="tool-body">
+        <p>
+          <span class="lang-en">Loads the real mod files in Node against engine stubs and asserts them, so the first browser open is not the first test. It catches load-time throws, two layers sharing an id, broken <code>startData</code> contracts, and hooks that return NaN on a fresh save. It starts every layer unlocked on purpose, so a hook that only breaks once the layer is reachable fails here instead of in a player's console.</span>
+          <span class="lang-zh">在 Node 里对着引擎桩加载真实 mod 文件并断言，让首次打开浏览器不再是第一道测试。它能抓住加载期抛错、两个层级共用一个 id、<code>startData</code> 契约损坏，以及在新存档上返回 NaN 的钩子。它刻意让每个层级一开始就解锁，所以一个只在层级可达后才出问题的钩子会在这里失败，而不是在玩家的控制台里。</span>
+        </p>
+        <code class="tool-run">node tools/smoke.js</code>
+      </div>
+    </div>
+    <div class="tool">
+      <div><div class="tool-name">assets/harness/simulate.js</div><span class="tool-stage"><span class="lang-en">stage 6</span><span class="lang-zh">阶段 6</span></span></div>
+      <div class="tool-body">
+        <p>
+          <span class="lang-en">Plays the build headlessly and reports the timeline. Shipped as a template rather than a finished instrument: its early timeline is trustworthy, and its total is not until you fit one point you already know from a real playthrough. The estimates above were wrong by a factor of four, by a factor of two thousand, and by enough that an entire multiplier architecture had to be replaced. The script says so out loud when a run finishes implausibly fast, because the alternative is a number nobody should quote.</span>
+          <span class="lang-zh">无头游玩这个构建并汇报时间线。它以模板形式交付，而不是一件成品仪器：它的早期时间线可信，而总量在你用一个真实通关已知点校准之前并不可信。上面那些估算分别错了四倍、两千倍，还有一次错到整个倍率架构都得推倒重来。当一次运行快得不合常理时，脚本会直接说出来，因为另一个选项是一个谁都不该引用的数字。</span>
+        </p>
+        <code class="tool-run">node assets/harness/simulate.js &lt;game-folder&gt;</code>
+      </div>
+    </div>
+    <div class="tool">
+      <div><div class="tool-name">scripts/i18n_check.js</div><span class="tool-stage"><span class="lang-en">text layers</span><span class="lang-zh">文本层</span></span></div>
+      <div class="tool-body">
+        <p>
+          <span class="lang-en">Checks a text layer for missing keys, duplicate language codes, duplicate endonyms, and placeholder drift. One generated game ships 371 keys in three complete languages behind a phrase pool of 344 sentences, no two of them in the same language, which is a long way past what a bilingual toggle can express. With no <code>js/lang/</code> folder the checker is a silent no-op.</span>
+          <span class="lang-zh">检查一个文本层的缺失键、重复语言码、重复母语名和占位符漂移。有一款生成的游戏用三种完整语言交付了 371 个键，背后是 344 句话的短语池，没有任何两句属于同一种语言，这远远超出了双语开关能表达的范围。没有 <code>js/lang/</code> 文件夹时，这个检查器是静默空操作。</span>
+        </p>
+        <code class="tool-run">node scripts/i18n_check.js &lt;game-folder&gt;</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec-note">
+    <span class="lang-en">Everything learned the hard way ends up in one chapter: <b>sixteen</b> behaviours of the engine that its own documentation does not state. Among them, <code>format()</code> rendering every value below 1e-4 as <code>0.00</code>, <code>layeradd()</code> silently ignoring a Decimal, a top-level throw in <code>mod.js</code> killing every initializer after it, and a buyable whose effect exponent equals its cost exponent funding its own next purchase until the economy detonates. Each entry was written after it cost somebody a debugging session, and each one names the build it came from.</span>
+    <span class="lang-zh">所有吃过亏才学到的东西最后都归入一章：引擎有<b>十六种</b>它自己的文档从未说明的行为。其中包括 <code>format()</code> 把 1e-4 以下的每个值都渲染成 <code>0.00</code>、<code>layeradd()</code> 悄悄忽略 Decimal、<code>mod.js</code> 里一个顶层抛错会杀死它之后所有初始化器，以及一个效果指数等于成本指数的可购买项自己资助自己的下一次购买，直到经济爆炸。每一条都是在害某人花掉一整个调试会话之后写下来的，每一条都注明了它来自哪个构建。</span>
+  </div>
+</section>
+
+<section id="install" class="wrap">
+  <div class="sec-head">
+    <h2>
+      <span class="lang-en">Copy the folder, then <em>say go</em></span>
+      <span class="lang-zh">把文件夹复制过去，然后<em>说开始</em></span>
+    </h2>
+    <p>
+      <span class="lang-en">The folder is the skill. It carries its own handbook, its scripts, and a complete TMT v2.7 template, and it needs nothing installed beyond Node.</span>
+      <span class="lang-zh">这个文件夹就是技能本身。它自带手册、脚本和一整套 TMT v2.7 模板，除了 Node 之外什么都不用装。</span>
+    </p>
+  </div>
+
   <div class="install-grid">
     <div>
       <div class="install-block">
         <h3>ZCode</h3>
-        <p>User-level skills folder, shared across your tools:</p>
-        <code class="path" data-copy="~/.agents/skills/">~/.agents/skills/</code>
+        <p><span class="lang-en">User-level skills folder, shared across your tools:</span><span class="lang-zh">用户级技能文件夹，在你的各个工具之间共享：</span></p>
+        <button type="button" class="copyline" data-copy="~/.agents/skills/">~/.agents/skills/</button>
       </div>
       <div class="install-block">
         <h3>Claude Code</h3>
-        <p>User-level skills folder:</p>
-        <code class="path" data-copy="~/.claude/skills/">~/.claude/skills/</code>
+        <p><span class="lang-en">User-level skills folder:</span><span class="lang-zh">用户级技能文件夹：</span></p>
+        <button type="button" class="copyline" data-copy="~/.claude/skills/">~/.claude/skills/</button>
       </div>
       <div class="install-block">
-        <h3>Any other SKILL.md tool</h3>
-        <p>Copy the folder into whatever directory your tool scans for skills.</p>
-        <code class="clone" data-copy="git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator">git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator</code>
+        <h3><span class="lang-en">Any other SKILL.md tool</span><span class="lang-zh">任何其他 SKILL.md 工具</span></h3>
+        <p><span class="lang-en">Clone it into whatever directory your tool scans for skills.</span><span class="lang-zh">克隆到你所用工具扫描技能的目录即可。</span></p>
+        <button type="button" class="copyline wrap" data-copy="git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator">git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator</button>
       </div>
     </div>
+
     <div>
-      <p class="side-label">Then say one of these</p>
-      <button class="chip" data-copy="Make me an incremental game about beekeeping">"Make me an incremental game about beekeeping"<span class="hint">click to copy</span></button>
-      <button class="chip" data-copy="Build a prestige tree game around a space elevator">"Build a prestige tree game around a space elevator"<span class="hint">click to copy</span></button>
-      <button class="chip" data-copy="Generate a TMT mod tree where you brew tea">"Generate a TMT mod tree where you brew tea"<span class="hint">click to copy</span></button>
-      <p class="verify">To verify an install, run the bundled smoke tests from the skill folder:<br>
-      <code data-copy="node tests/run_tests.js">node tests/run_tests.js</code><br>
-      it should end with <span class="expect">ALL SMOKE TESTS PASSED</span>.</p>
+      <p class="prompt-label"><span class="lang-en">Then say one of these</span><span class="lang-zh">然后说其中一句</span></p>
+      <p class="prompt-hint"><span class="lang-en">Click a prompt to copy it.</span><span class="lang-zh">点击提示词即可复制。</span></p>
+      <button type="button" class="chip" data-copy="Make me an incremental game about beekeeping">"Make me an incremental game about beekeeping"</button>
+      <button type="button" class="chip" data-copy="Build a prestige tree game around a space elevator">"Build a prestige tree game around a space elevator"</button>
+      <button type="button" class="chip" data-copy="Generate a TMT mod tree where you brew tea">"Generate a TMT mod tree where you brew tea"</button>
+
+      <p class="verify"><span class="lang-en">To check that the install is intact, run the bundled test suite from the skill folder:</span><span class="lang-zh">想确认安装完好，在技能文件夹里跑一遍捆绑的测试套件：</span></p>
+      <button type="button" class="copyline" data-copy="node tests/run_tests.js">node tests/run_tests.js</button>
+      <p class="verify">
+        <span class="lang-en">It ends with <code class="expect">ALL SMOKE TESTS PASSED</code> when the toolchain is sound.</span>
+        <span class="lang-zh">工具链正常时，它会以 <code class="expect">ALL SMOKE TESTS PASSED</code> 结束。</span>
+      </p>
     </div>
   </div>
 </section>
 
-<section id="quality" class="wrap" style="padding-top: 0;">
+<section id="quality" class="wrap">
   <div class="sec-head">
-    <h2>What "finished" means</h2>
-    <p>A generated game ships only when every one of these holds. The rules come from measured corpus data and from real defects caught in earlier generated games.</p>
+    <h2>
+      <span class="lang-en">What <em>finished</em> means here</span>
+      <span class="lang-zh">在这里，<em>完成</em>意味着什么</span>
+    </h2>
+    <p>
+      <span class="lang-en">A build ships when all of this holds. Every line of it comes from the corpus, from the engine author's own design notes, or from a defect that escaped an earlier game and is now a rule.</span>
+      <span class="lang-zh">当以下全部成立时，一个构建才算可以交付。这里的每一条都来自语料库、来自引擎作者自己的设计笔记，或者来自一个从更早的游戏里逃出来、现在成了规则的缺陷。</span>
+    </p>
   </div>
+
   <div class="qual-grid">
     <div class="qual-col">
-      <h3>Numbers</h3>
+      <h3><span class="lang-en">Numbers</span><span class="lang-zh">数字</span></h3>
       <ul>
-        <li>Requires ladders and cost curves taken from 329 measured games</li>
-        <li>First prestige within minutes; endgame reachable, never instant</li>
-        <li>Cost ladders span the measured 6+ orders of magnitude</li>
-        <li>Self-scaling effects budgeted so gains cannot compound out of control</li>
+        <li><span class="lang-en">Requires ladders and cost curves taken from 329 measured games</span><span class="lang-zh">需求阶梯与成本曲线取自 329 款实测游戏</span></li>
+        <li><span class="lang-en">First prestige within minutes, endgame reachable, never instant</span><span class="lang-zh">首次转生在几分钟内，终局可达，绝不瞬达</span></li>
+        <li><span class="lang-en">Cost ladders spanning the measured six orders of magnitude or more</span><span class="lang-zh">成本阶梯跨越实测的六个数量级或更多</span></li>
+        <li><span class="lang-en">Self-scaling effects budgeted so a gain cannot compound past its own softcap</span><span class="lang-zh">自缩放效果有预算，使收益无法复利越过它自己的软上限</span></li>
+        <li><span class="lang-en">Pacing measured in the simulator rather than estimated on paper</span><span class="lang-zh">节奏在模拟器里实测，而非纸面估算</span></li>
       </ul>
     </div>
     <div class="qual-col">
-      <h3>Content</h3>
+      <h3><span class="lang-en">Content</span><span class="lang-zh">内容</span></h3>
       <ul>
-        <li>The theme decides tree topology, currencies, and hard caps</li>
-        <li>Effect-kind quotas prevent walls of identical flat multipliers</li>
-        <li>Microtabs organize layers before they become scroll walls</li>
-        <li>Challenges, clickables, and active loops land per blueprint quota</li>
-        <li>The locked game type&rsquo;s contract is honoured &mdash; required components present, forbidden ones absent</li>
+        <li><span class="lang-en">The theme decides tree topology, currencies and hard caps, not just the labels</span><span class="lang-zh">主题决定树的拓扑、货币与硬性上限，而不只是标签</span></li>
+        <li><span class="lang-en">Effect-kind quotas keep layers from becoming walls of identical multipliers</span><span class="lang-zh">效果种类配额防止层级变成一堵堵相同的倍率墙</span></li>
+        <li><span class="lang-en">Microtabs organise a layer long before it turns into a scroll wall</span><span class="lang-zh">微标签在一个层级变成滚动墙之前很早就把它组织好</span></li>
+        <li><span class="lang-en">Challenges, clickables and active loops land at the quota for the blueprint</span><span class="lang-zh">挑战、可点击项与主动循环按蓝图配额落位</span></li>
+        <li><span class="lang-en">The locked game type's contract is honoured: <b>required components present, forbidden ones absent</b></span><span class="lang-zh">已锁定类型的契约得到遵守：<b>必需的组件在，被禁的组件不在</b></span></li>
       </ul>
     </div>
     <div class="qual-col">
-      <h3>Verification</h3>
+      <h3><span class="lang-en">Verification</span><span class="lang-zh">验证</span></h3>
       <ul>
-        <li>61 static checks pass before manual testing starts</li>
-        <li>Zero console errors across the whole playthrough</li>
-        <li>Saves, offline cap, and the win screen verified by hand</li>
-        <li>Every effect is proven to be consumed by a formula somewhere</li>
-        <li>A clickable is opened and read, not merely counted; a grid declares <code>getStartData</code></li>
-        <li>Prestige a high row with milestones earned, then confirm the ladder survived the reset</li>
-        <li>Rules hardened by six full games, a 329-game corpus, and the engine author's own design notes</li>
+        <li><span class="lang-en">68 static checks pass before manual testing is allowed to start</span><span class="lang-zh">68 项静态检查通过，才允许开始手动测试</span></li>
+        <li><span class="lang-en">The load-time harness reports 0 FAIL against the real mod files</span><span class="lang-zh">加载期测试工具对真实 mod 文件报告 0 FAIL</span></li>
+        <li><span class="lang-en">Every effect is proven to be consumed by some formula somewhere</span><span class="lang-zh">每个效果都被证明在某处的某个公式里被消费</span></li>
+        <li><span class="lang-en">A clickable is opened and read, not merely counted, and a grid declares <code>getStartData</code></span><span class="lang-zh">可点击项要被打开并读过，而不只是计数；网格必须声明 <code>getStartData</code></span></li>
+        <li><span class="lang-en">Prestige a high row with milestones earned, then confirm the ladder survived it</span><span class="lang-zh">在已获得里程碑的高层做一次转生，然后确认阶梯活了下来</span></li>
+        <li><span class="lang-en">Zero console errors across the whole playthrough</span><span class="lang-zh">整个通关过程中控制台零报错</span></li>
+        <li><span class="lang-en">Saves, the offline cap and the win screen verified by hand</span><span class="lang-zh">存档、离线上限与胜利画面逐一人工核验</span></li>
+        <li><span class="lang-en">Rules hardened by <b>eight full games</b>, a 329-game corpus, and the engine author's design notes</span><span class="lang-zh">规则由<b>八款完整游戏</b>、329 款语料库和引擎作者的设计笔记锤炼而成</span></li>
       </ul>
     </div>
   </div>
 </section>
 
+</main>
+
 <footer>
-  <div class="wrap foot-inner">
-    <span>MIT licensed. Built on The Modding Tree v2.7 by Acamaeda. This project is not affiliated with the TMT team.</span>
-    <span>
-      <a href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
-      &nbsp;&nbsp;
-      <a href="https://github.com/chenf888/TMT-game-generator/blob/main/SKILL.md" target="_blank" rel="noopener">SKILL.md</a>
-    </span>
+  <div class="wrap">
+    <div class="foot-inner">
+      <span>
+        <span class="lang-en">MIT licensed. Built on The Modding Tree v2.7 by Acamaeda, and not affiliated with the TMT team.</span>
+        <span class="lang-zh">MIT 许可。基于 Acamaeda 的 The Modding Tree v2.7 构建，与 TMT 团队无隶属关系。</span>
+      </span>
+      <span class="foot-links">
+        <a href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/chenf888/TMT-game-generator/blob/main/SKILL.md" target="_blank" rel="noopener">SKILL.md</a>
+      </span>
+    </div>
+    <div class="author">
+      <span class="author-label"><span class="lang-en">Author</span><span class="lang-zh">作者</span></span>
+      <a class="author-name" href="https://github.com/chenf888" target="_blank" rel="noopener">chenf888</a>
+      <span class="author-note">
+        <span class="lang-en">Built and measured against real generated games, every claim on this page traced to a file, a rule or a playthrough.</span>
+        <span class="lang-zh">对照真实生成的游戏构建与实测，本页每一条说法都可追溯到某个文件、某条规则或某次实际游玩。</span>
+      </span>
+    </div>
   </div>
 </footer>
 
 <script>
 (function () {
   "use strict";
-  /* ---------------- copy-to-clipboard ---------------- */
-  document.querySelectorAll("[data-copy]").forEach(function (el) {
+
+  var root = document.documentElement;
+  var status = document.getElementById("copyStatus");
+  var THEME_KEY = "tmt-theme";
+  var LANG_KEY = "tmt-lang";
+
+  var TITLES = {
+    en: "TMT Game Generator: an agent skill for The Modding Tree",
+    zh: "TMT 游戏生成器：The Modding Tree 的 Agent 技能"
+  };
+
+  /* ------------------------------------------------------------ theme */
+  function currentTheme() { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
+
+  function setTheme(next) {
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  }
+
+  var themeToggle = document.getElementById("themeToggle");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", function () {
+      setTheme(currentTheme() === "dark" ? "light" : "dark");
+    });
+  }
+
+  /* ------------------------------------------------------- language */
+  function currentLang() { return root.getAttribute("data-lang") === "zh" ? "zh" : "en"; }
+
+  function setLang(next) {
+    root.setAttribute("data-lang", next);
+    root.setAttribute("lang", next === "zh" ? "zh-CN" : "en");
+    document.title = TITLES[next];
+    try { localStorage.setItem(LANG_KEY, next); } catch (e) {}
+  }
+
+  var langToggle = document.getElementById("langToggle");
+  if (langToggle) {
+    langToggle.addEventListener("click", function () {
+      setLang(currentLang() === "zh" ? "en" : "zh");
+    });
+  }
+
+  /* Keep the document title correct on first paint too. */
+  document.title = TITLES[currentLang()];
+
+  /* ------------------------------------------------------- copy UI */
+  Array.prototype.forEach.call(document.querySelectorAll("[data-copy]"), function (el) {
     el.addEventListener("click", function () {
       var text = el.getAttribute("data-copy");
+      var original = el.innerHTML;
+
       function done() {
-        var old = el.innerHTML;
-        el.classList.add("copied");
-        el.innerHTML = "copied";
-        setTimeout(function () { el.innerHTML = old; el.classList.remove("copied"); }, 1200);
+        var zh = currentLang() === "zh";
+        if (status) status.textContent = (zh ? "已复制：" : "Copied: ") + text;
+        el.style.borderColor = "var(--accent)";
+        el.innerHTML = zh ? "已复制" : "copied";
+        window.setTimeout(function () {
+          el.innerHTML = original;
+          el.style.borderColor = "";
+        }, 1100);
       }
+
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, done);
-      } else { done(); }
-    });
-  });
-
-  /* ---------------- The Sapling Tree ---------------- */
-  var S = { sap: 0, amber: 0, totalAmber: 0, auto: false, autoUnlocked: false,
-            upg: { u1: false, u2: false, u3: false } };
-  var UPGS = [
-    { id: "u1", name: "Sunlight",  cost: 1, mult: 2 },
-    { id: "u2", name: "Rainwater", cost: 3, mult: 3 },
-    { id: "u3", name: "Deep roots", cost: 8, mult: 4 }
-  ];
-  var MILESTONE_AT = 12, AUTO_AT = 100;
-  var $ = function (id) { return document.getElementById(id); };
-  var last = Date.now();
-
-  function mult() { return UPGS.reduce(function (m, u) { return m * (S.upg[u.id] ? u.mult : 1); }, 1); }
-  function gain() { return (1 + 0.5 * S.amber) * mult(); }
-  function prestigeGain() { return Math.floor(Math.sqrt(S.sap / 10)); }
-  function fmt(n) {
-    if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
-    if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
-    if (n >= 1e4) return (n / 1e3).toFixed(1) + "k";
-    if (n >= 100) return String(Math.floor(n));
-    return n.toFixed(1);
-  }
-
-  function buildUpgrades() {
-    var row = $("upgRow");
-    UPGS.forEach(function (u) {
-      var b = document.createElement("button");
-      b.className = "upg"; b.id = "btn-" + u.id;
-      b.innerHTML = "<b>" + u.name + "</b><small></small>";
-      b.addEventListener("click", function () {
-        if (S.upg[u.id] || S.amber < u.cost) return;
-        S.amber -= u.cost; S.upg[u.id] = true; render();
-      });
-      row.appendChild(b);
-    });
-  }
-
-  function doPrestige() {
-    var g = prestigeGain();
-    if (g < 1) return;
-    S.amber += g; S.totalAmber += g; S.sap = 0;
-    if (!S.autoUnlocked && S.totalAmber >= MILESTONE_AT) S.autoUnlocked = true;
-    render();
-  }
-
-  function render() {
-    var g = prestigeGain();
-    var btn = $("prestigeBtn");
-    if (g >= 1) {
-      btn.disabled = false; btn.className = "prestige-btn ready";
-      btn.textContent = "Prestige for +" + g + " amber";
-    } else {
-      btn.disabled = true; btn.className = "prestige-btn";
-      btn.textContent = "Prestige";
-    }
-    var unlocked = S.totalAmber > 0;
-    var aNode = $("aNode");
-    aNode.className = unlocked ? "node" : "node locked";
-    $("aCircle").textContent = unlocked ? "A" : "?";
-    $("aName").textContent = unlocked ? "amber" : "locked";
-    $("aAmt").textContent = unlocked ? fmt(S.amber) : "";
-    var p = prestigeGain();
-    var lo = 10 * p * p, hi = 10 * (p + 1) * (p + 1);
-    $("sBar").style.width = (Math.max(0, Math.min(1, (S.sap - lo) / (hi - lo))) * 100) + "%";
-    $("aBar").style.width = (Math.min(1, S.totalAmber / MILESTONE_AT) * 100) + "%";
-    UPGS.forEach(function (u) {
-      var b = $("btn-" + u.id);
-      var small = b.querySelector("small");
-      if (S.upg[u.id]) { b.className = "upg owned"; small.textContent = "owned"; }
-      else {
-        b.className = "upg";
-        small.textContent = "cost " + u.cost + " amber" + (S.amber >= u.cost ? "" : " - need " + fmt(u.cost - S.amber));
+      } else {
+        done();
       }
     });
-    if (S.autoUnlocked) {
-      $("mDesc").textContent = "auto-prestige at " + AUTO_AT + " sap";
-      var ab = $("autoBtn");
-      ab.hidden = false;
-      ab.textContent = S.auto ? "AUTO ON" : "AUTO OFF";
-      ab.className = "auto-toggle" + (S.auto ? " on" : "");
-    }
-  }
-
-  function tick() {
-    var now = Date.now(), dt = Math.min(1, (now - last) / 1000); last = now;
-    S.sap += gain() * dt;
-    if (S.autoUnlocked && S.auto && S.sap >= AUTO_AT) doPrestige();
-    $("sapCount").textContent = fmt(S.sap);
-    $("sAmt").textContent = fmt(S.sap);
-    $("sapRate").textContent = gain().toFixed(1) + " / sec";
-    render();
-  }
-
-  $("prestigeBtn").addEventListener("click", doPrestige);
-  $("autoBtn").addEventListener("click", function () { S.auto = !S.auto; render(); });
-  buildUpgrades();
-  render();
-  setInterval(tick, 100);
+  });
 })();
 </script>
 </body>

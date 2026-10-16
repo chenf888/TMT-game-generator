@@ -146,6 +146,38 @@
  *     N-STATICMAX   (FAIL) a static layer with no canBuyMax(): getResetGain() short-circuits to 1
  *                   (game.js:21) and doReset() clamps the payout to 1 (game.js:186), so the layer
  *                   banks exactly ONE floor per prestige and its whole upgrade ladder is dead.
+ * Phase-⑨ structural rules (2026-10-17) — from three generated games read against their own
+ *   design briefs (The True Color Tree, The Truth Tower, The Ties-Tree). Each of these defects
+ *   shipped with 0 FAIL from all 68 rules above, because none is visible in the source of a
+ *   single component: they are properties of a whole layer, of a whole file set, or of the
+ *   economy's trajectory (that last class is out of a text checker's reach by construction —
+ *   see assets/harness/ and references/design/14).
+ *     N-FACTORY     (FAIL) addLayer()'s second argument is not an object literal. Every rule
+ *                   resolves a layer by locating the `{` after the call, so a factory or a
+ *                   shared object reference makes row/startData/components invisible and the
+ *                   checker approves an empty shell (True Color Tree: 8 unrelated FAILs)
+ *     N-COMPID      (FAIL) two components of one layer share an id. Ids are object keys, so a
+ *                   duplicate is last-wins: the earlier definition is unreachable and the
+ *                   engine reports nothing (Truth Tower: `row*10+col` collides at col ≥ 10)
+ *     N-ALLOWSMALL  (WARN) a value below 1e-4 exists but modInfo.allowSmall is unset, so
+ *                   format() prints the game's opening currency as "0.00" (Truth Tower: 1e-64)
+ *     N-AUTOFLAG    (FAIL) a layer's text promises an automation flag that no code grants to
+ *                   that layer — the milestone sells a chore it never removes (True Color
+ *                   Tree: played by hand end to end; Truth Tower: the ladder was dead code)
+ *     N-COMPSTYLETHIS (FAIL) componentStyles reads this.id/this.layer. It runs once per LAYER,
+ *                   so `this` carries no component id and the call throws on the first tick
+ *                   (The Ties-Tree)
+ *     N-EFFECTHONEST (WARN, per layer) a displayed multiplier (×1.5 / 1.5x / ^1.5) appears
+ *                   nowhere in the layer's code — the readout and the applied value differ
+ *                   (Truth Tower: ×1.5 shown against ×2.5 applied; a buyable showed x^1.5
+ *                   against an applied x^1.6)
+ *     N-MAINSTR     (WARN, aggregated) a non-English language mode is declared but layers still
+ *                   render the stock "main-display", which hard-codes You have / (x/sec)
+ *                   (The Ties-Tree: the one string the translator cannot reach)
+ *     N-SELFTOTAL   (extended, see above) the buyable form of the same budget: a buyable whose
+ *                   effect and cost both grow multiplicatively per purchase has feedback
+ *                   exponent ln(effect)/ln(cost); at ≥1 it funds its own next purchase
+ *                   (True Color Tree: income ∝ income^≈2, peaked at 1e73, beaten in 2.5 h)
  *   Type-profile rules (SKILL.md Q4b, assets/type-registry.json, references/design/13).
  *   These run ONLY when a type is declared, via .tmt-profile.json in the game folder
  *   (written by scaffold.js --type) or the --profile flag; --no-profile turns them off.
@@ -1333,16 +1365,37 @@ function layerUpgradeSpans(rec, L, field) {
 // effect reading player[this.layer].points and raising to power p is an independent
 // self-loop multiplicative zone; the zones SUM, and Σp ≥ 1 makes prestige gains compound
 // superlinearly per reset — numbers explode within the layer (The Yeast Tree y: 0.5+0.25+0.5).
+//
+// Two forms, one budget:
+//   (a) Σp across the layer's own upgrade effects (original rule).
+//   (b) The buyable form, which the original rule could not see because it only walked the
+//       `upgrades` collection: a buyable whose effect multiplies by E per purchase while each
+//       purchase costs C times more has feedback exponent ln(E)/ln(C). At ≥ 1 it funds its own
+//       next purchase and income compounds as income^(ln E / ln C). The True Color Tree shipped
+//       E = 1.4–2.0 against C = 2–3, reached income ∝ income^≈2 and 1e73, and was finished in
+//       2.5 h (07 Part F13).
 {
+    const powBaseOf = (body, amt) => {
+        let m = body.match(new RegExp("Decimal\\s*\\.\\s*pow\\s*\\(\\s*([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*[^)]*" + amt));
+        if (m) return parseFloat(m[1]);
+        m = body.match(new RegExp("new\\s+Decimal\\s*\\(\\s*([0-9]+(?:\\.[0-9]+)?)\\s*\\)\\s*\\.\\s*pow\\s*\\(\\s*[^)]*" + amt));
+        if (m) return parseFloat(m[1]);
+        m = body.match(new RegExp("(?<![\\w.$)])([0-9]+(?:\\.[0-9]+)?)\\s*\\.\\s*pow\\s*\\(\\s*[^)]*" + amt));
+        if (m) return parseFloat(m[1]);
+        return null;
+    };
+    const AMT = "(?:amount|getBuyableAmount)";
     for (const L of layers) {
         if (L.isSide || L.isUtility) continue;
         const rec = fileRecs.get(L.file);
         const gmM = L.code.match(/\bgainMult\s*\(/);
         const gmBody = gmM ? functionBody(L.code, gmM.index) : "";
         if (!gmBody) continue;
+        const idEsc = escapeRe(L.id);
+
+        // (a) self-scaling upgrade effects wired into the layer's own gainMult
         let sum = 0;
         const parts = [];
-        const idEsc = escapeRe(L.id);
         const selfRe = new RegExp("player\\s*\\[\\s*this\\s*\\.layer\\s*\\]\\s*\\.\\s*points|player\\s*\\.\\s*" + idEsc + "\\s*\\.\\s*points");
         for (const s of layerUpgradeSpans(rec, L)) {
             const selfIdx = s.text.search(selfRe);
@@ -1361,7 +1414,29 @@ function layerUpgradeSpans(rec, L, field) {
         else if (sum >= 0.75)
             add(WARN, "N-SELFTOTAL", L.file, L.start, `layer "${L.id}" wires ${sum.toFixed(2)} total self-scaling exponent into its own gainMult (${parts.join(", ")}) — close to the compounding threshold`, "Prefer Σ ≤ 0.6: soften one zone (lower exponent, tighter softcap) or make it cross-resource.");
         else if (sum > 0)
-            pass("N-SELFTOTAL", `layer "${L.id}" self-scaling Σ${sum.toFixed(2)} ok`);
+            pass("N-SELFTOTAL", `layer "${L.id}" self-scaling upgrade Σ${sum.toFixed(2)} ok`);
+
+        // (b) buyable feedback exponent ln(effect base) / ln(cost base)
+        let buyablePolicy = 0;
+        for (const b of layerUpgradeSpans(rec, L, "buyables")) {
+            const costIdx = b.text.search(/(?<![A-Za-z0-9_$.])cost\s*\(/);
+            const effIdx = b.text.search(/(?<![A-Za-z0-9_$.])effect\s*\(/);
+            if (costIdx < 0 || effIdx < 0) continue;
+            const costBody = functionBody(b.text, costIdx);
+            const effBody = functionBody(b.text, effIdx);
+            if (!costBody || !effBody) continue;
+            const costBase = powBaseOf(costBody, AMT);
+            const effBase = powBaseOf(effBody, AMT);
+            if (costBase === null || effBase === null || costBase <= 1 || effBase <= 1) continue;
+            const ratio = Math.log(effBase) / Math.log(costBase);
+            if (ratio < 0.8) continue;
+            buyablePolicy++;
+            if (ratio >= 1)
+                add(FAIL, "N-SELFTOTAL", L.file, b.start, `buyable ${b.key} of layer "${L.id}" multiplies its effect by ×${effBase} per purchase while each purchase costs ×${costBase} — the feedback exponent is ln(${effBase})/ln(${costBase}) = ${ratio.toFixed(2)} ≥ 1, so the buyable funds its own next purchase and income compounds as income^${ratio.toFixed(2)}. A real build reached 1e73 this way and was beaten in 2.5 h.`, `Keep ln(effect)/ln(cost) comfortably below 1 — flatten the per-purchase effect (the fixed build used ×1.15–1.30) or raise the cost ratio. This is the buyable form of the same self-scaling budget as the upgrade rule above (07 Part F13).`);
+            else
+                add(WARN, "N-SELFTOTAL", L.file, b.start, `buyable ${b.key} of layer "${L.id}" has feedback exponent ln(${effBase})/ln(${costBase}) = ${ratio.toFixed(2)} — under 1 but close enough to compound noticeably per purchase`, "Aim for ≤ 0.6 unless the buyable is deliberately the game's engine, and softcap it if it is.");
+        }
+        if (buyablePolicy === 0) pass("N-SELFTOTAL", `layer "${L.id}" buyable feedback exponents are sub-critical`);
     }
 }
 
@@ -2066,6 +2141,244 @@ function resolveKeepList(doResetBody) {
             "Add `canBuyMax() { return player[this.layer].unlocked }` (or any condition you like). Until it exists the layer's whole upgrade ladder is unreachable, because the floors it prices them in never accumulate.");
     }
     if (hits === 0) pass("N-STATICMAX", "every static layer can bank more than one floor per prestige");
+}
+
+// ===========================================================================
+// phase-⑨ structural rules (2026-10-17) — from three generated games
+// (The-True-Color-Tree, The-Truth-Tower, The-Ties-Tree) read against their own
+// design briefs. Every defect below shipped with 0 FAIL from all 68 rules above,
+// because none of them is visible in the source of a single component: they are
+// properties of a whole layer, of a whole file set, or of the economy's
+// trajectory over time. The last class is out of a text checker's reach by
+// construction — that is what references/design/14 and the bundled harness are for.
+//
+//   N-FACTORY     (FAIL) addLayer()'s second argument is not an object literal
+//                 (The True Color Tree: 8 unrelated FAILs from one factory call)
+//   N-COMPID      (FAIL) two components of one layer share an id. Ids are object
+//                 keys, so a duplicate is silently last-wins — the earlier
+//                 definition is unreachable and the engine reports nothing
+//                 (The Truth Tower: a 15-column id scheme collided at col ≥ 10)
+//   N-ALLOWSMALL  (WARN) a value below 1e-4 exists but modInfo.allowSmall is unset,
+//                 so format() prints "0.00" for the game's opening currency
+//                 (The Truth Tower starts at 1e-64)
+//   N-AUTOFLAG    (FAIL) a layer's text promises an automation flag that no code
+//                 ever grants to that layer — the milestone sells a chore that is
+//                 never removed (True Color Tree: the whole game was played by
+//                 hand; Truth Tower: the ladder was dead code)
+//   N-COMPSTYLETHIS (FAIL) componentStyles reads this.id/this.layer. It is
+//                 evaluated once per LAYER, so `this` carries no component id and
+//                 the call throws on the first tick (The Ties-Tree)
+//   N-EFFECTHONEST (WARN, per layer) a displayed multiplier literal appears
+//                 nowhere in the layer's code — the readout and the applied value
+//                 come from different expressions (The Truth Tower: ×1.5 shown,
+//                 ×2.5 applied; a buyable showed x^1.5 against an applied x^1.6)
+//   N-MAINSTR     (WARN, per layer) a non-English language mode is declared but
+//                 the layer still renders the stock "main-display", which
+//                 hard-codes the English words You have / (x/sec)
+//                 (The Ties-Tree: untranslatable engine chrome)
+//   N-SELFTOTAL   (extended) the buyable form of the same budget: a buyable whose
+//                 effect and cost both grow multiplicatively per purchase has a
+//                 feedback exponent ln(effect)/ln(cost); at ≥1 it funds its own
+//                 next purchase (The True Color Tree: income ∝ income^2, 1e73)
+// ===========================================================================
+
+// Code-only slice of a record: `clean` with every string/comment char blanked.
+// `clean` keeps string bodies (only comments are overwritten), so a rule that
+// wants "identifiers and operators only" must go through this.
+function codeOnly(rec, from, to) {
+    let out = "";
+    const stop = Math.min(to, rec.clean.length);
+    for (let i = from; i < stop; i++) out += rec.mask[i] === 0 ? rec.clean[i] : " ";
+    return out;
+}
+
+const ID_COLLECTIONS = ["upgrades", "buyables", "milestones", "challenges", "achievements", "clickables"];
+
+// --- N-FACTORY: the layer body must be an inline object literal ---------------
+// Everything this file does — row, startData, components, wiring — starts from
+// "find the `{` after L.start". A layer built as addLayer("x", factory(...)) or
+// addLayer("x", SOME_SHARED_OBJECT) has no object literal in the call, so the
+// layer silently becomes an empty shell for every rule below and above.
+{
+    let hits = 0;
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        for (const c of extractCalls(rec, "addLayer")) {
+            const argM = c.code.match(/^\s*addLayer\s*\(\s*["'`][^"'`]*["'`]\s*,\s*([\s\S]*)$/);
+            if (!argM) continue;
+            const rest = argM[1].replace(/^\s+/, "");
+            if (rest.startsWith("{")) continue;
+            hits++;
+            const callee = (rest.match(/^([A-Za-z_$][\w$.]*)\s*\(/) || [null, "…"])[1];
+            add(FAIL, "N-FACTORY", f, c.start,
+                `addLayer("${c.id}") receives its definition as "${rest.slice(0, 24).replace(/\s+/g, " ")}…" instead of an inline object literal${callee !== "…" ? ` (\`${callee}()\`)` : ""} — every structural rule resolves a layer by locating the \`{\` after the call, so this layer's row, startData, components and wiring are all invisible, and the checker silently approves an empty game.`,
+                "Inline the layer: addLayer(\"x\", { … }). If you want to share a shape, run the factory at BUILD time and emit inlined source — a runtime factory is opaque to every tool, including the load-time harness (07 Part F11).");
+        }
+    }
+    if (hits === 0) pass("N-FACTORY", "every addLayer() is defined with an inline object literal");
+}
+
+// --- N-COMPID: component ids are object keys and must be unique per layer -----
+{
+    let hits = 0;
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        for (const field of ID_COLLECTIONS) {
+            const spans = layerUpgradeSpans(rec, L, field);
+            if (spans.length < 2) continue;
+            const first = new Map();
+            for (const s of spans) {
+                if (first.has(s.key)) {
+                    hits++;
+                    add(FAIL, "N-COMPID", L.file, s.start,
+                        `layer "${L.id}" declares ${field} id "${s.key}" twice — component ids are object keys, so the second definition silently wins and the first is unreachable. The engine reports nothing: the layer just has one fewer component than you wrote.`,
+                        `Give every component in one layer a unique id. Note that \`row * 10 + col\` collides as soon as a row has 10 or more columns (row 0 col 10 == row 1 col 0) — keep columns single-digit, or move to a wider base such as \`row * 100 + col\` (07 Part F5).`);
+                } else first.set(s.key, s.start);
+            }
+        }
+    }
+    if (hits === 0) pass("N-COMPID", "no component id is declared twice inside one layer");
+}
+
+// --- N-ALLOWSMALL: sub-1e-4 values need modInfo.allowSmall --------------------
+{
+    const TINY_RE = /new\s+Decimal\s*\(\s*["'`]?\s*(?:1e-(?:[5-9]|\d{2,})|0\.0{4,}[0-9]*)/;
+    const TINY_POW_RE = /Decimal\s*\.\s*pow\s*\(\s*10\s*,\s*-\s*(?:[5-9]|\d{2,})/;
+    const allowed = !!(modInfo && /\ballowSmall\s*:/.test(modInfo.code));
+    if (allowed) pass("N-ALLOWSMALL", "modInfo.allowSmall is set — small values render as themselves");
+    else {
+        let hit = null;
+        for (const f of allModderCandidates) {
+            const rec = loadRec(f);
+            for (const [re, kind] of [[TINY_RE, "literal"], [TINY_POW_RE, "computed"]]) {
+                const m = rec.clean.match(re);
+                if (m) { hit = { file: f, idx: m.index, lit: m[0].replace(/\s+/g, " ").trim(), kind }; break; }
+            }
+            if (hit) break;
+        }
+        if (hit)
+            add(WARN, "N-ALLOWSMALL", hit.file, hit.idx,
+                `the economy can hold values below 1e-4 (${hit.kind}: \`${hit.lit}\`) but modInfo.allowSmall is not set — format() renders anything under 1e-4 as "0.00", so the player watches a zero for the opening of the game.`,
+                "Set `allowSmall: true` in modInfo (07 Part F1). A game that starts at 1e-64 or lets a currency decay toward zero needs it; nothing else does.");
+        else pass("N-ALLOWSMALL", "no sub-1e-4 value — format() will not print 0.00");
+    }
+}
+
+// --- N-AUTOFLAG: an automation promise must be granted by code -----------------
+// The text is the contract ("this milestone automates the layer") and the flag is
+// the implementation. A layer that names a flag in its own strings must define it
+// on itself or have it granted from anywhere — otherwise the milestone sells a
+// chore that is never removed, and no engine error tells you.
+{
+    const AUTO_FLAGS = ["autoPrestige", "autoUpgrade", "passiveGeneration", "resetsNothing"];
+    let hits = 0;
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const text = stringLiterals(rec, L.start, L.end).join(" ¦ ");
+        if (!text) continue;
+        const ownCode = codeOnly(rec, L.start, L.end);
+        const idEsc = escapeRe(L.id);
+        for (const flag of AUTO_FLAGS) {
+            if (!new RegExp("\\b" + flag + "\\b").test(text)) continue;      // the layer never promises it
+            const definedHere = new RegExp("(?:^|[,{\\n])\\s*" + flag + "\\s*[(:]").test(ownCode);
+            if (definedHere) continue;
+            // granted from anywhere: tmp.<id>.flag / player.<id>.flag / tmp[<id>].flag / …
+            const grantRe = new RegExp(
+                "(?:tmp|player)\\s*(?:\\.\\s*" + idEsc + "|\\[\\s*[\"'`]" + idEsc + "[\"'`]\\s*\\])\\s*\\.\\s*" + flag + "\\b");
+            let granted = false;
+            for (const f of allModderCandidates) { if (grantRe.test(loadRec(f).clean)) { granted = true; break; } }
+            if (granted) continue;
+            hits++;
+            add(FAIL, "N-AUTOFLAG", L.file, L.start,
+                `layer "${L.id}" promises "${flag}" in its text, but no mod file grants it to this layer — it is neither defined as a layer property nor assigned anywhere as tmp/player["${L.id}"].${flag}. The milestone advertises automation that does not exist, and the player keeps doing the chore by hand.`,
+                `Either set the flag where the milestone completes (\`onComplete() { tmp["${L.id}"].${flag} = true }\`) or define it on the layer and read the milestone (\`${flag}() { return hasMilestone("${L.id}", n) }\`). If the text is not a promise, reword it — a flag name in the description is a contract with the player.`);
+        }
+    }
+    if (hits === 0) pass("N-AUTOFLAG", "every automation promise in the text is backed by code that grants it");
+}
+
+// --- N-COMPSTYLETHIS: componentStyles runs once per layer, not per component ---
+{
+    let hits = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const mask = rec.mask.slice(L.start, L.end);
+        for (const m of codeMatches(L.code, mask, /componentStyles\s*[:(]/g)) {
+            const abs = L.start + m.index;
+            let brace = L.code.indexOf("{", m.index);
+            if (brace < 0) continue;
+            const open = L.start + brace;
+            const close = matchBracket(rec.clean, rec.mask, open);
+            if (close < 0) continue;
+            if (!/this\s*\.\s*(?:id|layer)\b/.test(codeOnly(rec, open, close))) continue;
+            hits++;
+            add(FAIL, "N-COMPSTYLETHIS", L.file, abs,
+                `layer "${L.id}" reads this.id / this.layer inside componentStyles — componentStyles is evaluated ONCE PER LAYER, never per component, so \`this\` is not a component and the call throws on the first tick (a real generated game died here).`,
+                "Delete it. Uncompleted achievements are already greyed and desaturated by the engine's own achievementStyle() (technical/displays.js:39), which is the intended presentation — a per-component style object belongs on the component, not in componentStyles (07 Part F8).");
+        }
+    }
+    if (hits === 0) pass("N-COMPSTYLETHIS", "no componentStyles hook depends on a per-component `this`");
+}
+
+// --- N-EFFECTHONEST: the displayed multiplier must be the applied one ----------
+// Restricted on purpose to a multiplier SHAPE in effectDisplay — ×1.5 / 1.5x / ^1.5.
+// A bare number in a description is usually prose ("unlocks at 10"), and flagging
+// those produced false positives; a displayed multiplier is always a claim.
+{
+    const MULT_RE = /[×xX^*]\s*([0-9]+(?:\.[0-9]+)?)|([0-9]+(?:\.[0-9]+)?)\s*[×xX](?![0-9A-Za-z_])/g;
+    let layersHit = 0;
+    for (const L of layers) {
+        const rec = fileRecs.get(L.file);
+        if (!rec) continue;
+        const layerCode = codeOnly(rec, L.start, L.end);
+        const offenders = [];
+        for (const field of ["upgrades", "buyables", "achievements", "challenges"]) {
+            for (const s of layerUpgradeSpans(rec, L, field)) {
+                const dispRel = s.text.search(/\beffectDisplay\s*[:(]/);
+                if (dispRel < 0) continue;
+                const dispAbs = s.start + dispRel;
+                const shown = stringLiterals(rec, dispAbs, s.end).join(" ");
+                if (!shown) continue;
+                const nums = [...shown.matchAll(MULT_RE)].map((m) => m[1] || m[2]).filter(Boolean);
+                if (!nums.length) continue;
+                const code = codeOnly(rec, s.start, s.end);
+                for (const n of new Set(nums)) {
+                    const numRe = new RegExp("(?:^|[^0-9.])" + escapeRe(n) + "(?![0-9])");
+                    if (numRe.test(code) || numRe.test(layerCode)) continue;
+                    offenders.push(`${field} ${s.key} shows ×${n}`);
+                }
+            }
+        }
+        if (!offenders.length) continue;
+        layersHit++;
+        const ex = offenders.slice(0, 3).join("; ");
+        add(WARN, "N-EFFECTHONEST", L.file, L.start,
+            `layer "${L.id}": ${offenders.length} displayed multiplier(s) appear nowhere in the layer's code (${ex}${offenders.length > 3 ? "; …" : ""}) — the readout and the applied value come from different expressions, so the player is told a number the game does not use.`,
+            "Return the value you actually apply: `effectDisplay() { return format(this.effect()) + \"x\" }`. A real build displayed ×1.5 while the consumer applied ×2.5, and a buyable showed x^1.5 against an applied x^1.6 — the author rule is report the value before purchase (handbook 12 §3).");
+    }
+    if (layersHit === 0) pass("N-EFFECTHONEST", "every displayed multiplier is backed by the layer's own code");
+}
+
+// --- N-MAINSTR: a translated game must not render the engine's English chrome ---
+{
+    const declared = allModderCandidates.some((f) => /window\s*\.\s*chinesemode|LANG_PACKS|window\s*\.\s*LANG_/.test(loadRec(f).clean));
+    if (!declared) pass("N-MAINSTR", "no non-English language mode — the engine's own chrome is fine");
+    else {
+        const hits = [];
+        for (const L of layers) {
+            if (L.isUtility) continue;
+            if (/"main-display"|'main-display'/.test(L.code)) hits.push(L.id);
+        }
+        if (!hits.length) pass("N-MAINSTR", "no layer renders the stock main-display");
+        else add(WARN, "N-MAINSTR", layers[0].file, null,
+            `${hits.length} layer(s) still render the stock "main-display" (${hits.slice(0, 5).join(", ")}${hits.length > 5 ? ", …" : ""}) in a game that declares a non-English language mode — that component hard-codes the English words "You have" and "(x/sec)", so the layer tab mixes languages no matter how completely you translated your own strings.`,
+            "Override mainDisplay (or supply mainAmount()) with the localized sentence — the stock component cannot be translated without editing engine files (07 Part F7, handbook 15 §2).");
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 let modInfo = {
     name: "Fixture Ghost",
     id: "fixture-ghost-test-bbbbbb",
-    author: "TMT-Skill",
+    author: "TMT GG",
     pointsName: "points",
     modFiles: ["layers.js", "tree.js"],
     discordName: "",

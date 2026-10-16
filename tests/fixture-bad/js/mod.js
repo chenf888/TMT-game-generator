@@ -39,9 +39,9 @@
 //   [N-AUTOWIPE]      [WARN] layer "v" keeps an "auto" flag that nothing ever reads
 let modInfo = {
     name: "Fixture Bad",
-    author: "TMT-Skill",
+    author: "TMT GG",
     pointsName: "points",
-    modFiles: ["layers.js", "tree.js"],
+    modFiles: ["layers.js", "defects.js", "tree.js"],
     discordName: "",
     discordLink: "",
     initialStartPoints: 10,

@@ -5,11 +5,16 @@
 > 329 real TMT games** — 1,156 layers, 29,141 components, 36 MB of source, each figure
 > traceable to file + line.
 >
-> **Provenance:** full numeric archive at `E:\Idle-Skill\archive\` —
+> **Provenance:** every figure below comes from a full numeric archive built from the
+> 329-file corpus. The archive is **not shipped with this skill** (it is ~320 MB); it lives
+> beside the skill in the author's workspace and contains:
 > `TMT_全量数值档案_Vol01–05.md` (per-file, all raw source),
 > `TMT_数值数据库.json` (machine-readable, 143 MB),
 > `TMT_生成式AI增量游戏数值设计指南.md` (the full write-up),
 > `TMT_遗漏与不确定项.md` (what could NOT be determined, and why).
+> The numbers that matter at generation time are mirrored into
+> `assets/balance-defaults.json` → `corpusBaselines` and `assets/fun-quota.json`, so
+> nothing here requires the archive to be present.
 > Machine-readable subset: `assets/balance-defaults.json` → `corpusBaselines`.
 >
 > **The one-line lesson:** in a real TMT game the numbers do not live on the components.
@@ -229,6 +234,47 @@ main layer ships at least one (enforced by `D-EFFECTSHAPE`).
 
 ---
 
+## §4.1 Row pacing — the one number that decides the whole game's length
+
+Corpus statistics describe single components. **Pacing is a ratio between two of them**, and it
+is the only quantity that determines how long the game takes:
+
+```
+time multiplier per row  =  requires step  ÷  output step
+```
+
+Where **requires step** is how much each deeper row's `requires` rises (corpus band ×10–×100,
+median ×25) and **output step** is how much more the previous layer's output rises per row. If
+output rises faster than the price, each row takes *less* time and the game collapses; if it
+rises slower, each row takes *more* time and the tail runs to decades.
+
+**Worked failures, both from real generated games:**
+
+| requires step | output step | per-row time | outcome |
+|---|---|---|---|
+| ×25 | ×16 | **×1.5625** | 22 rows × 1.5625 ≈ 1e5× total — "months", not 50 hours |
+| ×25 | ×2/×4/×8/×20 per band | **×1.6e5 by row 22** | production outruns the ladder by 1e43 |
+| ×25 | ×2 (flat) | **×12.5** | too slow even to be worth playing |
+| ×18 | ×16 | **×1.125** | the shape that worked: ~1.5–2× longer per row, compounding gently |
+
+**Generation target: per-row time multiplier between ×1.1 and ×1.6.** Get there by choosing the
+`requires` ratio first, then flattening the per-row output multipliers to sit *just under* it.
+This is the fix that mattered most in the postmortem the corpus rules came from — it came from
+flattening multipliers that had been *increasing by band* (×2/×4/×8/×20) to a flat ×2, and
+dropping the requires ratio from ×25 to ×18.
+
+**Compute this during design, not during checking.** A static analyser cannot see your output
+step (it spans layers, generator constants and upgrade wiring), which is why there is no rule id
+for this — it belongs in the brief, as two named constants with the resulting per-row multiplier
+written next to them. If your generator exposes them (e.g. `ROW_RATIO` and a per-arm multiplier),
+the check is one division, done once at generation time.
+
+**Then measure.** Extrapolation from the formula is a lower bound, not a result — a headless run
+that ignores trials, shops and achievements will always under-report. Fix the target total play
+time first, then tune these two constants until the simulation lands on it.
+
+---
+
 ## §5 Softcaps
 
 **Only 69 of 1,156 layers (6.0%) define a `softcap`.** Two forms in the wild:
@@ -302,10 +348,11 @@ a few `cost(x)` bodies; do not re-implement the engine's ladder.
 | File | Use |
 |---|---|
 | `assets/balance-defaults.json` → `corpusBaselines` | machine-readable corpus figures used by Stage 2 / Stage 6 |
-| `assets/fun-quota.json` → `corpusEffectShares`, `staticCheckThresholds` | effect-shape quotas + the thresholds mirrored in `static_checks.js` |
-| `E:\Idle-Skill\archive\TMT_全量数值档案_INDEX.md` | per-file index of all 329 files with component counts |
-| `E:\Idle-Skill\archive\TMT_数值数据库.json` | every component with cost/effect/unlock, line numbers, and full raw source |
-| `E:\Idle-Skill\archive\TMT_遗漏与不确定项.md` | what could NOT be determined (14 runtime-generated collections, 153 factory-built components, the out-of-file effects) |
+| `assets/fun-quota.json` → `corpusEffectShares`, `staticCheckThresholds` | effect-shape quotas + the thresholds `static_checks.js` reads **at run time** |
+| `assets/type-registry.json` | per-type corpus shares, contracts and rule exemptions (Q4b) |
+| *archive, not shipped:* `TMT_全量数值档案_INDEX.md` | per-file index of all 329 files with component counts |
+| *archive, not shipped:* `TMT_数值数据库.json` | every component with cost/effect/unlock, line numbers, and full raw source |
+| *archive, not shipped:* `TMT_遗漏与不确定项.md` | what could NOT be determined (14 runtime-generated collections, 153 factory-built components, the out-of-file effects) |
 
 ## §9 Dataset notes
 

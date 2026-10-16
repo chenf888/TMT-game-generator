@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * run_tests.js — smoke tests for the TMT-Skill toolchain (phase ⑤ acceptance).
+ * run_tests.js — smoke tests for the tmt-game-generator toolchain.
  *
  *   1. fixture-good : static_checks.js must report 0 FAIL and 0 WARN.
  *   2. fixture-bad  : every injected defect must be caught by its tagged rule.
@@ -85,6 +85,21 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
                                // resetsNothing at M2, so the automation wipes its own food
             "N-STATICMAX",     // layer f: static with no canBuyMax() — banks exactly 1 floor
                                // per prestige (game.js:21/:186)
+            // phase-⑨ structural rules (2026-10-17, from three generated games):
+            "N-FACTORY",       // defects.js: addLayer("q", shimLayerDef()) — the body is passed
+                               // by reference, so the layer is invisible to every rule
+            "N-COMPID",        // defects.js: layer k declares upgrades id 12 twice — object
+                               // keys are last-wins, so the first definition is unreachable
+            "N-COMPSTYLETHIS", // defects.js: layer k reads this.id inside componentStyles,
+                               // which runs once per LAYER and so has no component id
+            "N-SELFTOTAL",     // defects.js: layer k buyable 11 has feedback exponent
+                               // ln(2)/ln(2) = 1 — it funds its own next purchase
+            "N-AUTOFLAG",      // layers.js layer c promises autoUpgrade and defects.js layer k
+                               // promises autoPrestige; no code grants either
+            // D-STARTDATA appears twice on purpose — layers.js layer "a" lacks `unlocked`, and
+            // defects.js layer "q" has no startData AT ALL because it lives inside the factory.
+            // That second instance is N-FACTORY's cascade, and the cascade is the point: one
+            // opaque layer blinds every other rule, which is why N-FACTORY is a hard FAIL.
         ];
         const expectedWarns = [
             "M-END-PLACEHOLDER",
@@ -110,6 +125,15 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
                                // "toggleable" wording promises a switch that does not exist
             "N-POINTSWRITE",   // layer c assigns player.c.points in update(), bypassing
                                // addPoints() — the only writer of best/total
+            // phase-⑨ structural rules (2026-10-17):
+            "N-ALLOWSMALL",    // defects.js: layer k prices upgrade 11 at 1e-30 with
+                               // modInfo.allowSmall unset, so format() prints "0.00"
+            "N-EFFECTHONEST",  // defects.js: layer k upgrade 13 displays ×1.5 while its
+                               // effect() applies ×2 — the readout lies
+            "N-MAINSTR",       // defects.js declares window.chinesemode, but five layers
+                               // still render the stock English-only "main-display"
+            "D-ROW-UNSET",     // CASCADE from N-FACTORY: layer q's `row: 4` is inside the
+                               // factory's return value, so the layer source has no row
         ];
         ok(status === 1, "exit code 1 (FAILs present)", `status=${status}`);
         for (const rule of expectedFails)
@@ -145,6 +169,10 @@ console.log("== test 3: scaffold output passes static checks ==");
             ok(status === 0, "scaffolded game exits 0 (only the expected placeholder WARN allowed)", JSON.stringify(fails, null, 2));
             ok(parsed.findings.some((f) => f.rule === "M-END-PLACEHOLDER" && f.level === "WARN"), "placeholder-endgame WARN present as expected pre-generation");
         }
+        // the load-time harness (stage 5.5) must run clean on real scaffold output:
+        // this is what keeps assets/harness/smoke.js from rotting as the template moves
+        const h = spawnSync(process.execPath, [path.join(ROOT, "assets", "harness", "smoke.js"), out], { encoding: "utf8" });
+        ok(h.status === 0, "harness smoke.js reports 0 FAIL on scaffold output", (h.stdout || h.stderr || "").slice(-600));
     }
     fs.rmSync(out, { recursive: true, force: true });
 }

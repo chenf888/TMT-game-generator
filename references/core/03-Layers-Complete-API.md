@@ -131,7 +131,7 @@ cost = requires × base^(amt^exponent / gainExp), at least `requires`, ceil if r
 
 | Feature | Label | Meaning |
 |---|---|---|
-| `canBuyMax()` | **sometimes required** | Static layers: whether buying max is allowed. |
+| `canBuyMax()` | **required for static** | Static layers: whether buying max is allowed. Without it the layer banks exactly 1 floor per prestige (`game.js:21`) and its whole upgrade ladder is unreachable — see §4.1. |
 | `onPrestige(gain)` | optional | Runs right before currency is granted on prestige (secondary resources, recalculation). |
 | `resetDescription` | optional | Replaces `"Reset for "` on the prestige button. |
 | `prestigeButtonText()` | **sometimes required** | Full custom prestige-button text (HTML allowed). Required for custom-type layers. `tmp[layer].resetGain` and `tmp[layer].nextAt` are available. |
@@ -176,6 +176,63 @@ doReset(resettingLayer) {
 ### `layerDataReset(layer, keep = [])`
 
 Resets the layer: buyables/clickables/challenges/grid restored to start values, `upgrades`/`milestones`/`achievements` emptied, then the fields named in `keep` restored. Always kept regardless: `unlocked`, `forceTooltip`, `noRespecConfirm`, `prevTab`. Common keep entries: `"points"`, `"best"`, `"total"`, `"upgrades"`, `"milestones"`, `"achievements"`, or custom variable names. To keep only specific upgrades, save them aside, call `layerDataReset`, then reassign `player[layer].upgrades`.
+
+### 4.1 Four reset invariants (each one has broken a shipped game)
+
+These are checked by `N-MSDESTROY`, `N-AUTOWIPE`, `N-POINTSWRITE` and `N-STATICMAX`. Each
+defect below passed every other static rule with 0 FAIL — they only show up when you play far
+enough to hit them.
+
+**1. If any layer's milestones read `best` or `total`, that layer must keep them.**
+`layerDataReset` rebuilds the layer from `startData()`, so an unkept `best`/`total` returns to
+zero. A milestone demanding a lifetime record is then unreachable: the resets you need to reach
+it are what erase it. Score milestones on `.best`, never on live `.points`, and either keep both
+fields in `doReset` or accept that an upper-row prestige erases the ladder:
+
+```js
+doReset(resettingLayer) {
+    if (layers[resettingLayer].row > this.row)
+        layerDataReset(this.layer, ["unlocked", "best", "total"])
+}
+```
+
+A layer with **no `doReset` at all** is wiped with the default keep list — which contains
+neither `best` nor `total`. If such a layer has milestones, it needs an explicit `doReset`.
+
+**2. `autoPrestige`'s condition must imply `resetsNothing`'s.** The engine calls
+`if (tmp[layer].autoPrestige && tmp[layer].canReset) doReset(layer)` straight from the game loop
+(`game.js:369`) — there is **no player toggle in that path**, so automation the player cannot
+stop is automation that must be safe by construction. Inside `doReset`, `resetsNothing()` is the
+only brake before the wipe. Compare the milestone **sets**, not their numbers:
+
+```js
+autoPrestige()  { if (hasMilestone(this.layer, 2) && hasMilestone("sg2", 3)) return true },
+resetsNothing() { if (hasMilestone("sg2", 3)) return true },   // ⊆ the auto gate — correct
+```
+
+Automation that eats the currency its own safety milestone is priced in is not automation. It
+is correct for that automation to arrive **later** — accepting the delay is the price of safety.
+If a keep list preserves an `"auto"` flag, something must actually read `player[layer].auto`;
+otherwise the milestone text must not call the automation "toggleable".
+
+**3. `update()` must not assign `player[layer].points` directly.** `addPoints(layer, gain)` is the
+only writer of `best` and `total`; a direct assignment leaves every milestone scored on those two
+reading a stale number. On a **static** layer it is fatal, because the reset gain is
+`gain.floor().sub(player[layer].points).add(1)` (`game.js:24`) — the counter *is* the banked
+total, so every trickled floor is a floor the next prestige cannot bank. Move the reward to the
+production side instead (a `directMult` upgrade, or a multiplier on the dig; the engine divides
+`directMult` back out in `getNextAt`, so the displayed next-floor price stays honest). Reading is
+fine — TMT's `Decimal` is immutable, so `player.x.points.add(1).pow(0.5)` is a read.
+
+**4. Every static layer needs `canBuyMax()`.** Without it `getResetGain` short-circuits to
+`decimalOne` (`game.js:21`) and `doReset` clamps the payout to 1 (`game.js:186`): the layer banks
+exactly **one** floor per prestige however deep the player goes, and `getNextAt` drops max-buy too
+(`game.js:54`) so the button stops even hinting "Next:". Every upgrade priced in floors is then
+unreachable.
+
+```js
+canBuyMax() { return player[this.layer].unlocked },
+```
 
 ## 5. Automation and per-tick behavior
 
