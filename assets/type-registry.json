@@ -10,7 +10,7 @@
   },
 
   "corpus": {
-    "source": "E:/Idle-Skill/archive/data/tmt_index.json + direct source regex over E:/Idle-Skill/The-Modding-Tree-eg/",
+    "source": "archive data index (tmt_index.json) + direct source regex over the eg-games corpus (The-Modding-Tree-eg)",
     "files": 329,
     "layerBearingFiles": 297,
     "caveats": [

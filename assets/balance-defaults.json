@@ -6,7 +6,7 @@
     "version": "1.2.0 (2026-10-03, phases ⑧ + handbook 12 — added corpusBaselines and authorPacingTargets)"
   },
   "corpusBaselines": {
-    "_source": "Full numeric archive of 329 real TMT games (36,111,909 bytes): 1,156 layers, 29,141 component entities, every entry traceable to file+line. Full guide: E:\\Idle-Skill\\archive\\TMT_生成式AI增量游戏数值设计指南.md. These are DESCRIPTIVE baselines for judging whether generated content looks like real TMT content — not prescriptive targets.",
+    "_source": "Full numeric archive of 329 real TMT games (36,111,909 bytes): 1,156 layers, 29,141 component entities, every entry traceable to file+line. Distilled into references/design/11-Corpus-Numeric-Design.md. These are DESCRIPTIVE baselines for judging whether generated content looks like real TMT content — not prescriptive targets.",
     "corpus": {
       "files": 329,
       "layers": 1156,

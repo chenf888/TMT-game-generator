@@ -62,7 +62,7 @@
     "localWireNote": "D-LOCALWIRE fires when a main layer has >=3 effect-bearing upgrades and its gainMult/gainExp/passiveGeneration/update reference none of them."
   },
   "corpusEffectShares": {
-    "_source": "Full archive of 329 real TMT games, 6,274 effect-bearing upgrades (phase 8, 2026-10-03). E:\\Idle-Skill\\archive\\TMT_生成式AI增量游戏数值设计指南.md section 1.3.",
+    "_source": "Full archive of 329 real TMT games, 6,274 effect-bearing upgrades (phase 8, 2026-10-03). Numeric-archive design guide section 1.3 (distilled into references/design/11-Corpus-Numeric-Design.md).",
     "sharesOfEffectsCarryingUpgrade": {
       "pow": 0.77,
       "add": 0.536,
