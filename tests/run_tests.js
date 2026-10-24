@@ -96,6 +96,9 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
                                // ln(2)/ln(2) = 1 — it funds its own next purchase
             "N-AUTOFLAG",      // layers.js layer c promises autoUpgrade and defects.js layer k
                                // promises autoPrestige; no code grants either
+            // phase-⑪ browser-verified rules (2026-10-24, from three generated games):
+            "C-CONTENTSTR",    // layers.js layer z: a microtab's content: property is the bare
+                               // string "upgrades" — the engine iterates it per character
             // D-STARTDATA appears twice on purpose — layers.js layer "a" lacks `unlocked`, and
             // defects.js layer "q" has no startData AT ALL because it lives inside the factory.
             // That second instance is N-FACTORY's cascade, and the cascade is the point: one
@@ -134,6 +137,9 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
                                // still render the stock English-only "main-display"
             "D-ROW-UNSET",     // CASCADE from N-FACTORY: layer q's `row: 4` is inside the
                                // factory's return value, so the layer source has no row
+            // phase-⑪ browser-verified rules (2026-10-24, from three generated games):
+            "D-UPDATELOCK",    // layers.js layer c: update() calls addPoints with no
+                               // unlocked guard — locked layers run update() too
         ];
         ok(status === 1, "exit code 1 (FAILs present)", `status=${status}`);
         for (const rule of expectedFails)
@@ -173,8 +179,31 @@ console.log("== test 3: scaffold output passes static checks ==");
         // this is what keeps assets/harness/smoke.js from rotting as the template moves
         const h = spawnSync(process.execPath, [path.join(ROOT, "assets", "harness", "smoke.js"), out], { encoding: "utf8" });
         ok(h.status === 0, "harness smoke.js reports 0 FAIL on scaffold output", (h.stdout || h.stderr || "").slice(-600));
+        // the folder must never ship with the engine's README (The Double Ninth Tree did;
+        // scaffold.js now writes a game-first skeleton with the engine text kept below)
+        const rm = fs.readFileSync(path.join(out, "README.md"), "utf8");
+        ok(rm.startsWith("# Smoke Test Game"), "scaffold wrote a game-first README (not the engine's)");
+        ok(/## The Modding Tree \(engine\)/.test(rm), "engine attribution kept below the game README");
+        ok(/TODO\(Stage 3\)/.test(rm) && /TODO\(Stage 6\)/.test(rm), "README placeholders present for Stage 3/6");
     }
     fs.rmSync(out, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+console.log("== test 3b: template boot regression ==");
+{
+    // The Double Ninth Tree (D25): setAttribute("async", "false") creates the boolean
+    // attribute, i.e. async=true — mod files race and layers.js can run before tuning.js.
+    const loader = fs.readFileSync(path.join(ROOT, "template", "js", "technical", "loader.js"), "utf8");
+    ok(!/setAttribute\(\s*["']async["']/.test(loader),
+        "template loader never setAttribute(\"async\") — any string value makes async=true");
+    ok(/script\.async\s*=\s*false/.test(loader), "template loader sets script.async = false (IDL property, in-order execution)");
+    // The Braille Tree §12.1: <body onload="load()"> reads a half-built `layers` object,
+    // because dynamically inserted scripts do not reliably delay window.onload.
+    ok(/oneDone[\s\S]*readyState[\s\S]*start\(\)/.test(loader), "template loader starts load() only after every mod script reports back");
+    const html = fs.readFileSync(path.join(ROOT, "template", "index.html"), "utf8");
+    ok(!/<body[^>]*onload/.test(html), "template index.html does not boot from <body onload>");
+    ok(/js\/technical\/loader\.js/.test(html), "template index.html still boots through js/technical/loader.js");
 }
 
 // ---------------------------------------------------------------------------

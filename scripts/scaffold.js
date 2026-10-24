@@ -328,6 +328,56 @@ function writeProfile(outDir, opts) {
 }
 
 // ---------------------------------------------------------------------------
+// game-first README skeleton (Stage 3 fills the placeholders; Stage 6 re-checks counts)
+// ---------------------------------------------------------------------------
+function writeGameReadme(outDir, opts, modId) {
+    const readmePath = path.join(outDir, "README.md");
+    // The file just copied from the template IS the engine's README — keep it verbatim
+    // below the game section so the attribution never disappears (SKILL.md Stage 3).
+    const engineReadme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8").trim() : "";
+    const name = String(opts.name).replace(/[`\r\n]/g, "").replace(/\|/g, "\\|");
+    const game = [
+        `# ${name}`,
+        ``,
+        `<!-- Game-first README. scaffold.js wrote this skeleton; Stage 3 fills the placeholders`,
+        `     and Stage 6 re-checks the counted totals against the frozen build. The engine README`,
+        `     is kept verbatim below for attribution. -->`,
+        ``,
+        `**${name}** is an incremental game built on [The Modding Tree](https://github.com/Acamaeda/The-Modding-Tree) v2.7.`,
+        ``,
+        `**Play:** open \`index.html\` in a browser — no build step. A local static server is optional`,
+        `(\`npx http-server .\`, \`python -m http.server\`).`,
+        ``,
+        `**Saving:** autosaves to localStorage under the save key derived from \`modInfo.id = "${modId}"\`.`,
+        `Never change the id — changing it erases every save.`,
+        ``,
+        `**One-line design:** <!-- TODO(Stage 3): paste the pitch from design-brief §1 -->`,
+        ``,
+        `**Content totals** <!-- TODO(Stage 6): replace with the counted numbers from the frozen build.`,
+        `     Count by capturing addLayer calls and reading Object.keys(def.upgrades).filter(k => !isNaN(Number(k)))`,
+        `     per layer — brace-counting the generated source over-counts. -->`,
+        ``,
+        `| Layers | Upgrades | Milestones | Challenges | Buyables | Achievements |`,
+        `|---|---|---|---|---|---|`,
+        `| — | — | — | — | — | — |`,
+        ``,
+        `**Where things live:**`,
+        ``,
+        `| Path | Role |`,
+        `|---|---|`,
+        `| \`js/mod.js\` | economy root: getPointGen, isEndgame, displayThings |`,
+        `| \`js/layers/\` | one file per layer (each appended to modInfo.modFiles) |`,
+        `| \`js/tuning.js\` | every pacing constant — the game and tools/simulate.js read one object |`,
+        `| \`tools/\` | smoke.js (load-time harness) + simulate.js (pacing measurement) |`,
+        `| \`design-brief.md\` | the design contract this build implements |`,
+        ``,
+    ].join("\n");
+    const tail = engineReadme ? `\n## The Modding Tree (engine)\n\n${engineReadme}\n` : "";
+    fs.writeFileSync(readmePath, game + tail, "utf8");
+    console.log("Wrote README.md: game-first skeleton (Stage 3 fills placeholders, Stage 6 the counts)");
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 function main() {
@@ -406,6 +456,8 @@ function main() {
         }
         if (profile.blueprint) console.log(`  Blueprint : ${profile.blueprint}`);
     }
+
+    writeGameReadme(outDir, opts, modId);
 
     console.log(`\n============================================================`);
     console.log(`  Game    : ${opts.name}`);

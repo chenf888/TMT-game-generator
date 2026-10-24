@@ -16,6 +16,9 @@
 
 ## 2. Interview record (answers → parameters)
 
+Every Answer cell is the user's own answer — or a proposal the user explicitly confirmed.
+No cell is filled by inference.
+
 | # | Question | Answer | Locked parameter |
 |---|---|---|---|
 | Q1 | Theme-structure confirmation | | theme = structure mapping (P14) in §3 |
@@ -34,13 +37,15 @@ Paste the Q1 theme-structure recap the user confirmed:
 
 ## 2b. Game type profile (Q4b — required)
 
-Locked by `node scripts/classify.js`. **Orthogonal to Q2**: this row never changes the
+Proposed by `node scripts/classify.js`, **confirmed by the user** — the script's auto route
+is a proposal, never an answer. **Orthogonal to Q2**: this row never changes the
 blueprint. Full contracts in `references/design/13`, machine-readable in
 `assets/type-registry.json`.
 
 | Field | Value |
 |---|---|
 | Type (`type-registry.json` id) | passive-prestige / active-click / active-tick / board-minigame |
+| User confirmation (verbatim) | |
 | Confidence + margin from classify.js | |
 | Components this type makes mandatory | |
 | Components this type forbids | |
@@ -127,31 +132,77 @@ Ordered steps, each granting exactly one chore removal, with granting milestone 
 
 | Currency | Ceiling? | Cap mechanism | Where |
 |---|---|---|---|
-| | none | P12 softcap start ≈ next-layer unlock, power 0.3–0.5 | layer softcap / effect() softcap() |
+| | none | P12 softcap start ≈ next-layer unlock, power 0.3–0.5 corpus — but the measured retune favors power 0.1 with start 1e9–1e12 and cap raises of ×10 priced 1e12–1e18 (`balance-defaults.json softcap.measuredRetune`) | layer softcap / effect() softcap() |
 | | yes (e.g. exam score 150) | hard cap `softcap(x, cap, 0)` | custom points()/getResetGain() |
 
-## 9. Self-check results (09 §4 + §5 anti-pattern sweep)
+## 9. Self-check results (SKILL.md Stage 2, all 21 — numbering matches SKILL.md's table)
 
-Tick each after verifying the table above. Any FAIL → revise the table, not the code.
+Tick each after verifying the tables above. Any FAIL → revise the tables, not the code.
 
-- [ ] Requires ladder monotonic ×10–×100 per adjacent row (P2/A1)
-- [ ] First layer requires 2–10 (P1)
-- [ ] Density: every main layer ≥10 upgrades + ≥3 milestones (A4)
-- [ ] Every new layer boosts ≥2 older layers; layer-1 upgrade 11 matters at endgame (P10/A7)
-- [ ] Automation ladder 4–8 steps, P4 order, no double grants of the same flag by two milestones (A8 + Mario-Maker collision incident)
-- [ ] Softcap plan present for every unbounded loop; hard caps for theme ceilings (P12)
-- [ ] A1–A10 sweep: none present (list any deliberate exceptions in §10)
-- [ ] Endgame reachable in the target playtime (rough estimate done)
-- [ ] Fun density: K1 share within quota per layer, ≥3 non-K1 kinds per layer (10 §2)
-- [ ] Organization: tabFormat on every main layer, microtabs at quota threshold, context display-texts (10 §3)
-- [ ] Game-level fun quota met (10 §5 / fun-quota.json); every M-mechanic has a §4b "where"
-- [ ] **Type contract honoured (Q4b / 13-Types):** every component the locked type makes
-      mandatory is planned, every forbidden one is absent, and each modifier's hard
-      dependency holds (M2 needs a tick, M3 needs clickables)
-- [ ] Every modifier dropped in §2b has a reason recorded in §10 — none was dropped silently
+- [ ] 1 — requires ladder monotonic; adjacent rows ×10–×100 (P2/A1)
+- [ ] 2 — first layer requires 2–10 (P1)
+- [ ] 3 — every main layer ≥10 upgrades + ≥3 milestones (A4)
+- [ ] 4 — every new layer boosts ≥2 older layers in gainMult; ≥1 upgrade boosts layer 1 (P10/A7)
+- [ ] 5 — automation ladder 4–8 steps, P4 order, one chore per step (P4/A8)
+- [ ] 6 — softcap plan for every unbounded loop; hard caps for theme ceilings (P12)
+- [ ] 7 — anti-pattern sweep A1–A10: none present (deliberate exceptions listed in §10)
+- [ ] 8 — K1 share within quota per layer, ≥3 non-K1 kinds per layer (10 §2)
+- [ ] 9 — organization: tabFormat on every main layer, microtabs planned, context display-texts (10 §3)
+- [ ] 10 — game-level fun quota met; every M-mechanic has a §4b "where" (10 §5 / fun-quota.json)
+- [ ] 11 — **multiplier budget**: ≤1 self-scaling upgrade per layer (pow ≤0.5, softcapped); Σ
+      self-exponents in any gainMult ≤ 0.6; end-of-row-0 guaranteed flat zones product ≪ 1e4
+      (09 P12; N-SELFTOTAL) — self-scaling terms go into PRODUCTION, never shared with gainMult
+- [ ] 12 — **wiring plan**: every upgrade classified token/gate vs value-with-named-consumer (11 §2; N-UNWIRED)
+- [ ] 13 — cost ladder ≥6 orders per layer, ≥1 deliberate key drop, ≥30% pow/log shapes (11 §3–§4)
+- [ ] 14 — component density 8–30 per layer; challenges ≤15% of upgrades; layer softcap on unbounded loops (11 §1/§5)
+- [ ] 15 — **author pacing**: first boost ≤10 s; every reset >1 min pays; a major reset speeds the game from second one; no hard resets (12 §1)
+- [ ] 16 — **upgrade discipline**: one production bonus per upgrade; no upgrade boosts another upgrade's hidden number; threshold gates, not pay-gates (12 §3)
+- [ ] 17 — **cost before softcap**; only visible caps are sold (12 §2)
+- [ ] 18 — **row pacing** written as two constants (ROW_RATIO / OUTPUT_STEP → per-row ×1.1–×1.6), both in the brief (11 §4.1)
+- [ ] 19 — **reset lifecycle**: best/total kept; `autoPrestige` implies `resetsNothing`; no `update()` assigns points; every `doReset` guards `layerDataReset` with the vanilla `row > this.row` line; every static layer has `canBuyMax()` (03 §4.1; N-MSDESTROY/AUTOWIPE/POINTSWRITE/STATICMAX)
+- [ ] 20 — **type contract** (Q4b): mandatory modules planned, forbidden absent, modifier dependencies hold, dropped modifiers have §10 reasons (13; type-registry)
+- [ ] 21 — **measurement plan**: pacing constants in `js/tuning.js` read by game AND simulator; every pacing quantity callable (14 §3.3)
+
+## 9.1 Static-warning acceptance (Stage 5 output)
+
+Every WARN from `node scripts/static_checks.js <game>` gets a row here — accepted with a
+reason, or marked fixed with how. A WARN with no row re-opens Stage 5. (One real build
+accepted 15 WARNs this way and fixed a 16th in place; the discipline is what makes the
+"0 FAIL, N justified WARN" gate meaningful.)
+
+| Check | Layers | Why accepted (or: fixed — how) |
+|---|---|---|
+| | | |
 
 ## 10. Deviations & open questions
 
 | Default overridden | Value used | Why |
 |---|---|---|
 | | | |
+
+## 11. Stage-6 measured retune (authoritative — only if the measurement contradicted the brief)
+
+Record what the first simulation showed, the root cause, and each fix with where the constant
+now lives. This section supersedes the §7 estimate; a first pass that measured clean needs only
+one line here quoting the number. Write the WRONG first numbers down — they are why Stage 6
+exists, and the next build inherits the pattern.
+
+| # | Finding (measured) | Root cause | Fix, and where the constant lives |
+|---|---|---|---|
+| | | | |
+
+Measured timeline (greedy, `--click 1 --dt 1`): first purchase ___ s; first prestige per layer
+___; total to `isEndgame()` ___ h. Sim exclusions = the bias (handbook 14 §3.2, achievement
+count is a pacing lever inside it): ___.
+
+## 12. Browser-verification fixes (Stage 6.5)
+
+Each entry was invisible to static checks, smoke and the simulator; it was found by playing the
+build (SKILL.md Stage 6.5 / handbook 14 §5). Numbered, symptom → root cause → fix.
+
+| # | Symptom | Root cause | Fix |
+|---|---|---|---|
+| | | | |
+
+Final gates: static ___ PASS / ___ WARN / 0 FAIL (every WARN has a §9.1 row); i18n ___;
+smoke ___; measured lower bound ___ h.

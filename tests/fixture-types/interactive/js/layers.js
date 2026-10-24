@@ -80,3 +80,26 @@ addLayer("t", {
     canReset() { return player.t.points.gte(10) },
     doReset(layer) { layer.points = new Decimal(0) },
 });
+
+addLayer("dl", {
+    name: "Deadlock Layer",
+    symbol: "D",
+    color: "#c7a3ff",
+    position: 3,
+    row: 2,
+    resource: "locks",
+    type: "custom",
+    // [D-CANRESETDEAD] canReset reads ONLY the layer's own state, nothing outside the
+    // layer produces player.dl.points, and nothing ever writes player.dl.unlocked —
+    // the engine opens a custom layer only when canReset() is true, so this layer can
+    // never be opened (the Braille six/eight board deadlock).
+    startData() { return { unlocked: false, points: new Decimal(0), pattern: 0 } },
+    canReset() { return player.dl.pattern > 0 && player.dl.points.gte(1) },
+    getResetGain() { return new Decimal(1) },
+});
+
+// [D-GRIDZERO] the board's target list is FIRST filled by a loop whose counter starts
+// at 0 and is used as a mask — a fresh save's board is the empty mask, so it matches
+// the first target immediately and the first board reset is free.
+var BOARD_TARGETS = []
+for (var t = 0; t < 8; t++) { BOARD_TARGETS.push({ label: "t" + t, mask: t }) }

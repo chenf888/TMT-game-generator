@@ -1,1184 +1,518 @@
 <!DOCTYPE html>
-<html lang="en" data-lang="en" data-theme="light">
+<html lang="en" data-lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<meta name="description" content="An agent skill that turns one conversation into a complete, balanced, playable The Modding Tree incremental game. 68 static rules, a load-time harness, and a pacing simulator measured against 329 published TMT games.">
-<meta property="og:title" content="TMT Game Generator: an agent skill for The Modding Tree">
-<meta property="og:description" content="Your agent interviews you, designs the tree, writes the layer code, measures the pacing, then hands you a game.">
+<meta name="description" content="tmt-game-generator: an agent skill that turns one sentence into a complete, balanced, playable The Modding Tree incremental game. 72 static rules, statistics from 329 real games, measured pacing.">
+<meta property="og:title" content="TMT Game Generator — an agent skill for The Modding Tree">
+<meta property="og:description" content="Your agent interviews you, designs the tree from 329 measured games, writes the layers, runs 72 static rules, simulates the pacing, verifies it in a browser, then hands you the game.">
 <meta property="og:type" content="website">
-<title>TMT Game Generator: an agent skill for The Modding Tree</title>
+<title>TMT Game Generator — an agent skill for The Modding Tree</title>
 
 <script>
-/* Runs before first paint: resolves theme + language so nothing flashes. */
+/* Runs before first paint so the language never flashes. Default: English. */
 (function () {
-  var root = document.documentElement;
-  var theme = null, lang = null;
-  try {
-    theme = localStorage.getItem("tmt-theme");
-    lang = localStorage.getItem("tmt-lang");
-  } catch (e) {}
-  var dark = theme
-    ? theme === "dark"
-    : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  root.setAttribute("data-theme", dark ? "dark" : "light");
-  root.setAttribute("data-lang", lang === "zh" ? "zh" : "en");
-  root.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+  var lang = null;
+  try { lang = localStorage.getItem("tmt-lang"); } catch (e) {}
+  lang = lang === "zh" ? "zh" : "en";
+  document.documentElement.setAttribute("data-lang", lang);
+  document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
 })();
 </script>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
+
 <style>
-  :root {
-    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Display", "Segoe UI", Roboto,
-            "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
-    --mono: ui-monospace, "Cascadia Code", "SF Mono", "JetBrains Mono", "Roboto Mono", Consolas,
-            "Courier New", monospace;
-    --radius: 3px;
-    --wrap: 1140px;
-    color-scheme: light;
-    --bg: #fcf8f4; --surface: #ffffff; --surface-2: #f6efe8;
-    --ink: #1e1a17; --muted: #6b5f57; --border: #e5d9cd; --hairline: #ded0c2;
-    --accent: #c62f1e; --accent-ink: #ffffff; --accent-wash: #fdf3f0;
-    --code-bg: #f7f1ea;
-    --track: #ece0d5;
-  }
-  html[data-theme="dark"] {
-    color-scheme: dark;
-    --bg: #16120f; --surface: #1e1916; --surface-2: #251f1b;
-    --ink: #f2ebe4; --muted: #b3a49a; --border: #332b26; --hairline: #2b241f;
-    --accent: #ff6a4d; --accent-ink: #1a0f0b; --accent-wash: #2c1a14;
-    --code-bg: #1b1613;
-    --track: #2f2722;
-  }
+/* ============================================================================
+   色彩论证（取自题材资产，非凭空发明）：
+   · 纸白 / 近黑 —— 内置 TMT 引擎模板自己的变量：--background:#0f0f0f、--points:#ffffff、
+     --color:#dfdfdf。这件产品原生界面就是黑白，页面借用它当「仪器说明书」的墨与纸。
+   · 声望层绿 #4BDC13、节点蓝 #7182BC、金 #ffcc00 —— 全部采自同一模板的演示树；
+     金色只出现在数据高亮与荧光笔标记——金色 = 数字上涨。
+   · 链接蓝 #0000EE —— 浏览器游戏时代的超链接本色，也是这套版式的超链接语言。
+   ============================================================================ */
+:root {
+  --bg: #ffffff;
+  --ink: #0f0f0f;
+  --muted: #565656;
+  --hair: #e6e6e6;
+  --blue: #0000EE;
+  --panel: #0f0f0f;
+  --panel-ink: #dfdfdf;
+  --panel-dim: #9a9a9a;
+  --panel-edge: #262626;
+  --gold: #ffcc00;
+  --code-bg: #f6f6f6;
+  --font-display: "Archivo Black", "Noto Serif SC", "Songti SC", serif;
+  --font-body: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, "Courier New", monospace;
+}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html {
-    scroll-behavior: smooth;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-  }
-  body {
-    font-family: var(--sans); background: var(--bg); color: var(--ink);
-    font-size: 16px; line-height: 1.62; -webkit-font-smoothing: antialiased;
-    overflow-wrap: break-word;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    body { transition: background-color .25s ease, color .25s ease; }
-  }
-  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
-  a { color: var(--ink); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
-  .sr-only {
-    position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
-    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-  }
-  .skip {
-    position: absolute; left: 12px; top: -60px; z-index: 40; background: var(--accent);
-    color: var(--accent-ink); padding: 10px 16px; border-radius: var(--radius);
-    text-decoration: none; font-weight: 650;
-  }
-  .skip:focus { top: 12px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.8;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2 { text-wrap: balance; }
+p { text-wrap: pretty; }
+a { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+a:hover { background: var(--ink); color: #fff; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+::selection { background: var(--gold); color: var(--ink); }
 
-  /* -------------------------------------------------- language switching */
-  html[data-lang="en"] .lang-zh { display: none; }
-  html[data-lang="zh"] .lang-en { display: none; }
+/* ------------------------------------------------------------ language switch */
+html[data-lang="en"] .lang-zh { display: none; }
+html[data-lang="zh"] .lang-en { display: none; }
 
-  /* ---------------------------------------------------------------- nav */
-  nav {
-    position: sticky; top: 0; z-index: 20; background: var(--bg);
-    border-bottom: 1px solid var(--hairline);
+.wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.skip {
+  position: absolute; left: 12px; top: -64px; z-index: 40;
+  background: var(--ink); color: #fff; padding: 10px 16px; text-decoration: none;
+}
+.skip:focus { top: 12px; background: var(--ink); color: #fff; }
+.skip:hover { background: var(--ink); color: var(--gold); }
+
+/* ------------------------------------------------------------------ masthead */
+header.masthead { border-bottom: 1px solid var(--ink); }
+.masthead-inner {
+  min-height: 64px; display: flex; align-items: center; gap: 28px;
+  flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px;
+}
+.wordmark { text-decoration: none; color: var(--ink); line-height: 1.3; }
+.wordmark:hover { background: none; color: var(--ink); }
+.wordmark strong { font-family: var(--font-body); font-weight: 700; font-size: 17px; display: block; }
+.wordmark span { font-family: var(--font-body); font-size: 12px; color: var(--muted); }
+.masthead nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.masthead nav a {
+  color: var(--muted); text-decoration: none; font-size: 14.5px;
+  padding: 12px 10px; display: inline-block;
+}
+.masthead nav a:hover { color: var(--ink); background: none; }
+.masthead nav a.gh { color: var(--blue); font-weight: 600; }
+.masthead nav a.gh:hover { background: var(--blue); color: #fff; }
+.toggle {
+  font-family: var(--font-body); font-size: 13.5px; font-weight: 600; line-height: 1;
+  height: 40px; padding: 0 14px; margin-left: 6px;
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--ink); border-radius: 0;
+  background: var(--bg); color: var(--ink); cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.toggle:hover { background: var(--ink); color: var(--gold); }
+
+/* ---------------------------------------------------------------------- hero */
+.hero { padding: 72px 0 96px; }
+.hero-meta {
+  font-size: 14px; color: var(--muted); padding-bottom: 20px;
+  border-bottom: 1px solid var(--hair); margin-bottom: 40px;
+}
+.hero h1 {
+  font-family: var(--font-display); font-weight: 900;
+  font-size: clamp(42px, 6vw, 84px);
+  line-height: 1.14; letter-spacing: 0;
+  max-width: 13em;
+}
+.hero .sub { margin-top: 32px; max-width: 36em; color: var(--ink); font-size: 18px; }
+.hero .sub strong { font-weight: 700; }
+
+/* ------------------------------------------------------------------- section */
+section { border-top: 1px solid var(--ink); padding: 72px 0; }
+h2 {
+  font-family: var(--font-display); font-weight: 900;
+  font-size: clamp(28px, 3.2vw, 42px); line-height: 1.25; letter-spacing: 0;
+}
+.section-sub { margin-top: 14px; max-width: 36em; color: var(--muted); font-size: 16px; }
+
+/* ----------------------------------------------------------------- data band */
+.band { background: var(--panel); color: var(--panel-ink); }
+.band h2 { color: #fff; }
+.band .section-sub { color: #b9b9b9; }
+.stats { margin-top: 56px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--panel-edge); }
+.stat { padding: 28px 24px 28px 0; border-bottom: 1px solid var(--panel-edge); }
+.stat + .stat { padding-left: 24px; border-left: 1px solid var(--panel-edge); }
+.stat .num {
+  font-family: var(--font-display); font-weight: 900;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-size: clamp(34px, 4.2vw, 62px); line-height: 1.05; color: #fff;
+}
+.stat .num em { font-style: normal; color: var(--gold); }
+.stat .label { margin-top: 10px; font-size: 14.5px; color: #b9b9b9; }
+.doctrine { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+.doctrine p {
+  border-top: 2px solid #fff; padding-top: 18px; font-size: 16px; line-height: 1.85; max-width: 34em;
+}
+.doctrine strong { color: var(--gold); font-weight: 700; }
+
+/* ------------------------------------------------------------------ pipeline */
+.steps { margin-top: 48px; border-top: 1px solid var(--ink); }
+.step {
+  display: grid; grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 20px; padding: 22px 0; border-bottom: 1px solid var(--hair); align-items: baseline;
+}
+.step .no {
+  font-family: var(--font-display); font-weight: 900; font-variant-numeric: tabular-nums;
+  font-size: 26px; line-height: 1;
+}
+.step h3 { font-size: 18px; font-weight: 700; line-height: 1.5; }
+.step .desc { margin-top: 6px; color: var(--muted); font-size: 15.5px; max-width: 62em; }
+.step .tool {
+  font-family: var(--font-mono); font-size: 14px; color: var(--muted);
+  white-space: nowrap; align-self: center;
+}
+
+/* --------------------------------------------------------------------- types */
+.type-table { margin-top: 44px; width: 100%; border-collapse: collapse; }
+.type-table caption { text-align: left; caption-side: bottom; padding-top: 12px; font-size: 13.5px; color: var(--muted); }
+.type-table th, .type-table td {
+  border: 1px solid var(--ink); padding: 14px 16px; text-align: left; vertical-align: top;
+}
+.type-table th { font-size: 14px; font-weight: 700; background: var(--code-bg); }
+.type-table td { font-size: 15.5px; }
+.type-table td.tid { font-family: var(--font-mono); font-size: 14px; white-space: nowrap; }
+.type-note { margin-top: 24px; max-width: 36em; color: var(--muted); font-size: 15.5px; }
+.type-note strong { color: var(--ink); }
+
+/* ------------------------------------------------------------------- install */
+.install-grid { margin-top: 44px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 56px; }
+.cmd {
+  background: var(--code-bg); border: 1px solid var(--ink);
+  padding: 18px 20px; font-family: var(--font-mono); font-size: 14px; line-height: 1.7;
+  overflow-x: auto; white-space: pre;
+}
+.cmd .cmt { color: var(--muted); }
+.install-col h3 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
+.dest-table { width: 100%; border-collapse: collapse; }
+.dest-table td { border-bottom: 1px solid var(--hair); padding: 10px 0; font-size: 15px; vertical-align: top; }
+.dest-table td:first-child { width: 9em; font-weight: 600; }
+.dest-table td:last-child { font-family: var(--font-mono); font-size: 14px; }
+.triggers { margin-top: 40px; }
+.triggers ul { margin-top: 10px; list-style: none; }
+.triggers li { padding: 8px 0; font-size: 16px; }
+.triggers li em {
+  font-style: normal; background: linear-gradient(transparent 62%, #ffe98f 62%); font-weight: 600;
+}
+.triggers .req { margin-top: 18px; color: var(--muted); font-size: 15px; }
+
+/* -------------------------------------------------------------------- footer */
+footer { border-top: 1px solid var(--ink); padding: 40px 0 64px; }
+footer p { font-size: 13.5px; color: var(--muted); max-width: 46em; }
+footer p + p { margin-top: 8px; }
+footer a { color: var(--blue); }
+
+/* ----------------------------------------------------------------- responsive */
+@media (max-width: 960px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat { padding: 22px 16px 22px 0; }
+  .stat + .stat { padding-left: 16px; }
+  .doctrine { grid-template-columns: 1fr; gap: 28px; }
+  .install-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+}
+@media (max-width: 600px) {
+  .hero { padding: 48px 0 64px; }
+  section { padding: 56px 0; }
+  .stats { grid-template-columns: 1fr; }
+  .stat, .stat + .stat { padding-left: 0; border-left: none; }
+  .step { grid-template-columns: 56px minmax(0, 1fr); }
+  .step .tool { grid-column: 2; white-space: normal; }
+  .type-table thead { display: none; }
+  .type-table, .type-table tbody, .type-table tr, .type-table td { display: block; }
+  .type-table caption { display: block; }
+  .type-table tr { border: 1px solid var(--ink); border-bottom: none; }
+  .type-table tr:last-child { border-bottom: 1px solid var(--ink); }
+  .type-table td { border: none; border-top: 1px solid var(--hair); padding: 9px 12px; }
+  .type-table td.tid { border-top: none; }
+  .type-table td::before {
+    content: attr(data-label-en);
+    display: inline-block; min-width: 5.5em;
+    color: var(--muted); font-size: 13px;
   }
-  @media (prefers-reduced-motion: no-preference) {
-    nav { transition: background-color .25s ease, border-color .25s ease; }
-  }
-  .nav-inner { height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-  .wordmark {
-    font-family: var(--mono); font-weight: 700; font-size: 15px; letter-spacing: -0.02em;
-    color: var(--ink); text-decoration: none; white-space: nowrap;
-  }
-  .wordmark i { font-style: normal; color: var(--accent); }
-  .nav-links { display: flex; gap: 20px; align-items: center; }
-  .nav-links a {
-    color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap;
-    transition: color .18s ease;
-  }
-  .nav-links a:hover { color: var(--ink); }
-  .nav-links a.gh { color: var(--ink); font-weight: 650; }
-
-  /* ----------------------------------------------------- nav tools */
-  .nav-tools { display: flex; gap: 8px; align-items: center; }
-  .toggle {
-    font-family: var(--mono); font-size: 11.5px; font-weight: 650; line-height: 1;
-    height: 30px; min-width: 34px; padding: 0 9px;
-    display: inline-flex; align-items: center; justify-content: center;
-    border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--surface); color: var(--ink); cursor: pointer;
-    transition: border-color .18s ease, color .18s ease, background-color .18s ease;
-  }
-  .toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
-  .toggle svg { display: block; }
-  html[data-theme="light"] .icon-sun { display: none; }
-  html[data-theme="dark"] .icon-moon { display: none; }
-
-  /* Language button: show the language you would switch TO. */
-  html[data-lang="en"] .lt-en { display: none; }
-  html[data-lang="zh"] .lt-zh { display: none; }
-
-  /* --------------------------------------------------------------- hero */
-  .hero {
-    display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 60px; align-items: center;
-    padding: 76px 0 68px;
-  }
-  .hero > * { min-width: 0; }
-  .eyebrow {
-    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.15em; text-transform: uppercase;
-    color: var(--accent); margin-bottom: 20px;
-  }
-  h1 {
-    font-size: clamp(2.3rem, 4.4vw, 3.7rem); line-height: 1.1; letter-spacing: -0.032em;
-    font-weight: 760; margin-bottom: 20px; text-wrap: balance;
-    padding-bottom: 0.06em;
-  }
-  h1 em, h2 em { font-style: italic; }
-  html[data-lang="zh"] h1 em,
-  html[data-lang="zh"] h2 em { font-style: normal; color: var(--accent); }
-
-  .hero-sub { color: var(--muted); font-size: 1.11rem; max-width: 44ch; margin-bottom: 30px; }
-  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .btn {
-    display: inline-block; padding: 12px 24px; border-radius: var(--radius); font-size: 15px;
-    font-weight: 650; text-decoration: none; border: 1px solid transparent; white-space: nowrap;
-    transition: transform .14s ease, background-color .18s ease, border-color .18s ease, color .18s ease;
-  }
-  .btn:active { transform: translateY(1px); }
-  .btn-primary { background: var(--accent); color: var(--accent-ink); }
-  .btn-primary:hover { background: var(--ink); color: var(--bg); }
-  .btn-ghost { border-color: var(--border); color: var(--ink); background: var(--surface); }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-
-  /* --------------------------------------------------- the real output */
-  .treecard {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 22px 22px 20px;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .treecard, .band, .pair-col, .install-block, .copyline, .chip { transition: background-color .25s ease, border-color .25s ease; }
-  }
-  .treecard-head {
-    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-    padding-bottom: 14px; border-bottom: 1px solid var(--hairline);
-  }
-  .treecard-title { font-weight: 700; font-size: 15px; }
-  .treecard-note { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
-  .treecard svg { display: block; width: 100%; height: auto; margin: 14px 0 4px; }
-  .tree-edges { fill: none; stroke: var(--ink); stroke-width: 1; opacity: 0.38; }
-  .tree-nodes text {
-    text-anchor: middle; fill: var(--accent-ink);
-    font-family: var(--mono); font-size: 17px; font-weight: 700;
-  }
-  .tree-nodes circle { fill: var(--accent); }
-  .treecard-counts {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px;
-    border-top: 1px solid var(--hairline); padding-top: 14px;
-  }
-  .count-pair { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .count-pair dt { color: var(--muted); font-size: 13px; }
-  .count-pair dd { font-family: var(--mono); font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .treecard-cap { margin-top: 14px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-
-  /* --------------------------------------------------------- stat band */
-  .band { border-block: 1px solid var(--hairline); padding: 32px 0; background: var(--surface-2); }
-  .band-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px; }
-  .stat .num {
-    font-family: var(--mono); font-size: 33px; font-weight: 700; line-height: 1;
-    color: var(--accent); font-variant-numeric: tabular-nums;
-  }
-  .stat .lab { margin-top: 9px; font-size: 13px; color: var(--muted); line-height: 1.45; }
-
-  /* ----------------------------------------------------------- sections */
-  section { padding: 82px 0 0; }
-  .sec-head h2 {
-    font-size: clamp(1.65rem, 2.9vw, 2.2rem); letter-spacing: -0.022em; font-weight: 740;
-    line-height: 1.2; max-width: 30ch; padding-bottom: 0.06em;
-  }
-  .sec-head p { color: var(--muted); margin-top: 12px; max-width: 64ch; }
-  .sec-note {
-    margin-top: 26px; border-left: 2px solid var(--accent); padding: 2px 0 2px 16px;
-    font-size: 15px; max-width: 74ch;
-  }
-  .sec-note b { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; }
-  .sec-note code { font-family: var(--mono); font-size: 13px; }
-  #data .band-grid { margin-top: 38px; }
-
-  /* --------------------------------------------------- pipeline rail */
-  .rail { margin-top: 40px; position: relative; }
-  .rail::before { content: ""; position: absolute; left: 23px; top: 10px; bottom: 10px; width: 1px; background: var(--hairline); }
-  .step { display: grid; grid-template-columns: 52px 178px 1fr; gap: 18px; padding: 13px 0; position: relative; }
-  .step-n { font-family: var(--mono); font-size: 12.5px; color: var(--accent); background: var(--bg); padding-top: 3px; font-variant-numeric: tabular-nums; }
-  .step-verb { font-weight: 680; font-size: 15.5px; }
-  .step-desc { color: var(--muted); font-size: 15px; max-width: 64ch; }
-
-  /* ------------------------------------------------------ code panels */
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 36px; }
-  .pair-col { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; min-width: 0; background: var(--surface); }
-  .pair-col.good { border-color: var(--accent); }
-  .pair-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; color: var(--muted); }
-  .pair-col.good .pair-tag { color: var(--accent); }
-  .pair-col pre {
-    font-family: var(--mono); font-size: 12.5px; line-height: 1.62; color: var(--muted);
-    background: var(--code-bg); border-radius: var(--radius); padding: 13px 14px;
-    overflow-x: auto; white-space: pre; margin: 0;
-  }
-  .pair-col pre b { color: var(--ink); font-weight: 650; }
-  .pair-col pre i { font-style: normal; color: var(--accent); }
-  .pair-col p { margin-top: 13px; font-size: 13.5px; color: var(--muted); }
-  .pair-col p b { color: var(--ink); font-weight: 650; }
-
-  /* -------------------------------------------- operation distribution */
-  .ops { margin-top: 34px; max-width: 620px; }
-  .ops-row { display: grid; grid-template-columns: 92px 1fr 74px; gap: 14px; align-items: center; padding: 4px 0; }
-  .ops-name { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
-  .ops-bar { height: 8px; background: var(--track); border-radius: 1px; }
-  .ops-bar i { display: block; height: 100%; background: var(--accent); border-radius: 1px; }
-  .ops-val { font-family: var(--mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
-  .ops-cap { margin-top: 14px; font-size: 13px; color: var(--muted); }
-
-  /* ------------------------------------------------- type distribution */
-  .splitbar { display: flex; gap: 3px; margin-top: 38px; }
-  .splitbar i { display: block; height: 14px; background: var(--accent); border-radius: 1px; }
-  .split-cap { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
-  .typelist { margin-top: 26px; }
-  .typerow {
-    display: grid; grid-template-columns: 170px 66px 1fr; gap: 20px; align-items: baseline;
-    padding: 15px 0; border-top: 1px solid var(--hairline);
-  }
-  .typerow:last-child { border-bottom: 1px solid var(--hairline); }
-  .type-name { font-family: var(--mono); font-size: 13px; font-weight: 650; }
-  .type-share { font-family: var(--mono); font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .type-contract { color: var(--muted); font-size: 14.5px; }
-  .type-contract code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
-
-  /* ------------------------------------------------------- tool rows */
-  .tools { margin-top: 36px; border-top: 1px solid var(--hairline); }
-  .tool {
-    display: grid; grid-template-columns: 232px 1fr; gap: 28px; padding: 20px 0;
-    border-bottom: 1px solid var(--hairline);
-  }
-  .tool-name { font-family: var(--mono); font-size: 13px; font-weight: 650; word-break: break-all; }
-  .tool-stage { display: block; margin-top: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 400; }
-  .tool-body p { color: var(--muted); font-size: 14.5px; max-width: 66ch; }
-  .tool-run {
-    display: inline-block; margin-top: 10px; font-family: var(--mono); font-size: 12.5px;
-    background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 6px 10px; color: var(--ink);
-    max-width: 100%; overflow-x: auto; white-space: nowrap; vertical-align: bottom;
-  }
-
-  /* ---------------------------------------------------------- install */
-  .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 54px; margin-top: 38px; align-items: start; }
-  .install-grid > * { min-width: 0; }
-  .install-block {
-    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
-    padding: 18px 20px;
-  }
-  .install-block + .install-block { margin-top: 14px; }
-  .install-block h3 { font-size: 15px; margin-bottom: 6px; font-weight: 680; }
-  .install-block p { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; }
-  .copyline {
-    display: block; width: 100%; text-align: left; cursor: pointer; font-family: var(--mono);
-    font-size: 13px; background: var(--code-bg); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 9px 12px; color: var(--ink);
-    overflow-x: auto; white-space: pre; transition: border-color .18s ease, background-color .18s ease;
-  }
-  .copyline:hover { border-color: var(--accent); background: var(--accent-wash); }
-  .copyline.wrap { white-space: normal; word-break: break-all; }
-  .prompt-label { font-weight: 680; font-size: 15.5px; }
-  .prompt-hint { color: var(--muted); font-size: 13.5px; margin: 4px 0 14px; }
-  .chip {
-    display: block; width: 100%; text-align: left; font-family: var(--mono); font-size: 12.5px;
-    padding: 12px 15px; border-radius: var(--radius); border: 1px solid var(--border);
-    background: var(--surface); color: var(--ink); cursor: pointer;
-    transition: border-color .18s ease, color .18s ease, background-color .18s ease;
-  }
-  .chip + .chip { margin-top: 9px; }
-  .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
-  .verify { margin-top: 22px; font-size: 13.5px; color: var(--muted); }
-  .copyline + .verify { margin-top: 12px; }
-  .verify + .copyline { margin-top: 10px; }
-  .expect { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
-
-  /* ---------------------------------------------------------- quality */
-  .qual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 38px; margin-top: 38px; }
-  .qual-grid > * { min-width: 0; }
-  .qual-col h3 {
-    font-size: 13px; font-family: var(--mono); font-weight: 650; letter-spacing: 0.06em;
-    text-transform: uppercase; color: var(--accent); padding-bottom: 12px;
-    border-bottom: 1px solid var(--hairline); margin-bottom: 14px;
-  }
-  .qual-col ul { list-style: none; }
-  .qual-col li { color: var(--muted); font-size: 14.5px; padding: 7px 0; }
-  .qual-col li b { color: var(--ink); font-weight: 650; }
-  .qual-col code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
-
-  /* ----------------------------------------------------------- footer */
-  footer { margin-top: 84px; border-top: 1px solid var(--hairline); padding: 28px 0 44px; }
-  .foot-inner { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
-  .foot-inner a { color: var(--ink); text-decoration: none; font-weight: 600; }
-  .foot-inner a:hover { color: var(--accent); }
-  .foot-links { display: flex; gap: 18px; }
-  .author {
-    margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--hairline);
-    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-  }
-  .author-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-  .author-name {
-    font-family: var(--mono); font-size: 19px; font-weight: 700; letter-spacing: -0.01em;
-    color: var(--accent); text-decoration: none;
-  }
-  .author-name:hover { text-decoration: underline; text-underline-offset: 4px; }
-  .author-note { font-size: 13px; color: var(--muted); }
-
-  /* ------------------------------------------------------ load-in / a11y */
-  @media (prefers-reduced-motion: no-preference) {
-    .hero > * { animation: rise .5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-    .hero > *:nth-child(2) { animation-delay: .08s; }
-    @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    *, *::before, *::after { animation: none !important; transition: none !important; }
-  }
-
-  /* ------------------------------------------------------- responsive */
-  @media (max-width: 1000px) {
-    .hero { grid-template-columns: 1fr; gap: 40px; padding: 56px 0 60px; }
-    .treecard { max-width: 520px; }
-    .install-grid { grid-template-columns: 1fr; gap: 40px; }
-    .band-grid { grid-template-columns: repeat(2, 1fr); row-gap: 30px; }
-    .qual-grid { grid-template-columns: 1fr; gap: 32px; }
-    .pair { grid-template-columns: 1fr; }
-    .step { grid-template-columns: 52px 1fr; }
-    .step-desc { grid-column: 2; }
-    .tool { grid-template-columns: 1fr; gap: 12px; }
-    .nav-links { gap: 16px; }
-  }
-  @media (max-width: 720px) {
-    section { padding: 60px 0 0; }
-    .hero { padding-top: 44px; }
-    nav .nav-inner { height: 56px; }
-    .nav-links { gap: 10px; }
-    .nav-links a.hide-m { display: none; }
-    .typerow { grid-template-columns: 1fr; gap: 4px; }
-  }
-
-  /* --------------------------------------------- small phones (≤560px) */
-  @media (max-width: 560px) {
-    .wrap { padding: 0 18px; }
-    section { padding: 5px 0 0; }
-    .hero { padding: 36px 0 48px; gap: 32px; }
-
-    h1 { font-size: clamp(1.85rem, 6.5vw, 2.3rem); }
-    .sec-head h2 { font-size: clamp(1.5rem, 4.5vw, 1.65rem); }
-    .hero-sub { font-size: 1.03rem; }
-    .eyebrow { font-size: 10.5px; letter-spacing: 0.13em; margin-bottom: 16px; }
-    .cta-row { gap: 10px; }
-    .btn { padding: 11px 20px; font-size: 14.5px; }
-
-    .nav-inner { gap: 10px; }
-    .nav-links { gap: 10px; }
-    .toggle { height: 32px; min-width: 36px; padding: 0 8px; font-size: 11px; }
-
-    .treecard { padding: 16px 16px 14px; }
-    .treecard-head { padding-bottom: 12px; }
-    .treecard-counts { gap: 5px 14px; padding-top: 12px; }
-    .tree-nodes text { font-size: 19px; }
-
-    .band { padding: 26px 0; }
-    .band-grid { gap: 22px 16px; }
-    .stat .num { font-size: 28px; }
-    .stat .lab { font-size: 12.5px; margin-top: 7px; }
-
-    .step { grid-template-columns: 40px 1fr; gap: 12px; }
-    .step-n { font-size: 11.5px; }
-    .step-verb { font-size: 15px; }
-    .step-desc { font-size: 14px; }
-    .rail::before { left: 19px; }
-
-    .pair { gap: 16px; }
-    .pair-col { padding: 15px 16px; }
-    .pair-col pre { font-size: 12px; padding: 11px 12px; }
-
-    .ops-row { grid-template-columns: 72px 1fr 58px; gap: 10px; }
-    .ops-name, .ops-val { font-size: 11.5px; }
-
-    .typerow { padding: 13px 0; }
-    .type-name, .type-share { font-size: 12.5px; }
-    .type-contract { font-size: 14px; }
-
-    .tool { padding: 18px 0; }
-    .tool-name { font-size: 12.5px; }
-    .tool-body p { font-size: 14px; }
-
-    .install-grid { gap: 32px; }
-    .install-block { padding: 16px 16px; }
-    .copyline { font-size: 12.5px; padding: 9px 11px; }
-    .chip { font-size: 12px; padding: 11px 13px; }
-
-    .qual-grid { gap: 28px; }
-    .qual-col li { font-size: 14px; }
-
-    .foot-inner { flex-direction: column; gap: 10px; }
-    .author { gap: 10px; }
-    .author-name { font-size: 17px; }
-  }
-
-  /* --------------------------------------------- very small phones (≤400px) */
-  @media (max-width: 400px) {
-    .wrap { padding: 0 14px; }
-    h1 { font-size: 1.75rem; }
-    .sec-head h2 { font-size: 1.4rem; }
-    .hero-sub { font-size: 0.98rem; }
-
-    .nav-inner { gap: 8px; }
-    .nav-links { gap: 8px; }
-    .wordmark { font-size: 14px; }
-    .nav-links a.gh { font-size: 13px; }
-    .toggle { height: 30px; min-width: 32px; padding: 0 7px; }
-
-    .band-grid { gap: 20px 12px; }
-    .stat .num { font-size: 25px; }
-
-    .ops-row { grid-template-columns: 64px 1fr 52px; gap: 8px; }
-    .ops-name, .ops-val { font-size: 11px; }
-
-    .treecard-counts { gap: 4px 12px; }
-    .count-pair dt { font-size: 12px; }
-    .count-pair dd { font-size: 12.5px; }
-  }
-
-  /* --------------------------------------------- touch: kill sticky hover */
-  @media (hover: none) {
-    .nav-links a:hover { color: var(--muted); }
-    .nav-links a.gh:hover { color: var(--ink); }
-    .toggle:hover { border-color: var(--border); color: var(--ink); background: var(--surface); }
-    .btn-primary:hover { background: var(--accent); color: var(--accent-ink); }
-    .btn-ghost:hover { border-color: var(--border); color: var(--ink); background: var(--surface); }
-    .copyline:hover { border-color: var(--border); background: var(--code-bg); }
-    .chip:hover { border-color: var(--border); color: var(--ink); background: var(--surface); }
-    .foot-inner a:hover { color: var(--ink); }
-    .author-name:hover { text-decoration: none; }
-  }
+  html[data-lang="zh"] .type-table td::before { content: attr(data-label-zh); }
+  .masthead nav a { padding: 10px 8px; }
+}
 </style>
 </head>
 <body>
-
 <a class="skip" href="#main"><span class="lang-en">Skip to content</span><span class="lang-zh">跳到正文</span></a>
-<span id="copyStatus" class="sr-only" role="status" aria-live="polite"></span>
 
-<nav aria-label="Main">
-  <div class="wrap nav-inner">
-    <a class="wordmark" href="#"><i>tmt</i>gg</a>
-    <div class="nav-links">
-      <a href="#pipeline" class="hide-m"><span class="lang-en">How it works</span><span class="lang-zh">工作原理</span></a>
-      <a href="#data" class="hide-m"><span class="lang-en">The data</span><span class="lang-zh">数据</span></a>
-      <a href="#types" class="hide-m"><span class="lang-en">Game types</span><span class="lang-zh">游戏类型</span></a>
-      <a href="#safety" class="hide-m"><span class="lang-en">Save safety</span><span class="lang-zh">存档安全</span></a>
-      <a href="#install" class="hide-m"><span class="lang-en">Install</span><span class="lang-zh">安装</span></a>
-      <a class="gh" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
-
-      <div class="nav-tools">
-        <button type="button" class="toggle" id="langToggle" aria-label="Switch language / 切换语言">
-          <span class="lt-zh" lang="zh">中文</span>
-          <span class="lt-en" lang="en">EN</span>
-        </button>
-        <button type="button" class="toggle" id="themeToggle" aria-label="Toggle dark mode / 切换深色模式">
-          <svg class="icon-moon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20.4 14.2A8.4 8.4 0 0 1 9.8 3.6a8.6 8.6 0 1 0 10.6 10.6Z"/>
-          </svg>
-          <svg class="icon-sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="4.2"/>
-            <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>
-          </svg>
-        </button>
-      </div>
-    </div>
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="wordmark" href="#top">
+      <strong><span class="lang-en">TMT Game Generator</span><span class="lang-zh">TMT 游戏生成器</span></strong>
+      <span>tmt-game-generator v1.0.0</span>
+    </a>
+    <nav aria-label="Page / 页面导航">
+      <a href="#data"><span class="lang-en">Data</span><span class="lang-zh">数据</span></a>
+      <a href="#pipeline"><span class="lang-en">Pipeline</span><span class="lang-zh">流水线</span></a>
+      <a href="#types"><span class="lang-en">Types</span><span class="lang-zh">类型</span></a>
+      <a href="#install"><span class="lang-en">Install</span><span class="lang-zh">安装</span></a>
+      <a class="gh" href="https://github.com/chenf888/TMT-game-generator" rel="noopener">GitHub</a>
+      <button class="toggle" id="langToggle" type="button" aria-label="Switch language / 切换语言">
+        <span class="lang-en">中文</span><span class="lang-zh">EN</span>
+      </button>
+    </nav>
   </div>
-</nav>
-
-<main id="main">
-
-<header class="wrap hero">
-  <div>
-    <p class="eyebrow">
-      <span class="lang-en">Agent skill for The Modding Tree</span>
-      <span class="lang-zh">The Modding Tree 的 Agent 技能</span>
-    </p>
-    <h1>
-      <span class="lang-en">One sentence <em>in</em>. A playable tree <em>out</em>.</span>
-      <span class="lang-zh">一句话<em>输入</em>，一棵可玩的树<em>输出</em>。</span>
-    </h1>
-    <p class="hero-sub">
-      <span class="lang-en">Your agent interviews you, designs the tree, writes the layer code, then measures the pacing before handing you a game.</span>
-      <span class="lang-zh">你的智能体会先访谈你、设计树结构、编写层级代码，再把游戏交给你之前先实测一遍节奏。</span>
-    </p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">
-        <span class="lang-en">Get the skill</span><span class="lang-zh">获取技能</span>
-      </a>
-      <a class="btn btn-ghost" href="#pipeline">
-        <span class="lang-en">See the pipeline</span><span class="lang-zh">查看流水线</span>
-      </a>
-    </div>
-  </div>
-
-  <aside class="treecard">
-    <div class="treecard-head">
-      <span class="treecard-title">The True Color Tree</span>
-      <span class="treecard-note"><span class="lang-en">generated by this skill</span><span class="lang-zh">由本技能生成</span></span>
-    </div>
-
-    <svg class="tree" viewBox="0 0 460 296" role="img" aria-labelledby="treeTitle treeDesc">
-      <title id="treeTitle">Layer tree of The True Color Tree</title>
-      <desc id="treeDesc">Four rows. Row one holds one normal layer, The True Color Tree's white layer. Rows two and three hold three static layers each. Row four holds a static layer with six challenges, another static layer, and the closing normal prestige layer.</desc>
-      <g class="tree-edges">
-        <path d="M230 65 V 78 M90 78 H370 M90 78 V 91 M230 78 V 91 M370 78 V 91"/>
-        <path d="M90 137 V 163 M230 137 V 163 M370 137 V 163"/>
-        <path d="M90 209 V 235 M230 209 V 235 M370 209 V 235"/>
-      </g>
-      <g class="tree-nodes">
-        <circle class="n0" cx="230" cy="42" r="23"/>
-        <text class="n0" x="230" y="48">W</text>
-
-        <circle class="n1" cx="90" cy="114" r="23"/>
-        <circle class="n1" cx="230" cy="114" r="23"/>
-        <circle class="n1" cx="370" cy="114" r="23"/>
-        <text class="n1" x="90" y="120">R</text>
-        <text class="n1" x="230" y="120">G</text>
-        <text class="n1" x="370" y="120">B</text>
-
-        <circle class="n2" cx="90" cy="186" r="23"/>
-        <circle class="n2" cx="230" cy="186" r="23"/>
-        <circle class="n2" cx="370" cy="186" r="23"/>
-        <text class="n2" x="90" y="192">C</text>
-        <text class="n2" x="230" y="192">H</text>
-        <text class="n2" x="370" y="192">S</text>
-
-        <circle class="n3" cx="90" cy="258" r="23"/>
-        <circle class="n3" cx="230" cy="258" r="23"/>
-        <circle class="n3" cx="370" cy="258" r="23"/>
-        <text class="n3" x="90" y="264">X</text>
-        <text class="n3" x="230" y="264">T</text>
-        <text class="n3" x="370" y="264">P</text>
-      </g>
-    </svg>
-
-    <dl class="treecard-counts">
-      <div class="count-pair"><dt><span class="lang-en">layers</span><span class="lang-zh">层级</span></dt><dd>10</dd></div>
-      <div class="count-pair"><dt><span class="lang-en">upgrades</span><span class="lang-zh">升级</span></dt><dd>121</dd></div>
-      <div class="count-pair"><dt><span class="lang-en">milestones</span><span class="lang-zh">里程碑</span></dt><dd>47</dd></div>
-      <div class="count-pair"><dt><span class="lang-en">buyables</span><span class="lang-zh">可购买项</span></dt><dd>8</dd></div>
-      <div class="count-pair"><dt><span class="lang-en">challenges</span><span class="lang-zh">挑战</span></dt><dd>6</dd></div>
-      <div class="count-pair"><dt><span class="lang-en">achievements</span><span class="lang-zh">成就</span></dt><dd>50</dd></div>
-    </dl>
-
-    <p class="treecard-cap">
-      <span class="lang-en">Four rows, ten layers, 182 content components in the tree plus 50 achievements in the side layer. Read straight out of the game's own layer definitions.</span>
-      <span class="lang-zh">四行、十个层级，树内 182 个内容组件，外加侧层 50 个成就。全部直接读取自游戏自身的层级定义。</span>
-    </p>
-  </aside>
 </header>
 
-<div class="band">
-  <div class="wrap band-grid">
-    <div class="stat">
-      <div class="num">329</div>
-      <div class="lab"><span class="lang-en">published TMT games parsed to build the balance data</span><span class="lang-zh">款已发布的 TMT 游戏被解析，用于构建平衡数据</span></div>
+<main id="main">
+<!-- ============================================================= hero -->
+<section class="hero" id="top" style="border-top:none;">
+  <div class="wrap">
+    <p class="hero-meta lang-en">An agent skill for The Modding Tree v2.7, MIT-licensed. Runs in ZCode, Claude Code, Codex, Cursor — any tool that reads SKILL.md.</p>
+    <p class="hero-meta lang-zh">一个 Agent Skill，跑在 The Modding Tree v2.7 上，MIT 协议。支持 ZCode、Claude Code、Codex、Cursor 等一切读取 SKILL.md 的工具。</p>
+
+    <h1 class="lang-en">One sentence in,<br>a mod tree out.</h1>
+    <h1 class="lang-zh">一句话进来，<br>一棵模组树出去。</h1>
+
+    <p class="sub lang-en">tmt-game-generator is an agent skill. Say “make me an incremental game about X” and your agent runs the full measured pipeline — interview, data-driven design, scaffold, layer-by-layer generation, 72 static rules, a load-time smoke test, a pacing simulation, browser verification — and hands you a game that <strong>opens and plays, balanced, with a clean console</strong>.</p>
+    <p class="sub lang-zh">tmt-game-generator 是一个 Agent Skill：对它说一句「给我做一个关于 X 的增量游戏」，你的 agent 就走完一条带实测的流水线——采访、数据设计、脚手架、逐层生成、72 条静态规则、载入冒烟、平衡实测、浏览器实测——交付一个<strong>打开即玩、曲线平衡、控制台零报错</strong>的游戏。</p>
+  </div>
+</section>
+
+<!-- ============================================================= data -->
+<section class="band" id="data">
+  <div class="wrap">
+    <h2><span class="lang-en">It doesn't guess numbers. It counts them.</span><span class="lang-zh">它不猜数字。它数数字。</span></h2>
+    <p class="section-sub lang-en">Balance parameters are not folklore. They are per-component statistics across public TMT games — every figure traceable to a file and a line.</p>
+    <p class="section-sub lang-zh">平衡参数不是经验，是对公开 TMT 游戏逐组件统计的结果——每一条都能溯源到文件与行。</p>
+    <div class="stats">
+      <div class="stat">
+        <div class="num">329</div>
+        <div class="label"><span class="lang-en">public games, counted component by component</span><span class="lang-zh">局公开游戏被逐个组件统计</span></div>
+      </div>
+      <div class="stat">
+        <div class="num">1,156</div>
+        <div class="label"><span class="lang-en">layers — the evidence behind requires ladders and cost curves</span><span class="lang-zh">层，构成要求阶梯与成本曲线的证据</span></div>
+      </div>
+      <div class="stat">
+        <div class="num">29,141</div>
+        <div class="label"><span class="lang-en">upgrades, milestones, challenges and buyables</span><span class="lang-zh">个升级、里程碑、挑战与可购买项</span></div>
+      </div>
+      <div class="stat">
+        <div class="num"><em>54.4%</em></div>
+        <div class="label"><span class="lang-en">of real upgrades ship no effect() — where the wiring rule comes from</span><span class="lang-zh">的真实升级没有 effect()——接线规则的出处</span></div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="num">68</div>
-      <div class="lab"><span class="lang-en">static rules gating every generated build</span><span class="lang-zh">条静态规则，拦截每一个生成的构建</span></div>
-    </div>
-    <div class="stat">
-      <div class="num">8</div>
-      <div class="lab"><span class="lang-en">pipeline stages, including a load-time harness before the first browser open</span><span class="lang-zh">个流水线阶段，包括首次打开浏览器之前的加载期测试工具</span></div>
-    </div>
-    <div class="stat">
-      <div class="num">4</div>
-      <div class="lab"><span class="lang-en">game types, each with its own components and its own acceptance bar</span><span class="lang-zh">种游戏类型，各有自己的组件与验收标准</span></div>
+    <div class="doctrine">
+      <p class="lang-en">The wiring rule: most real upgrades carry their power not in effect() but in a <strong>branch of their layer's gainMult()</strong>. So the brief must name a consumer for every upgrade — an effect nobody consumes gets caught by the checker.</p>
+      <p class="lang-zh">接线规则：一多半真实升级的威力不写在 effect() 里，而写在所在层 <strong>gainMult() 的分支</strong>里。所以设计书必须给每个升级指名消费者——没有消费者的效果，会被静态检查揪出来。</p>
+      <p class="lang-en">The simulation is a floor, not a forecast: on one build a human ran 2.5 hours while the sim ran 0.62 (×4); on another, 99.8 hours matched the target. <strong>If the floor already misses the target, the target is missed</strong> — read the early timeline first, calibrate the total second.</p>
+      <p class="lang-zh">模拟是下界，不是预测：某局人类实玩 2.5 小时、模拟 0.62 小时（×4）；另一局 99.8 小时与目标吻合。<strong>下界已经错过目标，目标就是错的</strong>——所以先读时间线，再校准总数。</p>
     </div>
   </div>
-</div>
+</section>
 
-<section id="pipeline" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">How a game <em>gets made</em></span>
-      <span class="lang-zh">一个游戏是<em>如何做出来的</em></span>
-    </h2>
-    <p>
-      <span class="lang-en">Every run walks the same eight stages and nothing skips ahead. The first two are design, the middle three are code and verification, and the last two are measurement rather than estimate.</span>
-      <span class="lang-zh">每次运行都走同样的八个阶段，绝不跳步。前两个是设计，中间三个是编码与校验，最后两个是实测而非估算。</span>
-    </p>
-  </div>
-
-  <div class="rail">
-    <div class="step">
-      <div class="step-n">01</div>
-      <div class="step-verb"><span class="lang-en">Interview</span><span class="lang-zh">访谈</span></div>
-      <div class="step-desc">
-        <span class="lang-en">Seven questions lock the theme, the scale, the natural ceilings, the pacing target, the side content, and the language tier. A scorer then works out which kind of game this actually is, because that decides which components are allowed to exist at all.</span>
-        <span class="lang-zh">七个问题锁定主题、规模、自然上限、节奏目标、支线内容和语言层级。随后一个评分器判断这究竟是什么类型的游戏，因为它决定了哪些组件被允许存在。</span>
+<!-- ============================================================= pipeline -->
+<section id="pipeline">
+  <div class="wrap">
+    <h2><span class="lang-en">The pipeline: any stage can send the brief back</span><span class="lang-zh">流水线：每一道都可能把设计书打回去</span></h2>
+    <p class="section-sub lang-en">When a check fails, fix the table, not the code — the brief is the contract, the code is its execution.</p>
+    <p class="section-sub lang-zh">检查不过关时，修的是表格，不是代码——设计书是契约，代码是它的执行。</p>
+    <div class="steps">
+      <div class="step">
+        <div class="no">1</div>
+        <div>
+          <h3><span class="lang-en">Interview</span><span class="lang-zh">采访</span></h3>
+          <p class="desc"><span class="lang-en">At most 7 structured questions: how the theme decides the structure, the scale blueprint, natural ceilings, pacing and interactivity, automation tolerance, language. A final question locks the game type — classify.js proposes, you confirm.</span><span class="lang-zh">最多 7 个结构化问题：主题如何决定结构、规模蓝图、自然上限、节奏与互动、自动化容忍、语言。最后一步锁定游戏类型——classify.js 提议，由你确认。</span></p>
+        </div>
+        <div class="tool">scripts/classify.js</div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">02</div>
-      <div class="step-verb"><span class="lang-en">Design brief</span><span class="lang-zh">设计简报</span></div>
-      <div class="step-desc">
-        <span class="lang-en">A layer-by-layer table filled from measured blueprints and the corpus defaults, then self-checked against twenty-one rules. This stage has to pass before anyone types a line of game code.</span>
-        <span class="lang-zh">逐层填写的表格，数据来自实测蓝图与语料库默认值，再对照二十一条规则自检。任何一行游戏代码动笔之前，这一阶段必须先通过。</span>
+      <div class="step">
+        <div class="no">2</div>
+        <div>
+          <h3><span class="lang-en">Design brief</span><span class="lang-zh">设计书</span></h3>
+          <p class="desc"><span class="lang-en">A layer-chain table, one row per layer — the code-generation contract. Every number comes from the four data assets. All 21 self-checks must pass before any code exists.</span><span class="lang-zh">层链表一行一层，就是代码生成契约；数字全部来自四份数据资产。21 项自检全部通过才允许写代码。</span></p>
+        </div>
+        <div class="tool">assets/*.json</div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">03</div>
-      <div class="step-verb"><span class="lang-en">Scaffold</span><span class="lang-zh">脚手架</span></div>
-      <div class="step-desc">
-        <span class="lang-en">A fresh TMT v2.7 folder with a permanent savefile id, patched by a bundled script that also syntax-checks what it wrote.</span>
-        <span class="lang-zh">生成一套全新的 TMT v2.7 文件夹并写入永久存档 id，再由捆绑脚本打补丁，同时对自己写入的内容做语法检查。</span>
+      <div class="step">
+        <div class="no">3</div>
+        <div>
+          <h3><span class="lang-en">Scaffold</span><span class="lang-zh">脚手架</span></h3>
+          <p class="desc"><span class="lang-en">Copy the bundled TMT v2.7 template, patch mod.js with a permanent unique modInfo.id, write .tmt-profile.json, and self-verify the result.</span><span class="lang-zh">复制内置的 TMT v2.7 模板，给 mod.js 打上永久唯一的 modInfo.id，写 .tmt-profile.json，并自我验证语法。</span></p>
+        </div>
+        <div class="tool">scripts/scaffold.js</div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">04</div>
-      <div class="step-verb"><span class="lang-en">Generate</span><span class="lang-zh">生成</span></div>
-      <div class="step-desc">
-        <span class="lang-en">Layer code that keeps every number inside a Decimal: upgrades with genuinely varied effects, milestones, challenges, buyables, automation ladders, softcaps, and the theming.</span>
-        <span class="lang-zh">层级代码让每个数字都保持在 Decimal 之内：效果真正有差异的升级、里程碑、挑战、可购买项、自动化阶梯、软上限，以及主题化。</span>
+      <div class="step">
+        <div class="no">4</div>
+        <div>
+          <h3><span class="lang-en">Generate</span><span class="lang-zh">生成</span></h3>
+          <p class="desc"><span class="lang-en">Layer files written bottom-row-first: Decimal discipline, every upgrade classified token-vs-value and wired to a consumer, microtabs organization, M1–M10 mechanics, the automation ladder, softcaps.</span><span class="lang-zh">自底向上逐层写：Decimal 纪律、每个升级分类 token/value 并接上消费者、microtabs 组织、M1–M10 机制、自动化阶梯、软上限。</span></p>
+        </div>
+        <div class="tool"><span class="lang-en">per the brief</span><span class="lang-zh">按层链表</span></div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">05</div>
-      <div class="step-verb"><span class="lang-en">Static checks</span><span class="lang-zh">静态检查</span></div>
-      <div class="step-desc">
-        <span class="lang-en">68 rules read the source, gated by the locked game type. A FAIL blocks testing outright. A WARN has to be answered in writing in the brief, or it counts as a failure.</span>
-        <span class="lang-zh">68 条规则阅读源码，由已锁定的游戏类型决定是否触发。FAIL 直接阻断测试。WARN 必须在简报中书面回应，否则视同失败。</span>
+      <div class="step">
+        <div class="no">5</div>
+        <div>
+          <h3><span class="lang-en">Static checks</span><span class="lang-zh">静态检查</span></h3>
+          <p class="desc"><span class="lang-en">72 rules read the code. FAIL blocks testing; every WARN needs a written acceptance in the brief — an unexplained WARN counts as a failure.</span><span class="lang-zh">72 条规则读代码。FAIL 阻塞测试；WARN 必须在设计书里书面豁免——无解释的 WARN 算失败。</span></p>
+        </div>
+        <div class="tool">scripts/static_checks.js</div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">05.5</div>
-      <div class="step-verb"><span class="lang-en">Load-time smoke</span><span class="lang-zh">加载期冒烟测试</span></div>
-      <div class="step-desc">
-        <span class="lang-en">The real mod files are loaded in Node against engine stubs. Loading throws, duplicate layer ids, broken startData contracts, and hooks that return NaN are all caught here, before the browser ever opens.</span>
-        <span class="lang-zh">真实的 mod 文件会在 Node 里对着引擎桩加载。加载抛错、层级 id 重复、startData 契约损坏、钩子返回 NaN，全部在这里被抓住，浏览器还没打开。</span>
+      <div class="step">
+        <div class="no">5.5</div>
+        <div>
+          <h3><span class="lang-en">Load-time smoke</span><span class="lang-zh">载入冒烟</span></h3>
+          <p class="desc"><span class="lang-en">The real mod files load in Node: boot-time throws, duplicate layer ids, the startData contract, NaN hooks — all before a browser opens.</span><span class="lang-zh">真实的 mod 文件在 Node 里加载：启动抛错、重复层 id、startData 契约、NaN 钩子，全部在浏览器打开之前。</span></p>
+        </div>
+        <div class="tool">assets/harness/smoke.js</div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">06</div>
-      <div class="step-verb"><span class="lang-en">Balance</span><span class="lang-zh">平衡</span></div>
-      <div class="step-desc">
-        <span class="lang-en">A headless simulator plays the build and reports the real timeline, hour by hour. The brief's numbers are checked against that measurement instead of against arithmetic on paper.</span>
-        <span class="lang-zh">无头模拟器实际游玩这个构建，逐小时汇报真实时间线。简报里的数字要拿它来核对，而不是拿纸面算术核对。</span>
+      <div class="step">
+        <div class="no">6</div>
+        <div>
+          <h3><span class="lang-en">Pacing measurement</span><span class="lang-zh">平衡实测</span></h3>
+          <p class="desc"><span class="lang-en">Drives the real economy and reports the first purchase, each layer's first prestige, and the total time to isEndgame(). Measured, not estimated.</span><span class="lang-zh">驱动真实经济，报出首次购买、每层首次声望、到 endgame 的总时长。测量，不是估计。</span></p>
+        </div>
+        <div class="tool">assets/harness/simulate.js</div>
       </div>
-    </div>
-    <div class="step">
-      <div class="step-n">07</div>
-      <div class="step-verb"><span class="lang-en">Hand off</span><span class="lang-zh">交付</span></div>
-      <div class="step-desc">
-        <span class="lang-en">You serve the folder and play it, working down a checklist for the console, the saves, the offline cap, and whether the endgame actually fires.</span>
-        <span class="lang-zh">你启动这个文件夹来玩，按清单逐项检查控制台、存档、离线上限，以及终局是否真的触发。</span>
+      <div class="step">
+        <div class="no">6.5</div>
+        <div>
+          <h3><span class="lang-en">Browser verification</span><span class="lang-zh">浏览器实测</span></h3>
+          <p class="desc"><span class="lang-en">The generator opens the served game itself: boot errors empty, every tab and microtab opens, one real prestige per layer kind, save/reload intact, console clean.</span><span class="lang-zh">生成器自己打开这个游戏：启动零报错、每个标签页能开、每层真实声望一次、存档往返完好、控制台干净。</span></p>
+        </div>
+        <div class="tool">Stage 6.5</div>
+      </div>
+      <div class="step">
+        <div class="no">7</div>
+        <div>
+          <h3><span class="lang-en">Test handoff</span><span class="lang-zh">测试交接</span></h3>
+          <p class="desc"><span class="lang-en">Serve, play, and work the checklist: clean console, first prestige within minutes, save and offline cap, a reachable endgame.</span><span class="lang-zh">起服务器，对照清单玩一遍：控制台干净、首次声望在几分钟内、存档与离线上限、endgame 可达。</span></p>
+        </div>
+        <div class="tool"><span class="lang-en">handoff checklist</span><span class="lang-zh">交接清单</span></div>
       </div>
     </div>
   </div>
 </section>
 
-<section id="data" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">The numbers come from games people <em>already shipped</em></span>
-      <span class="lang-zh">这些数字来自别人<em>已经发布</em>的游戏</span>
-    </h2>
-    <p>
-      <span class="lang-en">None of the thresholds in this skill are opinion. They come from a numeric archive of every component in 329 published TMT games: 36 MB of source, parsed component by component, each figure traceable to a file and a line.</span>
-      <span class="lang-zh">这项技能里没有一个阈值是拍脑袋定的。它们来自一份数字档案，收录了 329 款已发布 TMT 游戏的每一个组件：36 MB 源码，逐组件解析，每个数字都能追溯到某个文件的某一行。</span>
-    </p>
-  </div>
-
-  <div class="band-grid">
-    <div class="stat">
-      <div class="num">329</div>
-      <div class="lab"><span class="lang-en">games extracted in full, not sampled</span><span class="lang-zh">款游戏完整提取，而非抽样</span></div>
-    </div>
-    <div class="stat">
-      <div class="num">1,156</div>
-      <div class="lab"><span class="lang-en">layers with their cost and gain formulas</span><span class="lang-zh">个层级，含其成本与收益公式</span></div>
-    </div>
-    <div class="stat">
-      <div class="num">29,141</div>
-      <div class="lab"><span class="lang-en">components catalogued: upgrades, milestones, challenges, achievements, buyables</span><span class="lang-zh">个组件被编目：升级、里程碑、挑战、成就、可购买项</span></div>
-    </div>
-    <div class="stat">
-      <div class="num">13,746</div>
-      <div class="lab"><span class="lang-en">upgrades, the largest single pool for numeric analysis</span><span class="lang-zh">个升级，数值分析中最大的单一池</span></div>
-    </div>
-  </div>
-
-  <div class="sec-note">
-    <span class="lang-en"><b>54.4%</b> of those upgrades carry no <code>effect()</code> of their own. Their power is a branch inside the layer's <code>gainMult()</code> instead. That one shape is how a generated incremental game runs perfectly, sells everything, prints its multipliers, and changes nothing.</span>
-    <span class="lang-zh">这些升级里有 <b>54.4%</b> 根本没有自己的 <code>effect()</code>。它们的力量其实是层级 <code>gainMult()</code> 里的一条分支。正是这种形态，让一个生成的增量游戏跑得完美无缺、卖光所有东西、把倍率打印得漂漂亮亮，却什么都没有改变。</span>
-  </div>
-
-  <div class="pair">
-    <div class="pair-col">
-      <div class="pair-tag"><span class="lang-en">generated, unwired</span><span class="lang-zh">生成结果：未接线</span></div>
-      <pre>upgrades: {
-  11: {
-    <b>effect()</b> { return new Decimal(2) },
-    <i>effectDisplay</i>() { return format(this.effect()) }
-  }
-}</pre>
-      <p>
-        <span class="lang-en">It loads. It sells. It prints a doubling. <b>No number anywhere in the game moves</b>, and not one of the 68 rules has anything to say about it.</span>
-        <span class="lang-zh">它能加载，能卖，能打印出翻倍。但<b>游戏里没有任何一个数字会动</b>，而 68 条规则没有一条能说得出话。</span>
-      </p>
-    </div>
-    <div class="pair-col good">
-      <div class="pair-tag"><span class="lang-en">what the corpus does</span><span class="lang-zh">语料库里是怎么做的</span></div>
-      <pre>upgrades: {
-  11: { <i>unlocked</i>() { return player.p.points.gte(1e6) } }
-}
-
-<b>gainMult</b>() {
-  let ret = new Decimal(1)
-  <b>if</b> (hasUpgrade("p", 11)) ret = ret.times(2)
-  <b>return</b> ret
-}</pre>
-      <p>
-        <span class="lang-en">The upgrade is a token; the layer owns the arithmetic. Now the doubling is real, and a rule can prove that something consumes it.</span>
-        <span class="lang-zh">升级只是一个凭证；算术归层级所有。现在这个翻倍是真的了，规则也能证明有东西在消费它。</span>
-      </p>
-    </div>
-  </div>
-
-  <div class="ops">
-    <div class="ops-row"><span class="ops-name">.pow()</span><span class="ops-bar"><i style="width:100%"></i></span><span class="ops-val">4,830</span></div>
-    <div class="ops-row"><span class="ops-name">.add()</span><span class="ops-bar"><i style="width:69.6%"></i></span><span class="ops-val">3,364</span></div>
-    <div class="ops-row"><span class="ops-name">.log10()</span><span class="ops-bar"><i style="width:69.3%"></i></span><span class="ops-val">3,350</span></div>
-    <div class="ops-row"><span class="ops-name">.times()</span><span class="ops-bar"><i style="width:34.2%"></i></span><span class="ops-val">1,652</span></div>
-    <div class="ops-row"><span class="ops-name">softcap()</span><span class="ops-bar"><i style="width:0.8%"></i></span><span class="ops-val">39</span></div>
-    <p class="ops-cap">
-      <span class="lang-en">Every operation used inside the 6,274 corpus upgrades that do have an effect. Power and log shapes outnumber plain multipliers roughly three to one, so a generator that only ever emits a flat doubling produces something no human has ever shipped.</span>
-      <span class="lang-zh">这是 6,274 个真正带效果的语料库升级中出现的每一种运算。幂与对数形态的数量大约是纯倍率的三倍，所以一个只会输出平直翻倍的生成器，产出的是没人真正发布过的东西。</span>
-    </p>
+<!-- ============================================================= types -->
+<section id="types">
+  <div class="wrap">
+    <h2><span class="lang-en">Type first, then code</span><span class="lang-zh">先定类型，再写代码</span></h2>
+    <p class="section-sub lang-en">The interview's final step locks the game type — orthogonal to the scale blueprint. The type decides which components are mandatory, which are exempt, and which acceptance rules apply.</p>
+    <p class="section-sub lang-zh">采访的最后一步锁定游戏类型。类型与规模蓝图正交：它决定哪些组件强制、哪些被豁免、哪些验收规则生效。</p>
+    <table class="type-table">
+      <thead>
+        <tr>
+          <th scope="col"><span class="lang-en">Type</span><span class="lang-zh">类型</span></th>
+          <th scope="col"><span class="lang-en">Interaction model</span><span class="lang-zh">交互模型</span></th>
+          <th scope="col"><span class="lang-en">Mandatory contract</span><span class="lang-zh">强制契约</span></th>
+          <th scope="col"><span class="lang-en">Explicit exemption</span><span class="lang-zh">明确豁免</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="tid" data-label-en="Type" data-label-zh="类型">passive-prestige</td>
+          <td data-label-en="Interaction" data-label-zh="交互"><span class="lang-en">idle, hands-off</span><span class="lang-zh">挂机放置</span></td>
+          <td data-label-en="Mandatory" data-label-zh="强制"><span class="lang-en">passiveGeneration / autoPrestige ladder</span><span class="lang-zh">passiveGeneration / autoPrestige 阶梯</span></td>
+          <td data-label-en="Exempt" data-label-zh="豁免"><span class="lang-en">the “you need tick logic” rule</span><span class="lang-zh">「必须有 tick 逻辑」这条规则</span></td>
+        </tr>
+        <tr>
+          <td class="tid" data-label-en="Type" data-label-zh="类型">active-click</td>
+          <td data-label-en="Interaction" data-label-zh="交互"><span class="lang-en">active clicking</span><span class="lang-zh">主动点击</span></td>
+          <td data-label-en="Mandatory" data-label-zh="强制"><span class="lang-en">the clickable contract (T-CLICKABLE)</span><span class="lang-zh">clickable 契约（T-CLICKABLE）</span></td>
+          <td data-label-en="Exempt" data-label-zh="豁免">—</td>
+        </tr>
+        <tr>
+          <td class="tid" data-label-en="Type" data-label-zh="类型">active-tick</td>
+          <td data-label-en="Interaction" data-label-zh="交互"><span class="lang-en">a tick loop</span><span class="lang-zh">节拍循环</span></td>
+          <td data-label-en="Mandatory" data-label-zh="强制"><span class="lang-en">an update() heartbeat with an unlocked guard</span><span class="lang-zh">update() 心跳，且带解锁守卫</span></td>
+          <td data-label-en="Exempt" data-label-zh="豁免">—</td>
+        </tr>
+        <tr>
+          <td class="tid" data-label-en="Type" data-label-zh="类型">board-minigame</td>
+          <td data-label-en="Interaction" data-label-zh="交互"><span class="lang-en">a board minigame</span><span class="lang-zh">棋盘小游戏</span></td>
+          <td data-label-en="Mandatory" data-label-zh="强制"><span class="lang-en">the grid contract (T-GRID)</span><span class="lang-zh">grid 契约（T-GRID）</span></td>
+          <td data-label-en="Exempt" data-label-zh="豁免">—</td>
+        </tr>
+      </tbody>
+      <caption><span class="lang-en">Type gates load from .tmt-profile.json; a game with no declared type produces a byte-identical report.</span><span class="lang-zh">类型守卫按 .tmt-profile.json 生效；没有声明类型的游戏，检查报告与从前逐字节一致。</span></caption>
+    </table>
+    <p class="type-note lang-en">On top of the type, <strong>6 modifiers</strong> can stack (themable challenges, offline progress and friends). A modifier whose hard dependency is unmet is <strong>downgraded with a written reason</strong>, never silently dropped.</p>
+    <p class="type-note lang-zh">在类型之上还可以叠加 <strong>6 个修饰符</strong>（主题化挑战、离线进度等）。硬依赖不满足时，修饰符会被<strong>降级并写明理由</strong>，绝不静默丢弃。</p>
   </div>
 </section>
 
-<section id="types" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">Size and shape are <em>two different questions</em></span>
-      <span class="lang-zh">规模与形态是<em>两个不同的问题</em></span>
-    </h2>
-    <p>
-      <span class="lang-en">Scale is settled by Q2: five to seven layers, or twenty-five and up. Shape is settled separately, by counting how many of those 329 games let the player act at all, and how. That ratio is not a guess. It decides which components are mandatory, which are forbidden outright, and which checks the build has to survive.</span>
-      <span class="lang-zh">规模由 Q2 决定：五到七层，或者二十五层以上。形态则单独决定，方法是统计那 329 款游戏里有多少让玩家真正动手，以及怎么动手。这个比例不是猜的。它决定了哪些组件是必需的、哪些被直接禁止、以及这个构建必须通过哪些检查。</span>
-    </p>
-  </div>
-
-  <div class="splitbar" role="img" aria-label="Share of the 329-file corpus: passive-prestige 53.5 percent, active-click 11.2 percent, active-tick 10.0 percent, board-minigame 6.7 percent, remaining files 18.6 percent.">
-    <i style="width:53.5%; opacity:1"></i>
-    <i style="width:11.2%; opacity:.72"></i>
-    <i style="width:10%; opacity:.5"></i>
-    <i style="width:6.7%; opacity:.34"></i>
-    <i style="width:18.6%; opacity:.13"></i>
-  </div>
-  <p class="split-cap">
-    <span class="lang-en">Share of the 329-file corpus. The last segment is the files where no single interaction model dominates, 18.6% of the set.</span>
-    <span class="lang-zh">占 329 份语料库的比例。最后一段是没有任何单一交互模型占主导的文件，占全集的 18.6%。</span>
-  </p>
-
-  <div class="typelist">
-    <div class="typerow">
-      <span class="type-name">passive-prestige</span><span class="type-share">53.5%</span>
-      <span class="type-contract">
-        <span class="lang-en">Accumulate and reset, never act. <code>normal</code> and <code>static</code> layers only, with no tick, no clickables and no grid. Having no tick here is correct, and the rule set exempts it rather than flagging it.</span>
-        <span class="lang-zh">积累与重置，从不主动操作。只有 <code>normal</code> 和 <code>static</code> 层级，没有 tick、没有可点击项、没有网格。这里没有 tick 是正确的，规则集会豁免它而不是标记它。</span>
-      </span>
-    </div>
-    <div class="typerow">
-      <span class="type-name">active-click</span><span class="type-share">11.2%</span>
-      <span class="type-contract">
-        <span class="lang-en">Discrete taps. Every clickable defines <code>canClick()</code> and <code>onClick()</code>, and its state lives in <code>startData</code>. A clickable missing its handler is a FAIL, not a headline count.</span>
-        <span class="lang-zh">离散点击。每个可点击项都定义 <code>canClick()</code> 和 <code>onClick()</code>，其状态存放在 <code>startData</code> 中。缺少处理器的可点击项是 FAIL，不是一个用来充数的标题数字。</span>
-      </span>
-    </div>
-    <div class="typerow">
-      <span class="type-name">active-tick</span><span class="type-share">10.0%</span>
-      <span class="type-contract">
-        <span class="lang-en">A continuous quantity the player pushes. Needs <code>update()</code>, bars with a real <code>progress()</code>, and tick-hook registration.</span>
-        <span class="lang-zh">玩家持续推动的连续量。需要 <code>update()</code>、带真实 <code>progress()</code> 的进度条，以及 tick 钩子注册。</span>
-      </span>
-    </div>
-    <div class="typerow">
-      <span class="type-name">board-minigame</span><span class="type-share">6.7%</span>
-      <span class="type-contract">
-        <span class="lang-en">The playfield is a 2D board. Grid contract: a <code>getStartData</code> hook, a rows and columns spec, and base-100 cell ids.</span>
-        <span class="lang-zh">操作场是一块 2D 棋盘。网格契约：一个 <code>getStartData</code> 钩子、行列规格，以及百进制单元格 id。</span>
-      </span>
-    </div>
-  </div>
-
-  <div class="sec-note">
-    <span class="lang-en">A mechanic that needs an interaction model is gated, never quietly dropped. The score-attack challenge hub records its peak inside <code>update()</code>, and this engine has no score-attack API, so that pattern is hand-rolled and genuinely needs a tick. Ask for it on a passive game and the skill says so, writes the reason into the brief, and carries on. A game that declares no type at all is checked exactly the way it was checked before types existed.</span>
-    <span class="lang-zh">需要交互模型的机制会被门控，而不会被悄悄丢掉。积分挑战中心把峰值记录在 <code>update()</code> 里，而这个引擎没有积分 API，所以那种模式是手写的，确实需要 tick。你在一个被动游戏里要求它，技能会直接说明，把理由写进简报，然后继续。一个完全不声明类型的游戏，检查方式与类型出现之前完全一致。</span>
-  </div>
-</section>
-
-<section id="safety" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">The bugs a text checker <em>cannot see</em></span>
-      <span class="lang-zh">文本检查器<em>看不见</em>的 bug</span>
-    </h2>
-    <p>
-      <span class="lang-en">Three defects reached a real player before any of the 53 rules in force at the time could say a word. That rule set reported zero failures on that build, because it asks whether things are wired and how big they are, while all three bugs were about what survives a reset.</span>
-      <span class="lang-zh">有三个缺陷到达了真实玩家手里，而当时生效的 53 条规则一声都没吭。那套规则在那个构建上报了零失败，因为它问的是东西接没接上、有多大，而这三个 bug 全都是关于重置后什么能活下来。</span>
-    </p>
-  </div>
-
-  <div class="sec-note">
-    <span class="lang-en">The engine prestiges straight out of the game loop, <code>if (tmp[layer].autoPrestige &amp;&amp; tmp[layer].canReset) doReset(layer)</code>, with no player toggle anywhere in that path, and <code>resetsNothing()</code> is the only brake. So automation a player cannot switch off has to be safe by construction. The invariant is short: <b>what auto-prestige requires must imply what makes the reset harmless.</b></span>
-    <span class="lang-zh">引擎直接从游戏循环里触发转生，<code>if (tmp[layer].autoPrestige &amp;&amp; tmp[layer].canReset) doReset(layer)</code>，这条路径上没有任何玩家开关，<code>resetsNothing()</code> 是唯一的刹车。所以玩家关不掉的自动化，必须在构造上就是安全的。不变式很短：<b>自动转生所需的条件，必须蕴含使重置无害的条件。</b></span>
-  </div>
-
-  <div class="pair">
-    <div class="pair-col">
-      <div class="pair-tag"><span class="lang-en">as generated</span><span class="lang-zh">生成时的样子</span></div>
-      <pre>autoPrestige() {
-  <b>if</b> (hasMilestone(this.layer, 2)) <b>return true</b>
-}
-resetsNothing() {
-  <b>if</b> (hasMilestone("sg2", 3)) <b>return true</b>
-}</pre>
-      <p>
-        <span class="lang-en">Automation turns on at this layer's second milestone. The reset only stops hurting orders of magnitude later, at <code>sg2</code>'s third. In between, the layer wipes its own supply every frame. <b>52 of the 98 automated layers in that game behaved this way.</b></span>
-        <span class="lang-zh">自动化在这一层的第二个里程碑开启。而重置要等到 <code>sg2</code> 的第三个里程碑才不再造成伤害，那已经晚了好几个数量级。中间这段时间，这一层每一帧都在清空自己的供给。<b>那款游戏 98 个自动化层级里有 52 个是这种行为。</b></span>
-      </p>
-    </div>
-    <div class="pair-col good">
-      <div class="pair-tag"><span class="lang-en">after the repair</span><span class="lang-zh">修复之后</span></div>
-      <pre>autoPrestige() {
-  <b>if</b> (hasMilestone(this.layer, 2) &amp;&amp;
-      hasMilestone("sg2", 3)) <b>return true</b>
-}
-resetsNothing() {
-  <b>if</b> (hasMilestone("sg2", 3)) <b>return true</b>
-}</pre>
-      <p>
-        <span class="lang-en">Automation now arrives later, and that delay is the honest price of safety. Four rules encode the whole class: <code>N-AUTOWIPE</code>, <code>N-MSDESTROY</code>, <code>N-POINTSWRITE</code> and <code>N-STATICMAX</code>. They compare milestone <b>sets</b>, never their numbers.</span>
-        <span class="lang-zh">自动化来得更晚了，而这段延迟就是安全要付的诚实代价。四条规则编码了这一整类问题：<code>N-AUTOWIPE</code>、<code>N-MSDESTROY</code>、<code>N-POINTSWRITE</code> 和 <code>N-STATICMAX</code>。它们比较的是里程碑<b>集合</b>，从不比较里程碑编号。</span>
-      </p>
-    </div>
-  </div>
-
-  <div class="qual-grid">
-    <div class="qual-col">
-      <h3><span class="lang-en">What survives a reset</span><span class="lang-zh">重置之后还剩什么</span></h3>
-      <ul>
-        <li>
-          <span class="lang-en">Milestones score on lifetime records. After the repair, <b>385 milestones read a career record and none reads a live counter.</b></span>
-          <span class="lang-zh">里程碑判定基于生涯记录。修复之后，<b>385 个里程碑读取的是生涯记录，没有任何一个读取实时计数器。</b></span>
-        </li>
-        <li>
-          <span class="lang-en">A layer with no <code>doReset</code> hook silently gets the engine's default keep list, which holds neither <code>best</code> nor <code>total</code>. That is the mechanism behind all three reports, and it applies to <b>all 104 layers</b>, not the one the player noticed.</span>
-          <span class="lang-zh">一个没有 <code>doReset</code> 钩子的层级会静默拿到引擎的默认保留清单，而那份清单里既没有 <code>best</code> 也没有 <code>total</code>。这就是那三份报告背后的机制，而且它适用于<b>全部 104 个层级</b>，不只是玩家注意到的那一个。</span>
-        </li>
-        <li>
-          <span class="lang-en">Version numbers are compared as text by the engine, so a downgrade quietly rewrites every save it opens.</span>
-          <span class="lang-zh">引擎把版本号当作文本来比较，所以一次降级会悄悄改写它打开的每一份存档。</span>
-        </li>
-      </ul>
-    </div>
-    <div class="qual-col">
-      <h3><span class="lang-en">Counters are not prizes</span><span class="lang-zh">计数器不是奖励</span></h3>
-      <ul>
-        <li>
-          <span class="lang-en">A static layer needs <code>canBuyMax()</code>. Without it the reset payout clamps to one floor, so each prestige banks exactly one and the entire upgrade ladder is unreachable.</span>
-          <span class="lang-zh">静态层级需要 <code>canBuyMax()</code>。没有它，重置发放会被夹到一层，于是每次转生刚好只存下一个，整条升级阶梯都够不着。</span>
-        </li>
-        <li>
-          <span class="lang-en">A static layer's counter <i>is</i> its banked total, so trickling points into it earns less every second and hands back floors the next prestige cannot bank.</span>
-          <span class="lang-zh">静态层级的计数器<i>就是</i>它存下的总量，所以把点数一点点滴进去，每秒收益越来越低，还会退回下一次转生存不下的零头。</span>
-        </li>
-        <li>
-          <span class="lang-en">Every currency award goes through the engine helper that writes lifetime records, because achievements and endgame conditions read those.</span>
-          <span class="lang-zh">每一笔货币发放都走那个会写入生涯记录的引擎辅助函数，因为成就和终局条件读的就是它。</span>
-        </li>
-      </ul>
-    </div>
-    <div class="qual-col">
-      <h3><span class="lang-en">Why the old rules stayed quiet</span><span class="lang-zh">为什么旧规则保持沉默</span></h3>
-      <ul>
-        <li>
-          <span class="lang-en">Each part of the failure was reasonable on its own. <b>24 defects</b> were repaired across 104 layers, 1,087 upgrades, 403 milestones and 8 challenges.</span>
-          <span class="lang-zh">失败的每一部分单看都合理。<b>24 个缺陷</b>被修复，横跨 104 个层级、1,087 个升级、403 个里程碑和 8 个挑战。</span>
-        </li>
-        <li>
-          <span class="lang-en">After the repair the build reported <b>370 PASS, 36 WARN, 0 FAIL</b>, every warning verified line by line. The player reports had all come in first.</span>
-          <span class="lang-zh">修复后这个构建报告 <b>370 PASS、36 WARN、0 FAIL</b>，每条警告都逐行核实过。而玩家的报告早就先到了。</span>
-        </li>
-        <li>
-          <span class="lang-en">One report guessed that other layers shared the bug. All of them did, across 104 layers at once. The repair then checked every hook that existed, and confirmed it.</span>
-          <span class="lang-zh">有一份报告猜其他层级也有同样的 bug。确实全都有，104 个层级一次中招。修复随后检查了每一个存在的钩子，并确认了这一点。</span>
-        </li>
-      </ul>
+<!-- ============================================================= install -->
+<section id="install">
+  <div class="wrap">
+    <h2><span class="lang-en">Install</span><span class="lang-zh">安装</span></h2>
+    <p class="section-sub lang-en">The build output is the skill itself: copy it into your tool's skills directory and start a new session.</p>
+    <p class="section-sub lang-zh">构建产物就是 skill 本体：拷进你的工具的 skills 目录，新开会话即可触发。</p>
+    <div class="install-grid">
+      <div>
+        <div class="cmd">node scripts/pack.js<span class="cmt"><span class="lang-en">   # → dist/tmt-game-generator/</span><span class="lang-zh">   # 产出 dist/tmt-game-generator/</span></span></div>
+        <table class="dest-table">
+          <tbody>
+            <tr><td>ZCode</td><td>~/.zcode/skills/tmt-game-generator/</td></tr>
+            <tr><td>Claude Code</td><td>~/.claude/skills/tmt-game-generator/</td></tr>
+            <tr><td><span class="lang-en">Other tools</span><span class="lang-zh">其他工具</span></td><td><span class="lang-en">the tool's user- or project-level skills directory</span><span class="lang-zh">该工具的用户级或项目级 skills 目录</span></td></tr>
+          </tbody>
+        </table>
+        <p class="type-note lang-en">Requires Node.js ≥ 18; the five scripts have zero npm dependencies. To play the result, any static file server (npx http-server &lt;folder&gt;).</p>
+        <p class="type-note lang-zh">要求 Node.js ≥ 18；五个脚本零 npm 依赖。玩生成结果需要一个静态文件服务器（npx http-server &lt;目录&gt;）。</p>
+      </div>
+      <div class="triggers install-col">
+        <h3><span class="lang-en">Once installed, start a new session and say:</span><span class="lang-zh">装好后，新开会话说一句：</span></h3>
+        <ul>
+          <li><em><span class="lang-en">“Make me an incremental game about bees”</span><span class="lang-zh">「给我做一个关于蜜蜂的增量游戏」</span></em></li>
+          <li>“Build a prestige tree game where you breed dragons”</li>
+          <li><span class="lang-en">or, where the tool supports it: </span><span class="lang-zh">或在支持斜杠命令的工具里：</span><em>/tmt-game-generator</em></li>
+        </ul>
+        <p class="req"><span class="lang-en">Full docs and source: </span><span class="lang-zh">仓库与完整文档见 </span><a href="https://github.com/chenf888/TMT-game-generator" rel="noopener">GitHub</a><span class="lang-en">.</span><span class="lang-zh">。</span></p>
+      </div>
     </div>
   </div>
 </section>
-
-<section id="measured" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">The checks that need a <em>real build</em></span>
-      <span class="lang-zh">那些需要<em>真实构建</em>才能做的检查</span>
-    </h2>
-    <p>
-      <span class="lang-en">Three briefs passed all twenty-one design self-checks and were then overturned as soon as anyone measured the result. Paper reachability is a consistency argument, not a prediction. So the skill ships three tools that only have something to say once a build exists.</span>
-      <span class="lang-zh">有三份简报通过了全部二十一项设计自检，却在任何人真正实测结果的那一刻被推翻。纸面可达性是一种一致性论证，不是预测。所以这项技能附带了三个工具，只有在构建存在之后它们才有话可说。</span>
-    </p>
-  </div>
-
-  <div class="tools">
-    <div class="tool">
-      <div><div class="tool-name">assets/harness/smoke.js</div><span class="tool-stage"><span class="lang-en">stage 5.5</span><span class="lang-zh">阶段 5.5</span></span></div>
-      <div class="tool-body">
-        <p>
-          <span class="lang-en">Loads the real mod files in Node against engine stubs and asserts them, so the first browser open is not the first test. It catches load-time throws, two layers sharing an id, broken <code>startData</code> contracts, and hooks that return NaN on a fresh save. It starts every layer unlocked on purpose, so a hook that only breaks once the layer is reachable fails here instead of in a player's console.</span>
-          <span class="lang-zh">在 Node 里对着引擎桩加载真实 mod 文件并断言，让首次打开浏览器不再是第一道测试。它能抓住加载期抛错、两个层级共用一个 id、<code>startData</code> 契约损坏，以及在新存档上返回 NaN 的钩子。它刻意让每个层级一开始就解锁，所以一个只在层级可达后才出问题的钩子会在这里失败，而不是在玩家的控制台里。</span>
-        </p>
-        <code class="tool-run">node tools/smoke.js</code>
-      </div>
-    </div>
-    <div class="tool">
-      <div><div class="tool-name">assets/harness/simulate.js</div><span class="tool-stage"><span class="lang-en">stage 6</span><span class="lang-zh">阶段 6</span></span></div>
-      <div class="tool-body">
-        <p>
-          <span class="lang-en">Plays the build headlessly and reports the timeline. Shipped as a template rather than a finished instrument: its early timeline is trustworthy, and its total is not until you fit one point you already know from a real playthrough. The estimates above were wrong by a factor of four, by a factor of two thousand, and by enough that an entire multiplier architecture had to be replaced. The script says so out loud when a run finishes implausibly fast, because the alternative is a number nobody should quote.</span>
-          <span class="lang-zh">无头游玩这个构建并汇报时间线。它以模板形式交付，而不是一件成品仪器：它的早期时间线可信，而总量在你用一个真实通关已知点校准之前并不可信。上面那些估算分别错了四倍、两千倍，还有一次错到整个倍率架构都得推倒重来。当一次运行快得不合常理时，脚本会直接说出来，因为另一个选项是一个谁都不该引用的数字。</span>
-        </p>
-        <code class="tool-run">node assets/harness/simulate.js &lt;game-folder&gt;</code>
-      </div>
-    </div>
-    <div class="tool">
-      <div><div class="tool-name">scripts/i18n_check.js</div><span class="tool-stage"><span class="lang-en">text layers</span><span class="lang-zh">文本层</span></span></div>
-      <div class="tool-body">
-        <p>
-          <span class="lang-en">Checks a text layer for missing keys, duplicate language codes, duplicate endonyms, and placeholder drift. One generated game ships 371 keys in three complete languages behind a phrase pool of 344 sentences, no two of them in the same language, which is a long way past what a bilingual toggle can express. With no <code>js/lang/</code> folder the checker is a silent no-op.</span>
-          <span class="lang-zh">检查一个文本层的缺失键、重复语言码、重复母语名和占位符漂移。有一款生成的游戏用三种完整语言交付了 371 个键，背后是 344 句话的短语池，没有任何两句属于同一种语言，这远远超出了双语开关能表达的范围。没有 <code>js/lang/</code> 文件夹时，这个检查器是静默空操作。</span>
-        </p>
-        <code class="tool-run">node scripts/i18n_check.js &lt;game-folder&gt;</code>
-      </div>
-    </div>
-  </div>
-
-  <div class="sec-note">
-    <span class="lang-en">Everything learned the hard way ends up in one chapter: <b>sixteen</b> behaviours of the engine that its own documentation does not state. Among them, <code>format()</code> rendering every value below 1e-4 as <code>0.00</code>, <code>layeradd()</code> silently ignoring a Decimal, a top-level throw in <code>mod.js</code> killing every initializer after it, and a buyable whose effect exponent equals its cost exponent funding its own next purchase until the economy detonates. Each entry was written after it cost somebody a debugging session, and each one names the build it came from.</span>
-    <span class="lang-zh">所有吃过亏才学到的东西最后都归入一章：引擎有<b>十六种</b>它自己的文档从未说明的行为。其中包括 <code>format()</code> 把 1e-4 以下的每个值都渲染成 <code>0.00</code>、<code>layeradd()</code> 悄悄忽略 Decimal、<code>mod.js</code> 里一个顶层抛错会杀死它之后所有初始化器，以及一个效果指数等于成本指数的可购买项自己资助自己的下一次购买，直到经济爆炸。每一条都是在害某人花掉一整个调试会话之后写下来的，每一条都注明了它来自哪个构建。</span>
-  </div>
-</section>
-
-<section id="install" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">Copy the folder, then <em>say go</em></span>
-      <span class="lang-zh">把文件夹复制过去，然后<em>说开始</em></span>
-    </h2>
-    <p>
-      <span class="lang-en">The folder is the skill. It carries its own handbook, its scripts, and a complete TMT v2.7 template, and it needs nothing installed beyond Node.</span>
-      <span class="lang-zh">这个文件夹就是技能本身。它自带手册、脚本和一整套 TMT v2.7 模板，除了 Node 之外什么都不用装。</span>
-    </p>
-  </div>
-
-  <div class="install-grid">
-    <div>
-      <div class="install-block">
-        <h3>ZCode</h3>
-        <p><span class="lang-en">User-level skills folder, shared across your tools:</span><span class="lang-zh">用户级技能文件夹，在你的各个工具之间共享：</span></p>
-        <button type="button" class="copyline" data-copy="~/.agents/skills/">~/.agents/skills/</button>
-      </div>
-      <div class="install-block">
-        <h3>Claude Code</h3>
-        <p><span class="lang-en">User-level skills folder:</span><span class="lang-zh">用户级技能文件夹：</span></p>
-        <button type="button" class="copyline" data-copy="~/.claude/skills/">~/.claude/skills/</button>
-      </div>
-      <div class="install-block">
-        <h3><span class="lang-en">Any other SKILL.md tool</span><span class="lang-zh">任何其他 SKILL.md 工具</span></h3>
-        <p><span class="lang-en">Clone it into whatever directory your tool scans for skills.</span><span class="lang-zh">克隆到你所用工具扫描技能的目录即可。</span></p>
-        <button type="button" class="copyline wrap" data-copy="git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator">git clone https://github.com/chenf888/TMT-game-generator.git ~/.claude/skills/tmt-game-generator</button>
-      </div>
-    </div>
-
-    <div>
-      <p class="prompt-label"><span class="lang-en">Then say one of these</span><span class="lang-zh">然后说其中一句</span></p>
-      <p class="prompt-hint"><span class="lang-en">Click a prompt to copy it.</span><span class="lang-zh">点击提示词即可复制。</span></p>
-      <button type="button" class="chip" data-copy="Make me an incremental game about beekeeping">"Make me an incremental game about beekeeping"</button>
-      <button type="button" class="chip" data-copy="Build a prestige tree game around a space elevator">"Build a prestige tree game around a space elevator"</button>
-      <button type="button" class="chip" data-copy="Generate a TMT mod tree where you brew tea">"Generate a TMT mod tree where you brew tea"</button>
-
-      <p class="verify"><span class="lang-en">To check that the install is intact, run the bundled test suite from the skill folder:</span><span class="lang-zh">想确认安装完好，在技能文件夹里跑一遍捆绑的测试套件：</span></p>
-      <button type="button" class="copyline" data-copy="node tests/run_tests.js">node tests/run_tests.js</button>
-      <p class="verify">
-        <span class="lang-en">It ends with <code class="expect">ALL SMOKE TESTS PASSED</code> when the toolchain is sound.</span>
-        <span class="lang-zh">工具链正常时，它会以 <code class="expect">ALL SMOKE TESTS PASSED</code> 结束。</span>
-      </p>
-    </div>
-  </div>
-</section>
-
-<section id="quality" class="wrap">
-  <div class="sec-head">
-    <h2>
-      <span class="lang-en">What <em>finished</em> means here</span>
-      <span class="lang-zh">在这里，<em>完成</em>意味着什么</span>
-    </h2>
-    <p>
-      <span class="lang-en">A build ships when all of this holds. Every line of it comes from the corpus, from the engine author's own design notes, or from a defect that escaped an earlier game and is now a rule.</span>
-      <span class="lang-zh">当以下全部成立时，一个构建才算可以交付。这里的每一条都来自语料库、来自引擎作者自己的设计笔记，或者来自一个从更早的游戏里逃出来、现在成了规则的缺陷。</span>
-    </p>
-  </div>
-
-  <div class="qual-grid">
-    <div class="qual-col">
-      <h3><span class="lang-en">Numbers</span><span class="lang-zh">数字</span></h3>
-      <ul>
-        <li><span class="lang-en">Requires ladders and cost curves taken from 329 measured games</span><span class="lang-zh">需求阶梯与成本曲线取自 329 款实测游戏</span></li>
-        <li><span class="lang-en">First prestige within minutes, endgame reachable, never instant</span><span class="lang-zh">首次转生在几分钟内，终局可达，绝不瞬达</span></li>
-        <li><span class="lang-en">Cost ladders spanning the measured six orders of magnitude or more</span><span class="lang-zh">成本阶梯跨越实测的六个数量级或更多</span></li>
-        <li><span class="lang-en">Self-scaling effects budgeted so a gain cannot compound past its own softcap</span><span class="lang-zh">自缩放效果有预算，使收益无法复利越过它自己的软上限</span></li>
-        <li><span class="lang-en">Pacing measured in the simulator rather than estimated on paper</span><span class="lang-zh">节奏在模拟器里实测，而非纸面估算</span></li>
-      </ul>
-    </div>
-    <div class="qual-col">
-      <h3><span class="lang-en">Content</span><span class="lang-zh">内容</span></h3>
-      <ul>
-        <li><span class="lang-en">The theme decides tree topology, currencies and hard caps, not just the labels</span><span class="lang-zh">主题决定树的拓扑、货币与硬性上限，而不只是标签</span></li>
-        <li><span class="lang-en">Effect-kind quotas keep layers from becoming walls of identical multipliers</span><span class="lang-zh">效果种类配额防止层级变成一堵堵相同的倍率墙</span></li>
-        <li><span class="lang-en">Microtabs organise a layer long before it turns into a scroll wall</span><span class="lang-zh">微标签在一个层级变成滚动墙之前很早就把它组织好</span></li>
-        <li><span class="lang-en">Challenges, clickables and active loops land at the quota for the blueprint</span><span class="lang-zh">挑战、可点击项与主动循环按蓝图配额落位</span></li>
-        <li><span class="lang-en">The locked game type's contract is honoured: <b>required components present, forbidden ones absent</b></span><span class="lang-zh">已锁定类型的契约得到遵守：<b>必需的组件在，被禁的组件不在</b></span></li>
-      </ul>
-    </div>
-    <div class="qual-col">
-      <h3><span class="lang-en">Verification</span><span class="lang-zh">验证</span></h3>
-      <ul>
-        <li><span class="lang-en">68 static checks pass before manual testing is allowed to start</span><span class="lang-zh">68 项静态检查通过，才允许开始手动测试</span></li>
-        <li><span class="lang-en">The load-time harness reports 0 FAIL against the real mod files</span><span class="lang-zh">加载期测试工具对真实 mod 文件报告 0 FAIL</span></li>
-        <li><span class="lang-en">Every effect is proven to be consumed by some formula somewhere</span><span class="lang-zh">每个效果都被证明在某处的某个公式里被消费</span></li>
-        <li><span class="lang-en">A clickable is opened and read, not merely counted, and a grid declares <code>getStartData</code></span><span class="lang-zh">可点击项要被打开并读过，而不只是计数；网格必须声明 <code>getStartData</code></span></li>
-        <li><span class="lang-en">Prestige a high row with milestones earned, then confirm the ladder survived it</span><span class="lang-zh">在已获得里程碑的高层做一次转生，然后确认阶梯活了下来</span></li>
-        <li><span class="lang-en">Zero console errors across the whole playthrough</span><span class="lang-zh">整个通关过程中控制台零报错</span></li>
-        <li><span class="lang-en">Saves, the offline cap and the win screen verified by hand</span><span class="lang-zh">存档、离线上限与胜利画面逐一人工核验</span></li>
-        <li><span class="lang-en">Rules hardened by <b>eight full games</b>, a 329-game corpus, and the engine author's design notes</span><span class="lang-zh">规则由<b>八款完整游戏</b>、329 款语料库和引擎作者的设计笔记锤炼而成</span></li>
-      </ul>
-    </div>
-  </div>
-</section>
-
 </main>
 
 <footer>
   <div class="wrap">
-    <div class="foot-inner">
-      <span>
-        <span class="lang-en">MIT licensed. Built on The Modding Tree v2.7 by Acamaeda, and not affiliated with the TMT team.</span>
-        <span class="lang-zh">MIT 许可。基于 Acamaeda 的 The Modding Tree v2.7 构建，与 TMT 团队无隶属关系。</span>
-      </span>
-      <span class="foot-links">
-        <a href="https://github.com/chenf888/TMT-game-generator" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/chenf888/TMT-game-generator/blob/main/SKILL.md" target="_blank" rel="noopener">SKILL.md</a>
-      </span>
-    </div>
-    <div class="author">
-      <span class="author-label"><span class="lang-en">Author</span><span class="lang-zh">作者</span></span>
-      <a class="author-name" href="https://github.com/chenf888" target="_blank" rel="noopener">chenf888</a>
-      <span class="author-note">
-        <span class="lang-en">Built and measured against real generated games, every claim on this page traced to a file, a rule or a playthrough.</span>
-        <span class="lang-zh">对照真实生成的游戏构建与实测，本页每一条说法都可追溯到某个文件、某条规则或某次实际游玩。</span>
-      </span>
-    </div>
+    <p class="lang-en">MIT license (the skill itself). Bundled engine template: The Modding Tree v2.7, MIT © 2020 Acamaeda; Prestige Tree, MIT © 2020 Jacorb.</p>
+    <p class="lang-en">Design heuristics and statistics come from public TMT games (gityx.com and yhvr's catalogs). Generated games are original works; none of the corpus games is redistributed.</p>
+    <p class="lang-zh">MIT License（skill 本体）。内置引擎模板：The Modding Tree v2.7，MIT © 2020 Acamaeda；Prestige Tree，MIT © 2020 Jacorb。</p>
+    <p class="lang-zh">设计启发与统计语料来自公开 TMT 游戏（gityx.com 与 yhvr 的目录）；生成的是原创游戏，不转载任何语料游戏。</p>
   </div>
 </footer>
 
 <script>
+/* Language toggle: swaps data-lang, persists the choice, keeps <title> in sync. */
 (function () {
-  "use strict";
-
-  var root = document.documentElement;
-  var status = document.getElementById("copyStatus");
-  var THEME_KEY = "tmt-theme";
-  var LANG_KEY = "tmt-lang";
-
   var TITLES = {
-    en: "TMT Game Generator: an agent skill for The Modding Tree",
-    zh: "TMT 游戏生成器：The Modding Tree 的 Agent 技能"
+    en: "TMT Game Generator — an agent skill for The Modding Tree",
+    zh: "TMT 游戏生成器 — 一句话生成完整的 The Modding Tree 增量游戏"
   };
-
-  /* ------------------------------------------------------------ theme */
-  function currentTheme() { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
-
-  function setTheme(next) {
-    root.setAttribute("data-theme", next);
-    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  function current() {
+    return document.documentElement.getAttribute("data-lang") === "zh" ? "zh" : "en";
   }
-
-  var themeToggle = document.getElementById("themeToggle");
-  if (themeToggle) {
-    themeToggle.addEventListener("click", function () {
-      setTheme(currentTheme() === "dark" ? "light" : "dark");
-    });
+  function apply(lang) {
+    document.documentElement.setAttribute("data-lang", lang);
+    document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+    document.title = TITLES[lang];
   }
-
-  /* ------------------------------------------------------- language */
-  function currentLang() { return root.getAttribute("data-lang") === "zh" ? "zh" : "en"; }
-
-  function setLang(next) {
-    root.setAttribute("data-lang", next);
-    root.setAttribute("lang", next === "zh" ? "zh-CN" : "en");
-    document.title = TITLES[next];
-    try { localStorage.setItem(LANG_KEY, next); } catch (e) {}
-  }
-
-  var langToggle = document.getElementById("langToggle");
-  if (langToggle) {
-    langToggle.addEventListener("click", function () {
-      setLang(currentLang() === "zh" ? "en" : "zh");
-    });
-  }
-
-  /* Keep the document title correct on first paint too. */
-  document.title = TITLES[currentLang()];
-
-  /* ------------------------------------------------------- copy UI */
-  Array.prototype.forEach.call(document.querySelectorAll("[data-copy]"), function (el) {
-    el.addEventListener("click", function () {
-      var text = el.getAttribute("data-copy");
-      var original = el.innerHTML;
-
-      function done() {
-        var zh = currentLang() === "zh";
-        if (status) status.textContent = (zh ? "已复制：" : "Copied: ") + text;
-        el.style.borderColor = "var(--accent)";
-        el.innerHTML = zh ? "已复制" : "copied";
-        window.setTimeout(function () {
-          el.innerHTML = original;
-          el.style.borderColor = "";
-        }, 1100);
-      }
-
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, done);
-      } else {
-        done();
-      }
-    });
+  apply(current());
+  var btn = document.getElementById("langToggle");
+  if (btn) btn.addEventListener("click", function () {
+    var next = current() === "zh" ? "en" : "zh";
+    apply(next);
+    try { localStorage.setItem("tmt-lang", next); } catch (e) {}
   });
 })();
 </script>

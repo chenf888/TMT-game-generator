@@ -1,8 +1,8 @@
 ---
 name: tmt-game-generator
-description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 68 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
-description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 68 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
-description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 68 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
+description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 72 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
+description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 72 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
+description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 72 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
 version: 1.0.0
 author: TMT GG
 ---
@@ -46,13 +46,14 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 
 | Stage | Output | Gate to next stage |
 |---|---|---|
-| 1. Interview | answers mapped to generation parameters | all 7 questions answered **+ a game type locked (Q4b)** |
-| 2. Design brief & self-check | filled `design-brief` doc | every self-check passes (20 checks) |
+| 1. Interview | answers mapped to generation parameters | all 7 questions answered **by the user** + a game type **the user confirmed** (Q4b) |
+| 2. Design brief & self-check | filled `design-brief` doc | every self-check passes (21 checks) |
 | 3. Scaffold | game folder + recorded `modInfo.id` | scaffold exits 0 |
 | 4. Generate code | js/mod.js, layer files, tree.js, theming | all files written & registered; **every upgrade classified token-vs-value and, if it has an effect, wired to a consumer** |
 | 5. Static checks | check report (type profile applied) | 0 FAIL (WARNs justified in brief) |
 | 5.5 Load-time smoke | harness report (`tools/smoke.js`) | 0 FAIL — every mod file loads, no duplicate ids, no fresh-save crash |
 | 6. Balance walkthrough | annotated numbers, **measured in-sim** | heuristic table verified **and** the sim's early timeline matches the design intent |
+| 6.5 Browser verification | boot + interaction report, fixes recorded in brief §14 | `__bootErrors` empty, every layer tab opens and renders, one real prestige per layer type, console clean |
 | 7. Manual test handoff | test instructions for the user | 07 Part D checklist handed over |
 
 **Load references on demand, not all at once** (keeps context small):
@@ -66,6 +67,7 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 | Stage 4, language scope | `references/design/15` + `scripts/i18n_check.js` (T2 and above only) |
 | Stage 4, theming/UI | `references/core/05` |
 | Stage 5.5–6 | `references/design/14` (smoke harness, simulator, calibration doctrine) |
+| Stage 6.5 | `references/design/14` §5 (the browser-verification checklist and why each line exists) |
 | Stage 5–7 | `references/core/07` (hard rules + Part C crash table + **Part F engine facts** + Part D checklist) |
 | Design inspiration | `references/core/08` (real-game catalog) |
 
@@ -77,8 +79,14 @@ Goal: ≤7 structured questions, each locking concrete generation parameters. As
 tool's question UI (2–4 options + free-text "Other") or plain conversation. Output the
 question text **in the user's language**; record answers in English in the brief.
 
+**Every answer comes from the user — there is no auto-answer mode.** The AI never fills in,
+guesses, or defaults a question on the user's behalf. Anything the AI derives (a theme
+proposal, a routed type, a modifier pick) is *shown* to the user and locked only on their
+explicit confirmation, recorded next to the answer in the brief.
+
 **Step 0 (only if the user gave no theme):** ask what the game is about (free text), then do Q1.
-If the user said "you pick the theme", propose one, say so, and continue.
+If the user said "you pick the theme", propose 2–3 candidates **and wait for their pick** —
+the theme is still a user answer, never an AI decision.
 
 **Q1 — Theme-structure interview (confirmation).** Before asking, restate your structured
 understanding of the theme in exactly three lines:
@@ -87,7 +95,9 @@ understanding of the theme in exactly three lines:
 - **Layer topology** — which layers exist, which reset which (e.g. "4 subject layers → one exam hub")
 - **Ceilings** — any natural maximum per currency (e.g. "each subject score caps at 150")
 
-Options: `Confirmed as described` / `Adjust (explain in Other)` / `Let the AI propose the structure`.
+Options: `Confirmed as described` / `Adjust (explain in Other)`. There is no
+"let the AI decide" option — if the user asks for a structure proposal, draft one, show it,
+and come back to this same question.
 This is the theme-is-structure question (P14): the theme must dictate the tree, not just names.
 
 **Q2 — Scale (locks the blueprint).**
@@ -140,9 +150,11 @@ node scripts/classify.js --request "<the user's request verbatim>" \
                          --q4 <idle|active|balanced> [--json]
 ```
 
-Exit 0 = routed. Exit 3 = the script could not decide and returns a question — **ask the
-user that question verbatim, in their language, then re-run with `--explicit <typeId>`.**
-Never guess past an exit-3, and never let a keyword override an explicit request.
+Exit 0 = the script proposes a route — **show the user the derived type with its confidence
+and the ranking behind it, and lock the type only on their confirmation.** The auto route is
+a proposal, never an answer. Exit 3 = the script could not decide and returns a question —
+**ask the user that question verbatim, in their language, then re-run with `--explicit
+<typeId>`.** Never guess past an exit-3, and never let a keyword override an explicit request.
 
 | Type | The player… | Layers | Exempt |
 |---|---|---|---|
@@ -151,7 +163,8 @@ Never guess past an exit-3, and never let a keyword override an explicit request
 | `active-tick` | pushes a continuous quantity that fills over time | + `bars` + `update()` | — |
 | `board-minigame` | plays on a 2D board | + `grid` | — |
 
-Then pick modifiers, checking each hard dependency:
+Then propose modifiers, checking each hard dependency — both the picks and the drops go in
+front of the user together with the type confirmation (drops are logged in brief §10):
 
 | Modifier | Requires | Drop it (and log why in brief §10) if… |
 |---|---|---|
@@ -171,7 +184,8 @@ for it, and then: declare the **primary** type, demote the rest to modifiers wit
 dependencies re-checked, **forfeit every exemption** (the tick must be real), keep all `T-*` rules
 active, and log the override as a numbered deviation in brief §10.
 
-Record in brief §2: the type, the confidence, and any modifier you dropped and why.
+Record in brief §2b: the type, the user's confirmation, the confidence, and any modifier you
+dropped and why.
 Full judgment aid: `references/design/13`.
 
 **Q5 — Side content.**
@@ -272,8 +286,20 @@ syntax-checks the result.
 `.tmt-profile.json` into the game folder; Stage 5's checker reads it and applies that type's
 gates and thresholds automatically. Omit them and nothing changes.
 
+`--author` is never invented: if the user has not given a name, show them the scaffolder's
+default (`author: "AI"`) and let them confirm or replace it — no parameter lands in the game
+unseen.
+
 - **Record `modInfo.id`** from the output — it keys the localStorage savefile and must never
   change afterwards (07 rule 3).
+- **README:** the scaffolder writes a **game-first skeleton** (play instructions, the save key,
+  placeholder content counts, a file table) and keeps the engine's own text below a
+  `## The Modding Tree (engine)` heading — the template's README, shipped as-is, is the
+  *engine's*, with two dead links and no word about the game. At Stage 3 fill its TODOs (the
+  one-line design from brief §1); at Stage 6 re-check the counted totals against the frozen
+  build (the README quotes numbers; they must match the gate output, not the plan). Count by
+  capturing `addLayer` calls and reading `Object.keys(def.upgrades)` per layer — brace-counting
+  the generated source over-counts (it once reported 200 upgrades / 30 achievements for 100/15).
 - If template lookup fails, pass `--from <template-dir>` explicitly.
 - If the output dir exists, choose another or pass `--force`.
 
@@ -354,7 +380,7 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
 
 ### 4.5 Structures no tool can see through (07 Part F)
 
-Each of these shipped as a defect in a real build, and each is invisible to all 68 rules:
+Each of these shipped as a defect in a real build, and each is invisible to all 72 rules:
 - **Never build a layer at runtime.** `addLayer(id, factory())` hides `row`, `startData` and every
   component from the checker and the harness (F11) — one build took 8 FAILs from this.
 - **One home for pacing constants** (`js/tuning.js`), read by the game *and* the simulator: a
@@ -376,11 +402,12 @@ node scripts/static_checks.js "<game-folder>"
 
 - **FAIL blocks manual testing.** Fix the code — or, for a design-assertion failure, fix the
   design — and re-run until 0 FAIL. Testing a build with open FAILs wastes the test.
-- **WARN needs a written acceptance reason in brief §10.** An unexplained WARN counts as a
+- **WARN needs a written acceptance reason in brief §9.1** (the template's static-warning
+  acceptance table). An unexplained WARN counts as a
   failure. Legitimate reasons do exist: a deliberate ×150 requires leap for a multi-row jump, a
   hard-capped currency whose ladder cannot span three orders, a sink layer that must never reset.
 - **The rule catalogue is the checker's own header, not this file.** `scripts/static_checks.js`
-  documents all 68 ids with their level, their provenance and the incident that produced each.
+  documents all 72 ids with their level, their provenance and the incident that produced each.
   Read it there: a second copy here would drift, and had already (this section was 20 rules
   behind). `--json` gives machine-readable output; the rules span `M-*` mod.js completeness,
   `C-*` banned calls, `D-*` design assertions, `N-*` negative examples from real builds, and
@@ -469,6 +496,39 @@ PASS/deviate-with-reason. Then do the reachability estimate (09 §4):
    any layer's Σ self-scaling exponent ≥ 0.75), the requires ladder is fiction — cut zones
    (merge flat mults into fewer, stronger ones), lower exponents, or tighten softcaps in
    the brief. Zones compound: ten "harmless" ×2s are ×1024.
+
+---
+
+## Stage 6.5 — Browser verification (the agent opens the game, not just the files)
+
+Static checks, smoke and the simulator all read the game without a real browser, and three real
+builds shipped browser-only breakages because nobody had opened the page: a `body onload` boot
+race (half-built `layers`), a `doReset` that wiped the currency it had just granted (the sim's
+port auto-kept `points` and masked it), a render-time throw that aborted the Vue mount and left
+the page on "Loading...", and a custom layer whose `canReset()` could never be true. Stage 6.5
+exists so the **generator** finds these, not the player.
+
+1. **Boot.** Serve the folder and open it in a real browser. If console capture is unavailable,
+   add a collector to `index.html` (a per-game shell — scaffold already patches it):
+   `<script>window.__bootErrors=[];window.addEventListener("error",e=>__bootErrors.push(String(e.message)));window.addEventListener("unhandledrejection",e=>__bootErrors.push(String(e.reason)));</script>`
+   **Gate: `__bootErrors` empty and the tree renders** (not stuck on "Loading..." — a Vue mount
+   abort means one component threw at render time; bisect by opening tabs).
+2. **Open every layer tab and every microtab.** A layer that cannot be opened (`layerShown` /
+   `canReset` deadlock) or a tab whose content throws is found here and nowhere else.
+3. **One real interaction per mechanic kind**: prestige once on each layer kind (normal, static,
+   custom) and confirm the currency rises and survives per the `doReset` contract; buy one
+   upgrade and one buyable and confirm the number it promises actually moves (dead effects are
+   invisible to every file-level check); click a clickable; for a board type, complete one match.
+4. **Lifecycle probe**: save → reload → values intact; if the game has non-ASCII in `player`
+   (bilingual microtab keys do), also round-trip a manual export/import (the engine's Export
+   button is Latin1-only — 07 Part F).
+5. **Console clean at the end.** Re-run Stage 5 after every fix; record each browser-only fix
+   in the brief's **browser-verification section** (§12 of the template) — the pattern list
+   doubles as regression notes for the next build. The full checklist and the engine traps it
+   has caught live in `references/design/14 §5`.
+
+**Gate to Stage 7: all five green.** Hand-off to the user is for *balance feel*, not for
+discovering that the game does not boot.
 
 ---
 

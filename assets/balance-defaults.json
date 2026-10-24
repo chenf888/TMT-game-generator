@@ -144,7 +144,8 @@
     "power": [0.3, 0.5],
     "hardCap": "power 0 — softcap(value, cap, 0) freezes the value; use for theme ceilings (exam score 150)",
     "defenseInDepth": "three independent places (P12): (1) layer softcap/softcapPower props, (2) softcap() helper inside individual effect()s, (3) staged re-root ladders in custom getResetGain()",
-    "source": "09 §4 row 11; P12"
+    "measuredRetune": "the medium builds whose floors MEASURED sane (5.1-5.25 h) converged on power 0.1 with start 1e9-1e12 and cap-raise upgrades priced 1e12-1e18 - flatter than the corpus's 0.3-0.5, which is what real games WROTE, not what survived simulation; and the cap raise is x10, never x1000 (one build let a x1000 raise apply twice and erased the cap entirely: 0.46 h to endgame)",
+    "source": "09 §4 row 11; P12; measured retunes in The Solar Terms Tree D15-D16 and The Braille Tree §11"
   },
   "automationLadder": {
     "order": ["keep-on-reset (resetsNothing)", "passiveGeneration", "autoPrestige", "autoUpgrade"],

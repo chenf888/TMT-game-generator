@@ -56,6 +56,10 @@
  *                   garble on servers that default to latin-1 (the template ships without one)
  *     C-CONTENT1ELEM  1-element content arrays like ["upgrades"] render as NOTHING — the engine's
  *                   row/column content renderer handles bare strings and 2/3-element arrays only
+ *   Phase-⑩ browser-verified rules (2026-10-17, The-Solar-Terms-Tree):
+ *     M-LAYOUT      (FAIL) layoutInfo missing, or startTab/startNavTab naming a layer that does
+ *                   not exist. save.js:13 reads it inside load(); the ReferenceError leaves
+ *                   `player` undefined and the page blank, with every other check still green.
  *   Phase-⑦ negative-example rules (2026-10-02 second pass, The Yeast Tree as the bad specimen):
  *     N-ACHVIS      (FAIL) achievementStyle() hides uncompleted achievements with
  *                   visibility:hidden (stock engine default) — always show them, dimmed
@@ -192,6 +196,25 @@
  *     T-TICKREG    (FAIL) a hook slot pointing at a name no mod file defines and the engine
  *                  does not provide; (WARN) doNotCallTheseFunctionsEveryTick listing such a
  *                  name. M-DNC only ever checked that the declaration EXISTS. (07 rule 4)
+ *   Phase-⑪ browser-verified rules (2026-10-24) — the escapes three generated games shipped
+ *   past every rule above, each found only by opening the page (SKILL.md Stage 6.5 exists so
+ *   the generator finds them first; every rule encodes one such escape permanently):
+ *     D-UPDATELOCK   (WARN) production inside update() with no unlocked guard — the engine
+ *                    runs update() for LOCKED layers too; layerShown() is a teaser, .unlocked
+ *                    is the production gate (The Braille Tree §11.1/§12.3: three layers
+ *                    produced from boot until their first reset).
+ *     D-CANRESETDEAD (FAIL) a custom layer whose canReset() reads only its own state, with
+ *                    no external producer of its points and no unlocked writer anywhere —
+ *                    the engine opens a custom layer only when canReset() is true, so the
+ *                    layer can never be opened (The Braille Tree §12.2: the six/eight
+ *                    board deadlock).
+ *     D-GRIDZERO     (WARN) a board's target list is first filled by a loop whose counter
+ *                    starts at 0 and is used as a mask — a fresh save's board IS the empty
+ *                    mask, so the first "match" is free (The Braille Tree §12.8: the
+ *                    untouched eight-dot grid counted as matched; first prestige for free).
+ *     C-CONTENTSTR   (FAIL) a tab/microtab `content:` property given a bare string naming
+ *                    a component — the engine iterates content as a LIST and renders the
+ *                    string per character (The Braille Tree §12.4: "u", "p", "g"…).
  *
  *   Type gating: the locked type's acceptance.exemptRules are skipped entirely — notably
  *   passive-prestige is exempt from D-NOUPDATE, because having no tick is that type's correct
@@ -546,6 +569,11 @@ const CONTENT_COMPONENTS = new Set(
         while ((m1 = re1.exec(rec1.clean))) {
             if (rec1.mask[m1.index] !== 0) continue;
             if (!CONTENT_COMPONENTS.has(m1[1])) continue;
+            // `content: ["upgrades"]` is the whole content list — correct, and the only way
+            // to give a microtab a single component. The bug is a 1-element array used as
+            // an ITEM inside a list, e.g. tabFormat: ["main-display", ["upgrades"]].
+            const before = rec1.clean.slice(Math.max(0, m1.index - 24), m1.index);
+            if (/content\s*:\s*$/.test(before)) continue;
             add(FAIL, "C-CONTENT1ELEM", p, m1.index, "content item [\"" + m1[1] + "\"] is a 1-element array — the engine renders NOTHING for it", "Use the bare string \"" + m1[1] + "\" or a 2/3-element array [\"" + m1[1] + "\", data] in tabFormat/microtab content.");
         }
     }
@@ -768,6 +796,44 @@ for (const f of allModderCandidates) {
         }
 
         layers.push(info);
+    }
+}
+
+// M-LAYOUT — layoutInfo must exist and its two tab ids must name real layers.
+// (2026-10-17, The-Solar-Terms-Tree: the generated js/tree.js emitted only addNode() calls, so
+//  `layoutInfo` was undefined. utils/save.js:13 reads layoutInfo.startTab inside
+//  startPlayerBase() -> load(); the ReferenceError aborted load() before `player` was ever
+//  assigned, and the browser showed a blank page with no console-visible cause in the mod
+//  files. Every static rule and the load-time smoke harness passed. This rule closes that hole:
+//  the definition is required, and startNavTab="tree-tab" needs the tree-tab layer to exist.)
+{
+    let defFile = null, defIdx = null;
+    for (const p of allModderCandidates) {
+        const rec = loadRec(p);
+        const m = rec.clean.match(/(?:var|let|const)\s+layoutInfo\s*=/);
+        if (m && rec.mask[m.index] === 0) { defFile = p; defIdx = m.index; break; }
+    }
+    if (!defFile) {
+        add(FAIL, "M-LAYOUT", path.join(jsDir, "tree.js"), null,
+            "layoutInfo is never defined in modder scope — utils/save.js reads layoutInfo.startTab when it builds a new save, so load() throws ReferenceError and the game never starts (blank page)",
+            'Declare it in js/tree.js: var layoutInfo = { startTab: "none", startNavTab: "tree-tab", showTree: true, treeLayout: "" }.');
+    } else {
+        const rec = loadRec(defFile);
+        const code = rec.clean.slice(defIdx);
+        const grab = (key) => { const m = code.match(new RegExp(key + '\\s*:\\s*"([^"]*)"')); return m ? m[1] : null; };
+        const startTab = grab("startTab"), startNavTab = grab("startNavTab");
+        if (startTab === null) add(FAIL, "M-LAYOUT", defFile, defIdx, "layoutInfo.startTab is not a string literal — startPlayerBase() stores it as player.tab", 'Set startTab to a layer id or "none".');
+        if (startNavTab === null) add(FAIL, "M-LAYOUT", defFile, defIdx, "layoutInfo.startNavTab is not a string literal — startPlayerBase() stores it as player.navTab", 'Set startNavTab to a layer id or "none".');
+        const known = new Set(layers.map((l) => l.id).concat(["none"]));
+        let layoutBad = startTab === null || startNavTab === null;
+        for (const [key, val] of [["startTab", startTab], ["startNavTab", startNavTab]]) {
+            if (val !== null && !known.has(val)) {
+                layoutBad = true;
+                add(FAIL, "M-LAYOUT", defFile, defIdx, `layoutInfo.${key} = "${val}" but no layer with that id is declared — the game opens on an empty tab`,
+                    'Point it at a real layer id (the engine\'s own nav tab is "tree-tab", declared with addLayer("tree-tab", { tabFormat: [["tree", ...]], leftTab: true })).');
+            }
+        }
+        if (!layoutBad) pass("M-LAYOUT", "layoutInfo present, startTab/startNavTab resolve to declared layers");
     }
 }
 
@@ -2379,6 +2445,121 @@ const ID_COLLECTIONS = ["upgrades", "buyables", "milestones", "challenges", "ach
             `${hits.length} layer(s) still render the stock "main-display" (${hits.slice(0, 5).join(", ")}${hits.length > 5 ? ", …" : ""}) in a game that declares a non-English language mode — that component hard-codes the English words "You have" and "(x/sec)", so the layer tab mixes languages no matter how completely you translated your own strings.`,
             "Override mainDisplay (or supply mainAmount()) with the localized sentence — the stock component cannot be translated without editing engine files (07 Part F7, handbook 15 §2).");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phase-⑪ browser-verified rules — see the header comment for the incidents behind them.
+// ---------------------------------------------------------------------------
+
+// D-UPDATELOCK — production inside update() with no unlocked guard
+{
+    let hits = 0;
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const um = L.code.match(/\bupdate\s*\(/);
+        if (!um) continue;
+        const body = functionBody(L.code, um.index);
+        if (!body || !/\baddPoints\s*\(/.test(body) || /\.unlocked\b/.test(body)) continue;
+        hits++;
+        add(WARN, "D-UPDATELOCK", L.file, L.start, `layer "${L.id}" produces inside update() but never checks unlocked — the engine runs update() for LOCKED layers too, so the layer generates currency before the player can open it (layerShown() is a teaser flag, not a production gate; caught in a real generated game where three layers produced from boot until their first reset)`, "First line of update(): if (!player[this.layer].unlocked) return — then produce.");
+    }
+    if (!hits) pass("D-UPDATELOCK", "every producing update() is unlocked-guarded");
+}
+
+// D-CANRESETDEAD — a custom layer that can never be opened the first time
+{
+    const unlockedWriters = new Set();
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        for (const m of codeMatches(rec.clean, rec.mask, /player\s*(?:\[\s*["']([A-Za-z_]\w*)["']\s*\]|\.\s*([A-Za-z_]\w*))\s*\.\s*unlocked\s*=[^=]/g))
+            unlockedWriters.add(m[1] || m[2]);
+    }
+    // Producers of player[X].points from OUTSIDE the layer's own object literal: another
+    // layer's update() or a file-scope helper feeding the layer is a legitimate way in.
+    const externalProducers = new Set();
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        const producerRe = /(?:\baddPoints\s*\(\s*["']([A-Za-z_]\w*)["']|player\s*(?:\[\s*["']([A-Za-z_]\w*)["']\s*\]|\.\s*([A-Za-z_]\w*))\s*\.\s*points\s*=[^=])/g;
+        let m;
+        while ((m = producerRe.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            const id = m[1] || m[2] || m[3];
+            if (!id) continue;
+            const owner = layers.find((L) => L.file === f && m.index >= L.start && m.index < L.end);
+            if (owner && owner.id === id) continue; // the layer produces itself (its own getResetGain etc.)
+            externalProducers.add(id);
+        }
+    }
+    let dead = 0;
+    for (const L of layers) {
+        if (L.isSide || L.isUtility) continue;
+        if (L.type !== "custom" && L.type !== "none") continue;
+        const cm = L.code.match(/\bcanReset\s*\(/);
+        if (!cm) continue;
+        const body = functionBody(L.code, cm.index);
+        if (!body) continue;
+        const refs = new Set();
+        let m; const refRe = /player\s*(?:\[\s*["']([A-Za-z_]\w*)["']\s*\]|\.\s*([A-Za-z_]\w*))/g;
+        while ((m = refRe.exec(body))) refs.add(m[1] || m[2]);
+        if (refs.size === 0 || ![...refs].every((r) => r === L.id)) continue; // reads an upstream currency → fine
+        if (unlockedWriters.has(L.id)) continue;
+        if (/startUnlocked\s*:\s*true/.test(L.code)) continue;
+        if (externalProducers.has(L.id)) continue;
+        dead++;
+        add(FAIL, "D-CANRESETDEAD", L.file, L.start, `layer "${L.id}" (type ${L.type}) defines canReset() whose only state references are the layer's own, no mod code writes player["${L.id}"].unlocked, and no code outside the layer produces its points — the engine opens a custom layer only when canReset() is true, so this layer can never be opened and everything behind it is unreachable (caught in a real generated game: two board layers deadlocked exactly this way)`, `Feed the layer from outside (another layer's update() producing its points) or unlock it at a threshold elsewhere: update() { if (player.<upstream>.points.gte(REQ)) player["${L.id}"].unlocked = true }.`);
+    }
+    if (!dead) pass("D-CANRESETDEAD", "every self-gated custom layer has a way to be opened");
+}
+
+// D-GRIDZERO — a board whose target list starts at the blank mask (free first match)
+{
+    const hasBoard = layers.some((L) => /\bgrid\b|getStartData/.test(L.code));
+    if (!hasBoard) pass("D-GRIDZERO", "no board layer — n/a");
+    else {
+        let hits = 0;
+        for (const f of allModderCandidates) {
+            const rec = loadRec(f);
+            const loopRe = /for\s*\(\s*(?:var|let|const)\s+(\w+)\s*=\s*0\s*;/g;
+            let m;
+            while ((m = loopRe.exec(rec.clean))) {
+                if (rec.mask[m.index] !== 0) continue;
+                const v = m[1];
+                const parenEnd = rec.clean.indexOf(")", m.index);
+                if (parenEnd < 0) continue;
+                const open = rec.clean.indexOf("{", parenEnd);
+                if (open < 0 || open - parenEnd > 4) continue; // single-statement loop body
+                const close = matchBracketFrom(rec.clean, open);
+                if (close < 0) continue;
+                const body = rec.clean.slice(open, close + 1);
+                const pushedInto = body.match(/(\w+)\s*\.\s*push\s*\(/);
+                if (!pushedInto || !/target|pattern|mask/i.test(pushedInto[1])) continue;
+                if (!new RegExp("[\\{,]\\s*(?:mask|pattern|target)\\s*:\\s*" + v + "\\b").test(body)) continue;
+                // only fire when this loop is the FIRST fill of the array — an array already
+                // seeded with named/non-blank targets before the loop is the fixed shape
+                if (new RegExp(pushedInto[1] + "\\s*\\.\\s*push\\s*\\(").test(rec.clean.slice(0, m.index))) continue;
+                hits++;
+                add(WARN, "D-GRIDZERO", f, m.index, `target list "${pushedInto[1]}" is first filled by a loop starting at 0 with the counter as a mask — a fresh save's board IS the empty mask, so it matches the FIRST target immediately and the first board reset is free (caught in a real generated game: the untouched grid counted as "matched")`, "Start the mask loop at 1 and push the blank cell LAST (mask 0 goes at the end of the target list).");
+            }
+        }
+        if (!hits) pass("D-GRIDZERO", "no target loop starts at the blank mask");
+    }
+}
+
+// C-CONTENTSTR — a tab's content: property given a bare component-name string
+{
+    let hits = 0;
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        const re = /\bcontent\s*:\s*(["'])([A-Za-z][\w-]*)\1/g;
+        let m;
+        while ((m = re.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue; // keyword itself inside a string/template — data, not code
+            if (!CONTENT_COMPONENTS.has(m[2])) continue;
+            hits++;
+            add(FAIL, "C-CONTENTSTR", f, m.index, `content: "${m[2]}" — a bare string naming a component. The engine treats a tab's content as a LIST and iterates a string per character, so the tab renders one character of the component's name and no component at all (caught in a real generated game: every microtab rendered "u", "p", "g"…)`, `Use the list form: content: ["${m[2]}"]. A 1-element array is the CORRECT form for a content: property — C-CONTENT1ELEM only bans it as an ITEM inside another list.`);
+        }
+    }
+    if (!hits) pass("C-CONTENTSTR", "no bare-string content: property");
 }
 
 // ---------------------------------------------------------------------------

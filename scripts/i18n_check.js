@@ -31,6 +31,9 @@
  *   js/lang/index.js   the t() accessor + LANG_MODES
  *   js/lang/pool_*.js  LANG_PHRASES rows: [key, code, text, native]
  *   js/lang/packs_*.js LANG_PACKS: { <code>: { <key>: <text> } }
+ * Scanned for t("…") calls: js/mod.js, every modFiles entry, js/lang/index.js, and —
+ * for a build that localized the engine's chrome (handbook 15 §4) — the six engine
+ * chrome files and index.html. Both double- and single-quoted calls are accepted.
  * No third-party dependencies. Node >= 18.
  */
 "use strict";
@@ -73,17 +76,29 @@ try {
 } catch (e) { add("FAIL", "I-LOAD", "js/mod.js unreadable: " + e.message); }
 
 const keyRe = /(?<![A-Za-z0-9_$.])t\(\s*"([^"]+)"/g;
+const keyReSq = /(?<![A-Za-z0-9_$.])t\(\s*'([^']+)'/g;   // single-quoted calls: Vue attribute contexts force them
 const dynRe = /(?<![A-Za-z0-9_$.])t\(\s*"([^"]+)"\s*\+/g;   // t("diary.s" + i) — a key FAMILY
+const dynReSq = /(?<![A-Za-z0-9_$.])t\(\s*'([^']+)'\s*\+/g;
 const used = new Map(); // key -> source file
 const dynamicPrefixes = new Set();
-// the text layer's own index.js calls t() too (dropdown labels, mode names)
-const scanFiles = modFiles.concat(fs.existsSync(path.join(langDir, "index.js")) ? ["lang/index.js"] : []);
-for (const f of scanFiles) {
-    const p = path.join(modDir, f);
+// the text layer's own index.js calls t() too (dropdown labels, mode names);
+// a T3+ build that localized the ENGINE's chrome (handbook 15 §4) has t("ui.*")
+// calls inside engine files — every one must be backed by a pack key like any other,
+// so those files are scanned as well (a stock engine file has no t() calls: no-op).
+const ENGINE_CHROME = ["components.js", "technical/systemComponents.js", "utils/NumberFormating.js", "utils/save.js", "utils.js", "game.js"];
+const scanFiles = modFiles
+    .concat(fs.existsSync(path.join(langDir, "index.js")) ? ["lang/index.js"] : [])
+    .concat(ENGINE_CHROME.filter((f) => fs.existsSync(path.join(modDir, f))));
+const scanSources = scanFiles.map((f) => [f, path.join(modDir, f)]);
+const htmlPath = path.join(game, "index.html");
+if (fs.existsSync(htmlPath)) scanSources.push(["index.html", htmlPath]); // the end screen lives here
+for (const [f, p] of scanSources) {
     if (!fs.existsSync(p)) continue;
     const src = fs.readFileSync(p, "utf8");
     for (const m of src.matchAll(keyRe)) if (!used.has(m[1])) used.set(m[1], f);
+    for (const m of src.matchAll(keyReSq)) if (!used.has(m[1])) used.set(m[1], f);
     for (const m of src.matchAll(dynRe)) dynamicPrefixes.add(m[1]);
+    for (const m of src.matchAll(dynReSq)) dynamicPrefixes.add(m[1]);
 }
 for (const pre of dynamicPrefixes) for (const k of used.keys()) if (k.startsWith(pre) && k !== pre) used.delete(k);
 const usedKeys = new Set(used.keys());

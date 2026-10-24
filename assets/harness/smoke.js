@@ -118,6 +118,9 @@ global.addLayer = function (id, def) {
         fail("S-NOSTARTDATA", id + ": no startData() — NaN cascades on first load");
     }
     LAYERS[id] = def;
+    // Stub fidelity (14 §2): the engine's setupLayer tags the definition with its own id
+    // (03 §2 "layer is assigned automagically"); layer-level hooks read this.layer.
+    if (!("layer" in def)) def.layer = id;
     order.push(id);
 };
 const compStub = () => ({ cost: new Decimal(1), effect: new Decimal(1), amount: new Decimal(0), unlocked: true, canComplete: () => false });
@@ -198,7 +201,11 @@ for (const id of order) {
     const probe = (name) => {
         if (typeof L[name] !== "function") return;
         try {
-            const v = L[name].call({ layer: id, id: 0 });
+            // Stub fidelity (14 §2): the engine invokes layer-level hooks as method calls on the
+            // layer definition (game.js getResetGain/getNextAt: layers[layer].getResetGain();
+            // temp.js updateTempData: layerData[item]()), so this === the definition. A bare
+            // {layer,id} stub here made custom layers' this.gainMult() a phantom throw.
+            const v = L[name].call(L);
             if (v === undefined) fail("S-UNDEF", id + "." + name + "() returned undefined");
             else if (v !== null && typeof v.toString === "function" && /NaN/.test(v.toString())) fail("S-NAN", id + "." + name + "() returned NaN");
         } catch (e) { fail("S-HOOKTHROW", id + "." + name + "() threw with a fresh save: " + e.message); }

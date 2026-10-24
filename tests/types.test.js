@@ -130,6 +130,11 @@ head("test 5e: the interactive fixture trips exactly the T-* rules it injects");
     ok((by["T-TICKREG"] || []).some((f) => f.level === "FAIL"), "T-TICKREG catches the ghost hook");
     ok((by["T-CLICKABLE"] || []).some((f) => f.msg.includes("goodButton") === false),
         "the well-formed clickable is NOT flagged");
+    // phase-⑪ browser-verified rules (2026-10-24), defects live in this fixture too:
+    ok((by["D-CANRESETDEAD"] || []).some((f) => f.level === "FAIL"),
+        "D-CANRESETDEAD catches the self-gated custom layer with no way in");
+    ok((by["D-GRIDZERO"] || []).some((f) => f.level === "WARN"),
+        "D-GRIDZERO catches the target loop that starts at the blank mask");
     const nonType = r.findings.filter((f) => f.level !== "PASS" && f.rule.startsWith("T-"));
     ok(nonType.every((f) => f.level === "FAIL"),
         "no T-* rule over-fires at WARN", JSON.stringify(nonType.filter((f) => f.level !== "FAIL").map((f) => f.msg.slice(0, 60))));

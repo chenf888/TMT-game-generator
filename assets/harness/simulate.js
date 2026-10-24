@@ -35,8 +35,13 @@
  *   the policy to one point you already know from a real playthrough. When the
  *   run ends implausibly fast the script says so out loud.
  *
+ *   The largest single source of over-prestige is the click rate: see --click
+ *   below. A sim whose total moves when you change only --dt is measuring its own
+ *   step, not the game — the click throttle is what makes the total mean anything.
+ *
  * USAGE
  *   node assets/harness/simulate.js <game-folder> [--max-hours 200] [--json]
+ *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --max-hours 200
  *   Copy to <game>/tools/simulate.js next to the game. Put every tunable
  *   constant in a modFile (e.g. js/tuning.js) that BOTH the game and this script
  *   read — otherwise you are tuning a number the game does not use.
@@ -59,7 +64,40 @@ const argv = process.argv.slice(2);
 const asJson = argv.includes("--json");
 const maxHoursIdx = argv.indexOf("--max-hours");
 const MAXH = maxHoursIdx >= 0 ? Number(argv[maxHoursIdx + 1]) : 400;
-const game = path.resolve(argv.filter((a, i) => !a.startsWith("--") && i !== maxHoursIdx + 1)[0] || path.join(__dirname, "..", ".."));
+/* --dt <seconds>: the simulated step. 0.1 mirrors the engine's ~20 Hz temp refresh, which is
+ * what an interactive run wants; a long Stage-6 run can use 1 (the per-tick income integral and
+ * the purchase cadence are unchanged — only the resolution of the discrete jumps is coarser,
+ * and both 0.1 and 1 are far finer than a human's). */
+const dtIdx = argv.indexOf("--dt");
+const DT = dtIdx >= 0 ? Number(argv[dtIdx + 1]) : 0.1;
+/* --budget <ms>: wall-clock cap. The 120 s default keeps an interactive run snappy; a full
+ * 400 h simulation of a slow tick costs far more, so Stage 6 raises it explicitly. */
+const budgetIdx = argv.indexOf("--budget");
+const BUDGET = budgetIdx >= 0 ? Number(argv[budgetIdx + 1]) : 120000;
+/* --click <seconds>: how often the policy may press ONE layer's prestige button. This is the
+ * most important fidelity knob in the script. The policy runs once per --dt, and any prestige
+ * worth >= 1 unit banks that unit — so without a click rate the sim's income is a function of
+ * the STEP rather than of the game: at --dt 0.1 every layer banks >= 10 units per second for
+ * free, at --dt 1 it banks 1. That artefact alone turns a multi-hour ladder into a ten-minute
+ * one. One press per layer per second is still generous (a player moving between nine tabs,
+ * reading tooltips and playing a minigame acts far slower), so the total stays a LOWER bound. */
+const clickIdx = argv.indexOf("--click");
+const CLICK = clickIdx >= 0 ? Number(argv[clickIdx + 1]) : 1;
+/* --trace: at each layer's FIRST prestige, print the numbers the gain formula saw
+ * (base currency, requires, gainMult, exponent, gain). A layer that gains 1e10 on its first
+ * press is being fed by an over-tuned multiplier, and this line names which one by arithmetic
+ * instead of by guesswork. */
+const TRACE = argv.includes("--trace");
+/* --trace-every <seconds>: print the state of the economy on that cadence — the root currency,
+ * its rate, and every layer's bank and gain. This is the view that shows WHICH loop is closing
+ * too fast (root rate -> prestige currency -> upgrades -> root rate), as opposed to --trace,
+ * which only shows the instant each layer first fires. */
+const traceEveryIdx = argv.indexOf("--trace-every");
+const TRACE_EVERY = traceEveryIdx >= 0 ? Number(argv[traceEveryIdx + 1]) : 0;
+/* the value after a flag is not a path; when the flag is absent there is no such index, so the
+ * guards must not become 0 — that would eat the game folder argument. */
+const FLAG_VALUE_IDX = new Set([maxHoursIdx, dtIdx, budgetIdx, clickIdx, traceEveryIdx].filter((i) => i >= 0).map((i) => i + 1));
+const game = path.resolve(argv.filter((a, i) => !a.startsWith("--") && !FLAG_VALUE_IDX.has(i))[0] || path.join(__dirname, "..", ".."));
 if (!fs.existsSync(path.join(game, "js", "mod.js"))) {
     console.error("no js/mod.js under " + game + " — pass the game folder as the first argument");
     process.exit(2);
@@ -101,12 +139,25 @@ global.softcapHTML = (x) => x;
 global.layerDataReset = function (l, keep) {
     keep = keep || [];
     const sd = LAYERS[l].startData();
-    const saved = { unlocked: player[l].unlocked };
-    ["points"].concat(keep).forEach((k) => { saved[k] = player[l][k]; });
-    player[l].points = sd.points;
+    /* Mirrors game.js layerDataReset: the layer is rebuilt from startData() and ONLY the
+     * engine's four always-kept fields plus the caller's keep list survive. `points` is
+     * NOT implicitly kept — a keep list that omits it means the reset wipes the currency,
+     * which is exactly what a lower row is supposed to feel when a deeper layer resets.
+     * Keeping points unconditionally here made every cascade free, so the ladder could be
+     * climbed without ever rebuilding a row (2026-10-17, The-Solar-Terms-Tree: the sim
+     * finished the whole game in 3 minutes and reported it as a 0.05 h playthrough). */
+    const ALWAYS = ["unlocked", "forceTooltip", "noRespecConfirm", "prevTab"];
+    const saved = {};
+    ALWAYS.concat(keep).forEach((k) => { if (player[l][k] !== undefined) saved[k] = player[l][k]; });
+    player[l] = Object.assign({}, sd);
+    player[l].points = (saved.points !== undefined) ? saved.points : (sd.points || new Decimal(0));
     player[l].upgrades = [];
-    player[l].buyables = {};
     player[l].milestones = [];
+    player[l].achievements = [];
+    player[l].buyables = {};
+    player[l].clickables = {};
+    player[l].challenges = {};
+    player[l].grid = {};
     Object.keys(saved).forEach((k) => { player[l][k] = saved[k]; });
 };
 global.addPoints = (l, amt) => { player[l].points = player[l].points.add(amt); };
@@ -157,15 +208,26 @@ for (const id of layerOrder) {
     if (typeof player[id].unlocked !== "boolean") player[id].unlocked = false;
     if (!player[id].points || typeof player[id].points.add !== "function") player[id].points = new Decimal(0);
 }
-player.points = new Decimal(10);
+/* modInfo.initialStartPoints is what the engine hands a fresh save, and what a non-row-0
+ * prestige returns the root currency to. Fall back to the template's 10. */
+const START_POINTS = (() => {
+    try { if (global.modInfo && global.modInfo.initialStartPoints) return new Decimal(global.modInfo.initialStartPoints); } catch (_) {}
+    return new Decimal(10);
+})();
+player.points = START_POINTS;
 if (typeof global.addedPlayerData === "function") Object.assign(player, global.addedPlayerData());
 global.player = player;
 global.getPointGen = global.getPointGen || (() => new Decimal(1));
 const ENDGAME = typeof global.isEndgame === "function" ? global.isEndgame : () => false;
 
 // ---- engine-formula port (mirrors js/game.js) ------------------------------
-const layerSoftcap = (l) => (LAYERS[l].softcap ? LAYERS[l].softcap() : new Decimal("e1e7"));
-const layerSoftcapPower = (l) => (LAYERS[l].softcapPower ? LAYERS[l].softcapPower() : new Decimal(0.5));
+/* softcap: the engine evaluates `softcap()` as a function (tmp[layer].softcap) but copies
+ * `softcapPower` into tmp as a PLAIN VALUE (temp.js setupTempData; layerSupport.js:188-189
+ * defaults it to a Decimal). Accept either shape for both, so a game may write the power as
+ * a constant or as a function and the simulator still mirrors js/game.js:28. */
+const asValue = (v, dflt) => (v === undefined ? dflt : (typeof v === "function" ? v() : new Decimal(v)));
+const layerSoftcap = (l) => asValue(LAYERS[l].softcap, new Decimal("e1e7"));
+const layerSoftcapPower = (l) => asValue(LAYERS[l].softcapPower, new Decimal(0.5));
 const layerGainMult = (l) => (LAYERS[l].gainMult ? LAYERS[l].gainMult() : new Decimal(1));
 const layerGainExp = (l) => (LAYERS[l].gainExp ? LAYERS[l].gainExp() : new Decimal(1));
 const reqOf = (l) => { const r = LAYERS[l].requires; return typeof r === "function" ? r() : r; };
@@ -184,8 +246,14 @@ function gainOf(l) {
         return g.floor().sub(player[l].points).add(1).max(1);
     }
     if (L.type !== "normal") return new Decimal(0);
-    if (player.points.lt(rm)) return new Decimal(0);
-    let g = player.points.div(rm).pow(L.exponent || 0.5).times(layerGainMult(l)).pow(layerGainExp(l));
+    /* ADAPT: the base currency is the layer's OWN baseAmount(), never a blanket
+     * player.points. The engine reads tmp[layer].baseAmount in getResetGain()/canReset(),
+     * and a tree whose rows feed each other (the standard shape: layer N's requires is
+     * expressed in layer N-1's currency) would otherwise be simulated as if every layer
+     * prestiged off the root resource — which makes the whole ladder look trivial. */
+    const base = (typeof L.baseAmount === "function") ? L.baseAmount() : player.points;
+    if (base.lt(rm)) return new Decimal(0);
+    let g = base.div(rm).pow(L.exponent || 0.5).times(layerGainMult(l)).pow(layerGainExp(l));
     const sc = layerSoftcap(l);
     if (g.gte(sc)) g = g.pow(layerSoftcapPower(l)).times(sc.pow(new Decimal(1).sub(layerSoftcapPower(l))));
     return g.floor().max(0);
@@ -194,10 +262,22 @@ const canPrestige = (l) => isPrestige(l) && gainOf(l).gte(1) && (typeof LAYERS[l
 function doPrestige(l) {
     const g = gainOf(l);
     if (g.lt(1)) return false;
+    if (TRACE && events.firstPrestige[l] === undefined) {
+        const L = LAYERS[l];
+        const base = (typeof L.baseAmount === "function") ? L.baseAmount() : player.points;
+        LOG("  trace " + l + " @ " + t.toFixed(1) + " s: base=" + global.format(base) +
+            " requires=" + global.format(reqOf(l)) + " gainMult=" + global.format(layerGainMult(l)) +
+            " exp=" + (L.exponent || 0.5) + " -> gain=" + global.format(g) +
+            "  (points before=" + global.format(player[l].points) + ")");
+    }
     player[l].points = player[l].points.add(g);
     if (player[l].best === undefined || player[l].points.gt(player[l].best)) player[l].best = player[l].points;
     if (player[l].total === undefined) player[l].total = new Decimal(0);
     player[l].total = player[l].total.add(g);
+    /* The engine zeroes the ROOT currency on every prestige (game.js doReset:
+     * `player.points = (row == 0 ? 0 : getStartPoints())`) — the gain is measured against
+     * a base the player has to earn back, so skipping this line hands the sim free income. */
+    player.points = (LAYERS[l].row === 0) ? new Decimal(0) : START_POINTS;
     cascade(LAYERS[l].row, l);
     return true;
 }
@@ -284,8 +364,9 @@ function refreshUnlocks() {
 }
 
 // ---- the run ---------------------------------------------------------------
-const DT = 0.1, STEP = 0.1;
+const STEP = DT;
 const events = { firstPurchase: null, firstPrestige: {}, firstMilestone: {}, unlocks: {} };
+const lastPress = {};   // per layer: the last simulated second the policy pressed its button
 let t = 0, peakIncome = new Decimal(0), peakAt = 0;
 const tick = () => {
     // base currency
@@ -313,12 +394,20 @@ const tick = () => {
     for (const id of layerOrder) if (LAYERS[id].type) { tryBuyUpgrades(id); tryBuyBuyables(id); }
     // prestige greedily, deepest row first so cascades settle
     for (const id of [...layerOrder].sort((a, b) => (LAYERS[b].row || 0) - (LAYERS[a].row || 0))) {
+        if (t - (lastPress[id] === undefined ? -Infinity : lastPress[id]) < CLICK) continue;   // one press per layer per --click
         if (canPrestige(id) && doPrestige(id)) {
+            lastPress[id] = t;
             if (!events.firstPrestige[id]) events.firstPrestige[id] = +t.toFixed(1);
             updateMilestones();
         }
     }
     t += STEP;
+    if (TRACE_EVERY > 0 && t % TRACE_EVERY < STEP) {
+        const cells = layerOrder.map((id) => id + "=" + global.format(player[id].points) +
+            (isPrestige(id) ? "/" + global.format(gainOf(id)) : "")).join(" ");
+        LOG("  t=" + t.toFixed(0) + "s  " + LAYERS[layerOrder[0]].baseResource() + "=" +
+            global.format(player.points) + " @" + global.format(gen || new Decimal(0)) + "/s   " + cells);
+    }
 };
 const started = Date.now();
 while (t < MAXH * 3600) {
@@ -326,7 +415,7 @@ while (t < MAXH * 3600) {
     const bought = layerOrder.reduce((n, id) => n + (player[id].upgrades.length || 0), 0);
     if (events.firstPurchase === null && bought > 0) events.firstPurchase = +t.toFixed(2);
     try { if (ENDGAME()) break; } catch (_) {}
-    if (Date.now() - started > 120000) { LOG("(stopped at the 120 s wall-clock budget)"); break; }
+    if (Date.now() - started > BUDGET) { LOG("(stopped at the " + Math.round(BUDGET / 1000) + " s wall-clock budget)"); break; }
 }
 for (const id of layerOrder) if (player[id].milestones.length) events.firstMilestone[id] = player[id].milestones.slice();
 
@@ -339,6 +428,7 @@ const report = {
     firstPurchaseSeconds: events.firstPurchase,
     firstPrestigeSeconds: events.firstPrestige,
     peakIncome: global.format(peakIncome), peakAtSeconds: +peakAt.toFixed(1),
+    clickSeconds: CLICK, dtSeconds: DT,
     layers: layerOrder.length,
     upgradesBought: layerOrder.reduce((n, id) => n + player[id].upgrades.length, 0),
     milestonesEarned: layerOrder.reduce((n, id) => n + player[id].milestones.length, 0),
@@ -347,6 +437,7 @@ const report = {
 if (asJson) { console.log(JSON.stringify(report, null, 2)); }
 else {
     LOG("simulate: " + path.basename(game) + " — " + report.layers + " layer(s)");
+    LOG("  policy                   : buy instantly, one prestige press per layer per " + CLICK + " s (step " + DT + " s)");
     LOG("  first affordable purchase : " + (report.firstPurchaseSeconds === null ? "never" : report.firstPurchaseSeconds + " s") + "   (author rule: < 10 s)");
     LOG("  first prestige by layer   : " + (Object.keys(events.firstPrestige).length ? JSON.stringify(events.firstPrestige) : "none"));
     LOG("  peak income              : " + report.peakIncome + " at " + report.peakAtSeconds + " s");

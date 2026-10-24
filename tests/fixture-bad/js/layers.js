@@ -52,6 +52,7 @@ addLayer("c", {
         },
     },                                   // [D-AUTOCOLLIDE] two milestones both claim autoUpgrade
     update(diff) {
+        addPoints("c", new Decimal(1)) // [D-UPDATELOCK] production with no unlocked guard — locked layers run update() too
         player.c.milestones.push(0)      // [D-PUSHGUARD] no !hasMilestone guard
         let r = player.c.points.mod(2)   // [C-MOD] Decimal has no .mod
         player.c.points = player.c.points.sub(r)
@@ -172,6 +173,11 @@ addLayer("z", {
     type: "normal",
     exponent: 0.5,
     tabFormat: ["main-display", "prestige-button", "upgrades"],
+    microtabs: {
+        stuff: {
+            broken: { content: "upgrades" }, // [C-CONTENTSTR] bare-string content: property — the engine iterates it per character
+        },
+    },
     gainMult() { return new Decimal(1) },
     gainExp() { return new Decimal(1) },
     layerShown() { return true },
