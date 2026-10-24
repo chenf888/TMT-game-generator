@@ -1,7 +1,7 @@
 {
   "$comment": "Game-type registry. The type axis (interaction model) is ORTHOGONAL to the blueprint axis (small/medium/large = scale). Adding a type means adding an entry here plus a subsection in references/design/13-Types.md — never editing SKILL.md's pipeline. Schema: ./type-registry.schema.json",
 
-  "version": "1.0.0",
+  "version": "1.1.0",
 
   "axis": {
     "primary": "interaction-model",
@@ -141,6 +141,62 @@
       "contract": "capped currency uses type:\"custom\" + softcap(x, cap, 0); its ladder STOPS at the cap",
       "cost": "medium",
       "evidence": { "source": "SKILL.md Q3; P8a references/design/09:241" }
+    },
+    "boss-rush": {
+      "label": "M12 Boss战层",
+      "labelEn": "M12 boss-rush layer",
+      "requiresType": ["active-click", "active-tick"],
+      "requiresModifier": ["sim"],
+      "contract": "one boss layer (09 P19): damage = layer currency x mult x points^exp through overflow softcaps; HP split into fixed segments (milestones key on segments destroyed); revive/level-up loop lives in update(); attack is a cooldown clickable (09 P28)",
+      "cost": "high",
+      "budget": { "maxLayers": 1 },
+      "evidence": {
+        "note": "One Dev One Layer l4 (HP=2^1024 in 1024 segments, author-as-boss) is the exemplar; celestial matos adds attack phases/counter rules (09 P35) — phase rules are beyond generated-game budget, segments only.",
+        "source": "references/design/09 §2 P19/P35"
+      },
+      "downgradeReason": "The revive loop and damage overflow math need a tick; without sim there is no update() to run them and the boss is a static number."
+    },
+    "gacha": {
+      "label": "M13 抽卡收集",
+      "labelEn": "M13 gacha / draw collection",
+      "requiresType": ["active-click", "active-tick"],
+      "requiresModifier": [],
+      "contract": "draw clickables write a neff/ncalc-style buff-bus array declared in startData (D-GACHADATA enforced), arrays sized pool-cap + 1; burn-on-out-of-pool and milestone slot-ladder optional (09 P21); banner timers (09 P39) are the advanced form and need sim",
+      "cost": "medium",
+      "budget": { "maxLayers": 1 },
+      "evidence": {
+        "note": "One Dev One Layer l7 sacrifice gacha feeds all 7 earlier layers through the bus; celestial pet gacha (4 rarities + banner rotation) is the full form. Both deep-reads 2026-10-24.",
+        "source": "references/design/09 §2 P21/P39"
+      },
+      "checker": ["D-GACHADATA"],
+      "downgradeReason": "A draw is a clickable verb. On passive-prestige there is nothing to click and the bus arrays would be written by nobody."
+    },
+    "casino": {
+      "label": "M14 赌场/运气玩法",
+      "labelEn": "M14 casino side games",
+      "requiresType": ["active-click", "active-tick"],
+      "requiresModifier": [],
+      "contract": "one luck economy expressed through 1-2 of the four distributions (dice product rolls / coin duality / slot reels / cards 100*suit+rank), each payout formula carrying its own softcap (09 P38). Never all four games",
+      "cost": "medium",
+      "budget": { "maxLayers": 1 },
+      "evidence": {
+        "note": "Celestial Zar runs all four on one luck resource — the selection table is the point, not the volume.",
+        "source": "references/design/09 §2 P38"
+      },
+      "downgradeReason": "Every casino game is a clickable verb (bet/roll). Passive-prestige cannot route here."
+    },
+    "story": {
+      "label": "M15 叙事章节",
+      "labelEn": "M15 story chapters",
+      "requiresType": [],
+      "requiresModifier": [],
+      "contract": "a stories side layer unlocking numbered chapters via a condition array with storyUnlocked tracking (09 P51); the full cutscene engine ({trigger, portrait, dialogue[]} tables, 09 P32) is large-blueprint only",
+      "cost": "low",
+      "evidence": {
+        "note": "Mining's stories layer (chapter conditions = progression milestones, glitch-text slots) is the generated-game-sized form; celestial's 39-scene data-driven cutscene engine is the ceiling.",
+        "source": "references/design/09 §2 P32/P51"
+      },
+      "downgradeReason": "Story is pure data (condition arrays + display texts); it has no engine dependency to fail — the only downgrade is dropping the large-only cutscene engine, not the layer."
     }
   },
 

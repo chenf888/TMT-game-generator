@@ -60,7 +60,7 @@ Metrics from `design-metrics.json`; `U/M/C/B/A` = upgrades/milestones/challenges
 
 ## 2. Named design patterns
 
-Each pattern: **What / When to use / Why it works / real code / variants**. Source files are named by their dataset filename in the source corpus (not shipped with this skill).
+Each pattern: **What / When to use / Why it works / real code / variants**. Source files are named by their dataset filename in the source corpus (not shipped with this skill). P1–P17 come from the corpus crawl; P18–P29 add *One Dev One Layer* (接力树, an 8-author relay tree analyzed as a full game outside the corpus), P30–P43 add *Celestial Incremental* (same), and P44–P63 come from five corpus games read in depth (C0v1d Plague Tree, The Mining Incremental Table, Incrementreeverse, The Tree Of Life, The Prestige Chain). Tags: `[required]`/`[recommended]` = use in normal generation; `[advanced]` = needs a checker guardrail or blueprint gate; `[optional]` = flavor.
 
 ---
 
@@ -138,7 +138,12 @@ branches: ["coin"],
 1. **keep-on-reset** (`resetsNothing` / milestone "resets don't reset X") — cheapest,
 2. **passiveGeneration** (offline-style gain without resetting),
 3. **autoPrestige** (auto-reset the layer),
-4. **autoUpgrade** (auto-buy upgrades — most expensive, usually last).
+4. **autoUpgrade** (auto-buy upgrades — most expensive, usually last),
+5. **autoBuyable** (closed-form buyMax driver for an earlier layer's load-bearing buyable —
+   2026-10-24, added after the generated games always shipped upgrade autobuyers but never
+   buyable ones; the cause was demand-side: their buyables had no cross-layer consumer, so an
+   autobuyer would automate a dead effect — see `N-BUYABLEDEAD` and P54 for the inverse-solve
+   form; `+1`-per-tick loops are the anti-form, `D-AUTOINVERT`).
 
 Grants are **cross-layer**: layer N's milestones automate layers < N, so progress always feels like it "reaches back" and fixes old tedium. Achievements act as an alternate path to the same flags (redundancy).
 
@@ -156,7 +161,7 @@ Grants are **cross-layer**: layer N's milestones automate layers < N, so progres
 
 **Why it works:** each unlock removes one specific chore. Granting `autoPrestige`+`autoUpgrade`+`resetsNothing` for a layer *as one package* (cape_feather above) is the QoL endgame move.
 
-**Variants:** `automate()` custom loops for buyables (cape_feather sets buyable amounts from a currency each tick — see P15); milestone-granted `buyMax` in `update()` (Incrementreeverse `i`: every 1s, `layers.i.buyables[11].buyMax(times * mult)` when `hasMilestone("a", 2)`).
+**Variants:** `automate()` custom loops for buyables (cape_feather sets buyable amounts from a currency each tick — see P15); milestone-granted `buyMax` in `update()` (Incrementreeverse `i`: every 1s, `layers.i.buyables[11].buyMax(times * mult)` when `hasMilestone("a", 2)`) — promoted to ladder **step 5** (2026-10-24) after the generated games shipped upgrade autobuyers but never buyable ones, because their buyables had no later consumer (`N-BUYABLEDEAD`).
 
 ---
 
@@ -468,6 +473,729 @@ Small habits found across top games that make 10k-line layers maintainable (and 
 - **`milestoneOverpowered()` / `overpowered()`** second-tier milestone effects (Mario Maker) — milestones evolve when a late upgrade is bought; keeps early text honest without rewriting.
 - **Milestone thresholds as content gates**: `done() { return player.points.gte(6871) }` — the number *is* the design; keep them ×2-spaced (median) early, ×5–×10 late.
 
+### P18 — Challenge-as-Farm (`canComplete: false`)  `[recommended]`
+
+**What:** a challenge that can never be completed — `canComplete()` is hardcoded false — becomes a repeatable dungeon: enter (onEnter wipes the field) → in-challenge resources accrue → exit (onExit banks completions via max) → the completion *count* itself grants exponential rewards and raises the next threshold.
+
+**When:** mid/late game needs an active-play wall. One layer can host 4–9 isomorphic farms (l5 ships six at once). One Dev One Layer runs this on four layers (l3, l5, l6, l8) — the highest-usage mechanic in the game.
+
+**Why:** extends P16 one step in time: the challenge stops being a one-shot exam and becomes a loop that automation eventually absorbs (l8 milestones 18/24 settle farm counts *outside* the challenge — the end of grinding is still automation, per P4).
+
+```js
+// One Dev One Layer (接力树) l5 — "anti-replicator" farm, 1 of 6 isomorphic farms
+canComplete() { return false },
+countcalc() {                      // in-challenge points -> completions earned this run
+    let x = player.points.div('1e10700').max(1).log('1e100').root(1.5).add(1)
+    return player.points.lte('1e10700') ? n(0) : x.floor()
+},
+goal()     { return Decimal.pow('1e100', player.l5.chalcomp[1].pow(1.5)).mul('1e10700') },
+onEnter()  { player.points = n(0); player.l1.points = n(0); player.l1.repl = n(0); updateTemp() },
+onExit()   { player.l5.chalcomp[1] = tmp.l5.challenges[11].countcalc.floor().max(player.l5.chalcomp[1]) },
+effect()   { return player.l5.chalcomp[1].pow_base(10) },   // completions -> 10^n reward
+// automation endpoint (l8 update): if(hasMilestone('l8',18)) player.l5.chalcomp[1] = ...countcalc.max(...)
+```
+
+**Variants:** bank-on-exit keep-max (l5) vs live rewrite of resources while inside (l3 displays the payout in real time, banks it on exit); hardcore variant adds a no-keep reset of l1–l3 on enter plus per-second decay (l5 farms 5/6).
+
+**Checker:** `D-FARMCHAL` — countcalc/goal must be generated as an inverse pair; onExit must `.max()` (no regression).
+
+---
+
+### P19 — Segmented-HP Boss Layer  `[advanced, high impact]`
+
+**What:** the layer's core loop is fighting one boss with a segmented HP bar: damage = layer currency × multiplier × points^exponent (all through overflow softcaps), HP split into a fixed number of segments, milestones keyed to "segments destroyed"; a fully-depleted boss revives and levels up, with damage divided by a huge base per level — forcing a numbers rebuild.
+
+**When:** one showcase layer at row 2–3; only one per game (One Dev One Layer has exactly l4). Ideal when you want softcap teaching made explicit — l4's page explains the overflow rules in red text.
+
+**Why:** bars + clickable + cooldown deliver clicker-style active play; "the boss IS the layer author" (loader3229, level cap 3229) is the meta-narrative landing spot (P29); segment-count milestones (2 → 144444) form a natural long-tail goal chain.
+
+```js
+// One Dev One Layer l4 — HP = 2^1024 in 1024 segments; player.l4.y = segments left (float)
+clickables: { 11: { canClick() { return player.l4.cooldown.lte(0) },   // 5s CD (1s after upgrades)
+    onClick() {
+        let singleDmg = layers.l4.effect().mul(layers.l4.dmgMult()).mul(player.points.pow(0.01).overflow(1e200, base))
+        if (player.l4.level.gte(2))                     // revive penalty: ÷MAX_VALUE^level
+            singleDmg = singleDmg.overflow(Number.MAX_VALUE, base).div(Decimal.pow(Number.MAX_VALUE, player.l4.level.sub(1)))
+        player.l4.dmg = player.l4.dmg.add(singleDmg)
+    } } },
+// revive: y<=0 && level<3229 -> level+1, dmg=0, y refills (in update)
+total_bars() { return Decimal.sub(1024, player.l4.y).add(player.l4.level.sub(1).mul(1024)).floor() }  // milestone dual-track
+// smooth HP animation lives OUTSIDE the main loop: setInterval(10ms) writes player.l4.y,
+// then manually tmp.bars.hp.* + constructBarStyle('l4','hp') (see mini-techniques below)
+```
+
+**Variants:** 6 weapons + 6 armors each paid in a *different* layer's currency (turns "cross-layer web" into a shopping list, P10); `BuyMax()` inverse-solves the price curve; `dmgAffectRate = 0.99^armorEffect` makes late levels animate the bar faster.
+
+---
+
+### P20 — Mutex Amplifier Rows  `[recommended]`
+
+**What:** mutually-exclusive upgrades within a row — each member's `canAfford` checks that no sibling is bought; later layers re-open the row for 2–3 picks and take over automation.
+
+**When:** row 1–2 secondary layers need a real build-choice dimension; 2–3 members per group, 3–5 groups per layer.
+
+**Why:** injects genuine tradeoffs into a linear upgrade grid (points vs data vs core cost), and "a later layer unlocks multi-pick" doubles as a redemption coupon — no hard reset for picking wrong.
+
+```js
+// One Dev One Layer l2 — amplifier I-A / I-B (mutually exclusive until l3 buys its unlock)
+41: { canAfford() { return (!hasUpgrade("l2", 42) || hasUpgrade('l3', 42)) && player.l2.points.gte(this.cost) },
+      ignoreAutoUpgrade: () => !hasUpgrade('l3', 42) },
+42: { canAfford() { return (!hasUpgrade("l2", 41) || hasUpgrade('l3', 42)) && ... } },
+// l3 "structural reload I/II/III": same row purchasable 2-3x + automated; l4 milestone 8 frees the 4th row
+// paired respec button: player.l2.upgrades = player.l2.upgrades.filter(n => n < 36)  (costs replicators x0.5)
+```
+
+**Variants:** respec cost from free to punishing (replicators ×0.5 + point wipe); member effects deliberately "same formula, different constants" for easy balancing.
+
+---
+
+### P21 — Sacrifice Gacha + Global Buff Bus  `[advanced]`
+
+**What:** sacrifice a resource to a narrative entity (the firmament) and draw N effects from tiered pools (angels 13 / archangels 18 / gods 6); effects land in `neffX[]` (on/off) + `ncalcX[]` (value) global arrays that **all seven earlier layers read**; drawing an empty slot burns the sacrifice (effect voided); milestones raise simultaneous-active slots (1→3→5→12) and finally remove burning.
+
+**When:** one or two layers before endgame, when you want run-to-run variance and a "one more sacrifice" gambling loop; requires accepting cross-layer global state.
+
+**Why:** the random buff bus decouples *drawing* from *consuming* — the gacha layer only writes arrays, every layer reads its own slots; burn/no-burn is a natural milestone ladder.
+
+```js
+// One Dev One Layer l7 — offer neutronium (clickable 21)
+player.l7.nseed1 = chooseFromArray([1,2,...,15], 1)     // engine-added chooseFromArray draw
+for (i = 0; i <= player.l7.wg1-1; i++) {                 // wg1 = simultaneous slots
+    t = layers.l7.eff1adjust(s[i])                       // s[i] out of pool -> "your neutronium burned up"
+    player.l7.neff1[s[i]] = true; player.l7.ncalc1[s[i]] = eff
+}
+// consumers everywhere: if (player.l7.neff1[2]) mult = mult.mul(player.l7.ncalc1[2])
+// anti-per-frame-recalc: calceff1-3 registered in mod.js doNotCallTheseFunctionsEveryTick
+```
+
+**Variants:** tiered pools (dust→angels, grain→archangels, ingot→gods; higher pools exponentiate lower pools' effects); 1/10%/50%/100% synthesis-ratio buttons.
+
+**Checker:** `D-GACHADATA` — the arrays must exist in startData (a save-load crash otherwise) and be sized pool-cap + 1.
+
+---
+
+### P22 — Unifier Layer (Numbered Hook Reclamation)  `[recommended for large]`
+
+**What:** the final big layer runs a "unified points" shop that systematically buffs **every named mechanic of the previous N layers**: ~80 boxes numbered by source layer (100x points / 103x data / 106x prestige / 109x dense / 111x attack / 113x ascension / 115x ruins / 116x neutronium), total box levels driving one unified milestone ladder.
+
+**When:** row 4+ of large blueprints. Requires the earlier layers (or the generator itself) to **pre-embed** `buyableEffect('l8', id)` hooks in their effects — protocol first, boxes filled later.
+
+**Why:** solves two problems at once: endgame QoL absorption (every old effect finds a home) and the multi-author collaboration protocol (the numbering table IS the interface doc). Works solo too: emit the numbers while generating rows 0–2, fill the table at row 4.
+
+```js
+// protocol side (l1-l7, everywhere): mod.js getPointGen()
+gain = gain.pow(buyableEffect('l8', 1002));      // "power of points": exponent-boosts points
+// box side (l8 unifier, shared unityBox template)
+1002: { ...unityBox, title: 'Power of Points', ed: 'raises points gain to a power',
+        effect(x) { return x.mul(0.01).add(1) } },   // x = bought amount
+// total level: uBTL() sums boxes 100x-116x -> 16 unified milestones (keep old milestones / unlock automation)
+```
+
+**Variants:** three box effect shapes — multiplier (`x.pow_base(k)`), exponent (`x.mul(a)+1`), bound-to-named-upgrade ("boosts 'Recursion'"); first-unification bonus (+2 unified points on the first reset).
+
+**Generator discipline:** emit the hook-ID table during the layer-plan stage (before any layer code), not when writing l8 — see 07 checklist.
+
+---
+
+### P23 — Layer-Knockout Challenge  `[advanced, checker-gated]`
+
+**What:** a challenge periodically *disables* whole layers for a window: the layer vanishes from the tree (`unlocked()` returns false), its update stalls (`chal7doomed[i] > 0` early-return), and its content is `layerDataReset` back to zero; a timer restores it.
+
+**When:** exactly one per game (l8 challenge 31 "Imprisonment": every 5 real seconds, 1–7 random layers disabled for 30s; challenge 33 triggers the same on boss revive). The extreme form of P16's penalty injection.
+
+**Why:** the strongest threat in the game — players watch tree nodes go dark; it also forces every layer to participate in the protocol (each needs the two guard lines), reusing P10's wiring discipline.
+
+```js
+// trigger side (l8 update)
+if (inChallenge('l8', 31)) {
+    player.l8.baC.chal7doomedCD += diff
+    if (player.l8.baC.chal7doomedCD >= 5) {
+        let s = chooseFromArray([1,2,3,4,5,6,7], Math.min(c, 7))
+        for (let i in s) { player.l8.baC.chal7doomed[s[i]-1] = 30; layerDataReset('l' + s[i]) }
+    }
+}
+// victim side (EVERY layer carries both lines)
+unlocked() { return !(player.l8.baC.chal7doomed[n] > 0) }
+update(diff) { if (player.l8.baC.chal7doomed[n] > 0) return; ... }
+```
+
+**Generator guardrail:** only emit this pattern when a single generator produces all layers (it can guarantee every layer carries the checks); hand-written mods can't. Checker: `D-KNOCKOUT` — a knockout state present but some layer missing the `unlocked()` guard is a FAIL.
+
+---
+
+### P24 — Tuning Manifold (Player-Tunable Softcaps)  `[advanced]`
+
+**What:** each of N resources gets a "tuning level" (initial 9–11) that directly rewrites its gain formula (÷10 is neutral, <10 weakens, >10 strengthens); all resources **share one level pool** (90+ points, cap purchasable 90→170) — raising one drains the others.
+
+**When:** endgame, once ≥7 resource types exist. The systematic version of the tree-tab author's promise: "I can remove all your softcaps."
+
+**Why:** balance parameters become a player-owned allocation puzzle (nine sliders, one pool) — a pure-strategy endgame dimension; implementation is just one `tuning[i].div(10)` exponent hook per gain formula.
+
+```js
+// One Dev One Layer l8 — tuning manifold (bars t0-t8 + tu/td +/- clickables)
+tunMin() { return hasUpgrade('l8',66) ? n(0) : ... }        // unlock 9 -> 0
+tunMax() { return hasUpgrade('l8',66) ? n(30) : n(11) }     // unlock 11 -> 30
+availTunLevel() { let m = tmp.l8.tunLevelMax; for (let i=0;i<9;i++) m = m.sub(player.l8.tuning[i]); return m }
+// consumer (points): if (hasUpgrade('l8', 11)) gain = gain.pow(player.l8.tuning[0].div(10))
+```
+
+**Variants:** per-bar color grading (<10 red, 10 gray, >20 green, 30 orange); t8 tunes a *mechanic's* exponent (black-hole surge) — not just resources.
+
+---
+
+### P25 — Erosion (Reverse Reset Pressure)  `[advanced]`
+
+**What:** once a resource crosses a threshold (7 tiers, from data 1.5e10 up to neutronium ee4) "erosion" activates: on a 1–15s cycle it **force-resets that layer's resource to 1** — but the erosion's *accumulated duration is itself the buff* (production exponent ^0.95^time, per tier); the only escape is one special reset (brick) that clears all erosion.
+
+**When:** endgame, to break the "idle = always better" rhythm; pairs with P19's boss pressure.
+
+**Why:** inverts "avoid being reset" into "farm the threat itself" — you want erosion running for the buff and pay a brick reset when you need calm; threat and reward share one source.
+
+```js
+// One Dev One Layer l8 update — erosion loop
+if (!player.l8.erosion.run[0] && player.l1.points.gte('e1.5e10')) player.l8.erosion.run[0] = true
+for (let i = 0; i < 7; i++) if (player.l8.erosion.run[i]) {
+    player.l8.erosion.time[i]  = player.l8.erosion.time[i].add(diff.mul(dmSpeed))     // duration = resource
+    if (player.l8.erosion.lastCycle[i].gte(layers.l8.erosionInterval(i))) {           // 1-15s cycle
+        player['l'+(i+1)].points = n(1); player['l'+(i+1)].total = n(1)               // force clear
+    }
+}
+// buff side (each layer's getResetGain): if (player.l8.erosion.run[0]) gain = gain.log10().pow(layers.l8.erosionEff(0)).pow_base(10)
+// escape side (brick reset onClick): clear run/time/lastCycle entirely
+```
+
+**Variants:** dark matter accelerates erosion-time growth (dmSpeed = darkMatter^0.75) — the threat couples to yet another resource; an upgrade converts duration directly into a multiplier.
+
+---
+
+### P26 — Branch-Tree Upgrades  `[recommended]`
+
+**What:** a shared template + a `branches: []` dependency array turns upgrades into a tech tree: `canAfford` requires all branches bought, payment uses a dedicated currency; tabs unlock by tree depth.
+
+**When:** any subsystem needing a visible unlock chain (One Dev One Layer l8's 40 brick upgrades across two tabs); adds a dependency graph on top of P7's grid.
+
+**Why:** dependencies become data, not page order — the generator can topologically sort before rendering, and the checker can verify acyclicity directly.
+
+```js
+// One Dev One Layer l8 — brickUpgrade template
+const brickUpgrade = {
+    canAfford() { for (let i in this.branches) if (!hasUpgrade(this.layer, this.branches[i])) return false;
+                  return player.l8.brick.valid.gte(this.cost) },
+    pay() { player.l8.brick.valid = player.l8.brick.valid.sub(this.cost) },
+    currencyDisplayName: 'usable bricks', ...
+}
+71: { ...brickUpgrade, cost: n(9), branches: [72, 81], title: 'No Trial Needed' },   // needs 72 AND 81 first
+```
+
+**Variants:** convergence nodes (multiple branches = AND); price varies with subtree completion; tab unlock by total bricks (tier 1 → tier 2 @5e7).
+
+---
+
+### P27 — Automation Requires Invertibility  `[recommended, engineering discipline]`
+
+**What:** auto-buying a buyable is implemented by **inverse-solving the cost formula** (from current resources, compute the reachable level, `setBuyableAmount` to the max). If the formula isn't invertible (division/piecewise), an upgrade must first *swap it* to an invertible form — and the automation unlock is bound to that same upgrade.
+
+**When:** any "core level" main buyable + automation milestone combo.
+
+**Why:** One Dev One Layer l2's own comment: "the original core price formula cannot be reverse-computed, so this upgrade is required before cores can be automated" — not a coincidence but a discipline: automation = closed-form inversion; non-invertible formulas are fundamentally un-automatable (P54 is the same law seen from the formula side).
+
+```js
+// One Dev One Layer l2 core (non-invertible): cost = 2^(x^2)/(x+1), piecewise past 64 -> automation impossible
+// l3-64 "core evolution": swap to 1.75^(x^2) (invertible) + unlock auto-buy — one upgrade, both jobs
+if (hasUpgrade('l3', 64) && !inChallenge('l5', 21)) {
+    let ncl = tmp.l2.corePointScale.max(1).log(1.75).root(2)      // inverse solve
+    setBuyableAmount('l2', 11, getBuyableAmount('l2', 11).max(ncl.add(1).floor()))
+}
+```
+
+**Variants:** handle quadratic softcaps during inversion (`if (ncl.gte(64)) ncl = ncl.div(64).root(scale).mul(64)`); l8's `maxCanBuy()` is the buyable-side form of the same law (all automation funnels through maxCanBuy + setBuyableAmount(max)).
+
+**Checker:** `D-AUTOINVERT` — per-tick `+1` auto-buys get a WARN pointing at closed-form inversion.
+
+---
+
+### P28 — Cooldown Burst Clickables  `[recommended]`
+
+**What:** high-value click buttons with real-time cooldowns (`Date.now()` deltas) that instantly grant X seconds of production; the automation endpoint is an upgrade that auto-clicks in `update()` whenever `canClick()`.
+
+**When:** active-play layers (P19's attack key; l8's black-hole surge 600s / vacuum turbulence 60s).
+
+**Why:** real-time CD (not game-time) is naturally offline-abuse-resistant — though note One Dev One Layer's black-hole subsystem deliberately *ignores devSpeed* to keep testing sane; "instantly gain N seconds" makes the burst quantifiable.
+
+```js
+// One Dev One Layer l8 — black-hole surge (unlocked at 250 levels, 600s initial CD)
+bhBoom: { canClick() { return (Date.now() - player.l8.lastBhBoom) >= 1000 * tmp.l8.bhBoomCDSecond.toNumber() },
+          onClick() { player.l8.bhMass = player.l8.bhMass.add(tmp.l8.bhMassGain.mul(tmp.l8.bhBoomEffect));
+                      player.l8.lastBhBoom = Date.now() } }
+// automation: if (hasUpgrade('l8', 171) && layers.l8.clickables.bhBoom.canClick()) layers.l8.clickables.bhBoom.onClick()
+// CD shrink: past 600 levels, CD divides by (level/10 - 59)
+```
+
+**Variants:** `12.3s/600.0s` countdown display; gray-while-CD styling (two-state style); combo type (l4's attack CD 5s→1s cut by upgrades).
+
+---
+
+### P29 — Meta-Author Presence  `[optional, theme]`
+
+**What:** the author written into the game — as the boss (l4's loader3229: HP and level cap are the author's name), as an NPC (tree-tab's 473362: "I can remove all your softcaps… can I delete parts of the game?"), and as easter eggs (`winText = '3'`, changelog claiming "endgame: 0 points", milestone requirement 114514).
+
+**When:** when the theme fits (especially co-authored/community works); single-author games can take just the easter-egg tier.
+
+**Why:** a TMT community tradition — "who made this" becomes playable content; boss naming costs nothing and is maximally memorable.
+
+```js
+// One Dev One Layer l4 infobox
+body() { return "This layer was made by loader3229. The goal of this layer is to defeat its author: loader3229. ..." }
+// tree-tab QoL author page
+["display-text", "I'm 473362, I made the tree-tab layer<br>I can remove all your softcaps, hardcaps and decay..."]
+```
+
+**Variants:** tribute upgrade names ("Finally Beat It"); number memes (3666/1145/114514/3229); fake endgame (isEndgame never true + a joke winText).
+
+---
+
+#### Mini-techniques from One Dev One Layer (too small for their own pattern)
+
+| Technique | Source | Note |
+|---|---|---|
+| Three-stage synthesis chain | l7 dust→grain→ingot | each stage ≥1e10 to synth, base tightens 1.25→1.02 per milestone, past 9e15 output switches to log transform — the standard secondary-currency ladder |
+| Dual-track milestone done() | l4 | `done()` ORs a currency threshold with a derived metric (total_bars), aligned with `hasMilestone('l8',n)` so cross-layer resets can't lose state |
+| Out-of-tick animation | l4 setInterval(10ms), l7 glow breathing | smooth bars must bypass the main loop: write player state, then hand-write `tmp.bars.*` and call `constructBarStyle()` |
+| Decimal upgrade IDs | l6 41.1/41.2 | string keys accept fractional IDs for "append a batch to this row"; iteration and style lookup treat them as strings |
+| In-challenge random events | l8 challenges 12/31 | Math.random + CD counter inside update(); keep the random table seedable (l8's predictableRandom) |
+| Never-completing placeholder milestone | l1 milestone 0 | `done(){return false}` reserves the slot — generators should placeholder, not renumber |
+| Per-frame run() of charged effects | l8 update tail | imperative effects (charged.effect) never enter the temp cache — run() each one in update() |
+
+---
+
+### P30 — Per-Region Tickspeed (Multi-Universe)  `[advanced]`
+
+**What:** `layers[].universe: "U1"` assigns each layer to a universe; the game loop multiplies each layer's `diff` by that universe's `player.uni[U].tickspeed`. Several trees share one save and one tick while keeping their own time flow, their own pause, and their own catch-up.
+
+**When:** "second world" content (NG+ realms, parallel worlds, prequel trees) that must not reset the main tree and must tick independently. Celestial runs seven universes this way.
+
+**Why:** the ultimate form of parallel content: one save, one loop, independent pacing. Pausing a universe is just `tickspeed = 0`; resuming replays real elapsed time layer by layer (action layers exempted so burst simulation can't break sub-games).
+
+```js
+// celestial-incremental-main/js/game.js — gameLoop
+if (layers[layer].universe) layers[layer].update(Decimal.mul(diff, player.uni[layers[layer].universe].tickspeed))
+// js/technical/uniSupport.js — on resume, loop the universe's tree with update((Date.now() - pauseTime) / 1000)
+// navigation: a map layer of absolutely-positioned clickables renders the universe list as a star chart
+```
+
+**Variants:** per-universe currencies that never convert; a multiverse map layer as the hub.
+
+---
+
+### P31 — Manual Pipeline + Named Softcap  `[advanced]`
+
+**What:** `canGenPoints()` is disabled and the main currency's full production chain is handwritten in the hub layer's `update()` (with pre/post multiplier segments displayed separately). The chain's centerpiece is a *named* softcap — Celestial's "SOFTCAP OF DOOM", red text and its own page — whose strength `0.5/(log(gain/start)/weaken+1)` decays as you overshoot, and whose start, weaken and floor are each purchasable.
+
+**When:** late-game economies that have outgrown `getPointGen()`; or anywhere you want the wall to be *content* rather than a hidden constant.
+
+**Why:** turns the softcap from invisible punishment into a visible, attackable mechanic — players buy the three counters and schedule their pushes. P24 is the player-side tuning version of the same idea.
+
+```js
+// celestial-incremental-main/js/layers.js — Origin update() (abridged)
+player.i.doomSoftcap = player.i.doomSoftcap.div(amt.div(player.i.doomSoftcapStart).add(1).log(player.i.doomSoftcapStart).div(doomWeaken).add(1))
+if (player.gain.gt(player.i.doomSoftcapStart))
+    player.gain = player.gain.div(player.i.doomSoftcapStart).pow(player.i.doomSoftcap).mul(player.i.doomSoftcapStart)
+```
+
+---
+
+### P32 — Cutscene System  `[recommended]`
+
+**What:** story as data — `{ trigger(), portrait, background, music, dialogue: [{text, portrait}] }` arrays with numbered trigger functions (celestial ships 39 scenes), a replay viewer, per-scene BGM and particle effects (rain, embers).
+
+**When:** any game with narrative ambition; the generator can emit the dialogue table straight from the story outline.
+
+**Why:** scenes are pure data — zero new engine surface, and the replay viewer comes free. 5,300 lines of celestial's cutscene engine is all content, not code.
+
+---
+
+### P33 — Feature Shop Hub  `[recommended]`
+
+**What:** the hub layer sells subsystem unlocks as one upgrade chain (Feature I–XI), prices spanning 11 orders of magnitude; each feature then runs its own inner unlock chain.
+
+**When:** large games where "milestones unlock everything" would flatten pacing into a checklist.
+
+**Why:** a shop makes unlocking a *decision* (buy now vs push numbers), and the chain doubles as a table of contents for the whole game.
+
+---
+
+### P34 — Charge Structure (Pylon/Foundry)  `[recommended]`
+
+**What:** spend rare materials to build a structure → it produces energy up to a cap → tier+1 wipes it and starts over; the energy simultaneously feeds global tickspeed, an exponent multiplier zone, and passive effects.
+
+**Why:** the tier loop gives "building" a repeatable promotion ritual instead of one-shot construction, and one energy output justifies three consumption channels.
+
+---
+
+### P35 — Boss Attack Phases  `[advanced]`
+
+**What:** the boss rotates several `attackTimer[]` groups through phase-1/2 attack generators with *counter rules* — one character can't hit airborne, shields must break first, stealth is only breakable by specific units at 15%.
+
+**When:** final-boss layer. Complements P19's numeric boss: here the boss acts on its own and demands a party composition.
+
+**Variants:** celestial's matos runs 4×3 attack timers with targeted rules per attack type (shield/stealth/anti-air).
+
+---
+
+### P36 — Bullet-Hell Arena  `[advanced, high cost]`
+
+**What:** `bulletHell(actions, values)` — duration, bullet action set, sub-arena, goalType and gravity jump all parameterized; **leaving the tab = everyone stunned and eating damage** (focus enforcement); entity state lives in a global object outside the save, only position persists to localStorage.
+
+**Cost warning:** celestial's engine is 3,570 lines. For generated games treat as blueprint-gated or skip entirely.
+
+---
+
+### P37 — Ship Roguelite Wave Arena  `[advanced]`
+
+**What:** canvas wave spawns + typed drops + XP orbs + **choose-1-of-3 upgrade at every wave end** (`pickUpgrade(canRepeat, repetitions, data)`) + salvaged variants.
+
+**Why:** adds the build-growth roguelite loop that P19's numeric boss lacks — the player gets stronger *within* the fight scene, not just between resets.
+
+---
+
+### P38 — Casino Quartet  `[recommended]`
+
+**What:** one luck economy expressed as four random distributions: dice (multi-point products), coin flip (binary duality + symmetric softcap), slots (reel matching 2/3-in-a-row), cards (4 suits × 13 ranks encoded `100*suit + rank`, draw/shred pow ladders).
+
+**When:** need randomness-driven side content; the quartet is a ready-made selection table — pick one or two, don't ship all four.
+
+---
+
+### P39 — Pet Rarity Gacha  `[advanced]`
+
+**What:** four rarity tiers with a price table, crate pulls, **banner rotation** (master timer 21600s, sub-banners 1800–7200s each on their own clock), sacrifice into three shard types, and pet entities that grow via the levelable system (P43).
+
+**Why:** an order of magnitude more complete than P21's sacrifice gacha; the banner timers create return-schedule pressure that pairs with P41.
+
+---
+
+### P40 — Blessing-Curse Duality  `[recommended]`
+
+**What:** one source (refinement) splits into two opposite-sign resources (blessings/curses), each with its own softcap; picking blessings vs enduring curses is a build branch. Celestial's Hex region generalizes the duality across ten layers.
+
+**Why:** one mechanic, two risk profiles — cheap to build, doubles the decision space.
+
+---
+
+### P41 — Check-Back Collection  `[recommended]`
+
+**What:** "things that happened while AFK" as a named layer family: golden cookies (DOM-floating clickable + fly text), timed orbs (claimable on schedule + claim popup), treasure rooms, limited banners. Rewards accumulate offline or refresh on timers so returning always has something to claim.
+
+**Why:** the cheapest retention loop in incremental design — and it composes with every other pattern here (P39 banners, P28 bursts).
+
+---
+
+### P42 — Compound Consumable Reset  `[recommended]`
+
+**What:** a prestige-scale reset that also *consumes* resources: Celestial's rocket launch = singularity-equivalent reset + burned fuel (four resources each contributing one term: base/mult/mult/mult, itemized in the UI) + selective keeps (some pet levels survive).
+
+**Why:** resets stop being free buttons and gain a resource-cost dimension — the launch decision becomes worth optimizing instead of spamming.
+
+---
+
+### P43 — Component Library Protocol  `[recommended, engineering discipline]`
+
+**What:** ~90 custom Vue components with suffix conventions (`-dark/-ex/rounded-/hoverless-/extended-`), `levelable` promoted to a first-class citizen alongside upgrade/buyable/clickable (`buyLevelable`/`clickLevelable`/`levelableEffect`), 7 tree layout variants.
+
+**Why:** TMT's component layer is extensible — large projects should spend UI complexity on components, not on `tabFormat` strings. For generated games: keep a fixed component suffix vocabulary so the checker can audit usage (M-FIELDS).
+
+---
+
+### P44 — Paired Scale Table  `[recommended]`
+
+**What:** a named table of scale starts per layer, consumed by two functions that are exact inverses: `scaleStaticCost()` raises costs through piecewise segments and `softcapStaticGain()` softens gains through the *same* segments in reverse.
+
+**When:** static layers with long lives, where cost runaway and gain softcap must stay synchronized.
+
+**Why:** "cost/gain designed in pairs" enforced structurally — one table, two consumers, so you can't tune one and forget the other. The general law behind P12.
+
+```js
+// c0v1d-9119361_The-Modding-Tree.js:1-73 (abridged)
+const STATIC_SCALE_STARTS = { r: () => new Decimal(2000), u: () => new Decimal(320), e: () => decimalTen, ... }
+function scaleStaticCost(gain, layer) {   // costs UP: pow(2)/start, log-domain pow, per-layer segments
+    let start = (STATIC_SCALE_STARTS[layer] ? STATIC_SCALE_STARTS[layer]() : 1);
+    if (gain.gte(start)) { if (layer == "r") gain = gain.pow(2).div(start); ... }
+    return gain
+}
+function softcapStaticGain(gain, layer) { // gains DOWN: the same segments inverted
+    ... gain = gain.times(start).pow(1/2) ...
+}
+```
+
+---
+
+### P45 — Laddered Softcap Chain  `[recommended]`
+
+**What:** one effect gets 5+ consecutive softcap stages, each a *different math family* (power-weaken → log-domain pow → double-log pow → exponential wall `x.log10().pow(10^997)`), each with its own threshold constant and weaken exponent — and the display appends "(softcapped)" per stage.
+
+**When:** any effect that would otherwise reach astronomic values (P12's endgame form).
+
+**Why:** single softcaps break — players sail past them; a ladder of escalating math families keeps every stage meaningful, and the one-constant-per-stage style makes balance reviewable.
+
+```js
+// c0v1d-9119361_The-Modding-Tree.js v-12 (abridged; thresholds 1e4 -> 1e10 -> 1e50 -> 10^10^1e3)
+let v12sf = Decimal.pow(10, 1e4)
+if (eff.gte(v12sf))  eff = Decimal.pow(10, Decimal.log10(eff.div(v12sf)).pow(3/4)).mul(v12sf)
+if (eff.gte(v12sf2)) eff = Decimal.pow(10, Decimal.log10(eff.div(v12sf2)).pow(0.9)).mul(v12sf2)
+if (eff.gte(Decimal.pow(10, Decimal.pow(10, 1e3)))) eff = eff.log10().pow(Decimal.pow(10, 997))
+```
+
+**Warning:** copy-paste across stages is how threshold/divisor typos happen — checker `D-SOFTCAPSEG` flags same-line threshold≠divisor pairs (real bug: c0v1d u-12 divides by 1e1500 under a 1e15000 threshold).
+
+---
+
+### P46 — Parallel Mirror Tree  `[advanced]`
+
+**What:** a full second tree of `U`-prefixed layers mirroring the main tree (Uv/Ui/Ur/… ↔ v/i/r/…), toggled by a switcher state (`player.uv.tree = "normal" | "unvaxxed"`), plus a hub side layer carrying the NG+ economy (mutations, boosters, virus counters). Challenges that send you into the second tree grant batches of previously-earned milestones/upgrades back — QoL compression instead of re-grinding.
+
+**When:** post-victory rebirth content (blueprint 3.3); or any "hard mode world" that must not fork the save.
+
+**Why:** one save, two trees; the mirror prefix convention (`U` + id) keeps save migration trivial and the checker's layer-id audit unambiguous.
+
+---
+
+### P47 — Loadout Layer  `[advanced]`
+
+**What:** a build-crafting layer: eight dimensions (d1–d8) + a sacrifice stat + a cooldown table; entering challenges clamps buyable levels to what cooldowns allow (`buyables[71+i] = min(level, cd[i])`), and a `kep[]` list names the 18 auto-toggles that must survive resets.
+
+**When:** when a game needs "gear" without leaving the TMT object model.
+
+**Why:** the keep-list (`kep[]`) is the loadout's save contract — one array tells both the reset logic and the reader exactly what persists.
+
+---
+
+### P48 — Grid Mining Field  `[advanced, high impact]`
+
+**What:** a 10×10 grid layer: movement mode vs mining mode (toggle key), four directional clickables, a "find ore" button that rolls ore count from rarity (`speed*3/rarity` expectation + fractional chance), mixes base tiles per `specialOreBases`, applies area effects (underwater), and mining progress = tool speed × diff integrated against `hardness(ore)`; clearing all ores instantly resets the find cooldown.
+
+**When:** the theme is an *activity* — this is P15's full form (P15's "swing pickaxe" bar is the 1-ore version).
+
+**Why:** the corpus's 9.6-rated game is built on this loop; spatial gameplay gives incremental games a body.
+
+```js
+// angrystar6k_The-Mining-Incremental-Table.js — layer "general" (abridged)
+let ores_expectation = player.copper.speed.times(3).div(player[target_ore].rarity).min(59).toNumber()
+let ores = Math.floor(ores_expectation); ores += Math.random() < ores_expectation - ores ? 1 : 0
+// update(): player[ore].progress = progress.add(player.stone.speed.times(diff))
+//           if (progress.gte(hardness(ore))) { progress = 0; ore += gainMult; destroying = false }
+```
+
+---
+
+### P49 — Map-Gated Combat  `[advanced]`
+
+**What:** a side `map` layer holds a full battle state machine — HP/MP/oxygen, attack cooldown, buffs, revival timer, 10-line battle log, boss drop table feeding layer progress, enemy HP/shield/attack timer, per-stat display toggles — and a world map whose location clickables are **locked while `battle.enemy` is set**.
+
+**Why:** combat + travel on one side layer keeps the main tree clean; the position lock prevents fleeing mid-fight.
+
+```js
+// angrystar6k_The-Mining-Incremental-Table.js — layer "map" (state excerpt)
+battle: { enemy: undefined, curHP: d(20), curMP: d(20), curOP: d(20), atkCooldown: zero, buffs: [], revival: d(-1),
+          battleText: [...], drops: { naga_loot_chest: zero, alpha_yeti_fur: zero, ... },
+          enemy_hp: d(-1), enemy_shield: d(-1), enemy_attack_time: d(-1), statusShowing: {...} },
+// location switch guard: canClick() { return !isAtLocation(dim) && !player.map.battle.enemy }
+```
+
+**Checker:** `D-BATTLELOCK` — clickables that write a `.location` state should guard on an in-progress flag.
+
+---
+
+### P50 — Recipe Crafting System  `[advanced]`
+
+**What:** a `layerType: "craft"` layer with a boolean blueprint table (831 items), pagination, progressive `maxCraftID` unlocks, a hide-blueprints mode for when the grid overflows, and progress-bar crafting with cooldown+speed; a sibling layer reuses the type for singularity smelting with a temperature mechanic.
+
+**When:** collection-driven themes (Minecraft-likes); position it off-tree (row 2001) so it never crowds the tree layout.
+
+**Why:** checklist crafting is the strongest "collection" retention loop in the corpus; the boolean item table is trivially save-migratable.
+
+---
+
+### P51 — Story Chapter Layer  `[recommended]`
+
+**What:** a `stories` side layer that unlocks numbered chapters via a condition array (`storyPending()`), tracks `storyUnlocked`, and reserves per-chapter glitch-text slots for corrupted entries.
+
+**When:** any game with lore; the conditions read like an achievements list but unlock *reading*, not bonuses.
+
+---
+
+### P52 — Negative-Resource Watchdog  `[recommended, engineering discipline]`
+
+**What:** a 60-second `setInterval` health check that alerts and zeroes any resource that went negative, with per-resource alert text naming the value — because big-number NaN cascades are catastrophic and hard to debug from a save alone.
+
+**Why:** self-repair at the save level; cheap insurance every generated game can afford.
+
+```js
+// angrystar6k_The-Mining-Incremental-Table.js:44-55 (abridged)
+function checkResourceHealth() {
+    if (player.invar.points.lt(0)) alert(negativeResourceFixText('殷钢锭', player.invar.points)),
+        player.invar.points = zero
+    ...
+}
+const resourceCheckInterval = setInterval(checkResourceHealth, 60000)
+```
+
+---
+
+### P53 — Convergent Dual Branch  `[recommended]`
+
+**What:** a layer's base amount is `min(branchA, branchB)` — Incrementreeverse Energy = min(Matter, Antimatter) — so two independent branches converge and the weaker always defines progress.
+
+**Why:** prevents single-branch snowballing; players must alternate, which naturally paces both branches' upgrade grids.
+
+```js
+// pg132_The-Modding-Tree.js — layer "e"
+baseAmount() { return player.m.points.min(player.am.points) },
+```
+
+---
+
+### P54 — Closed-Form BuyMax  `[recommended]`
+
+**What:** for `base^x * c^(x^2)` cost curves, buyMax solves the quadratic inverse in closed form (`target = (√(4c+b²)−b)/2`) and clamps to the cap — no purchase loops; super-exponential costs get a piecewise inverse instead.
+
+**Why:** P27's invertibility law seen from the formula side: if the generator emits the cost curve, it can emit the inverse for free; loops (30 buys/tick) are the slow, fragile alternative.
+
+```js
+// pg132_The-Modding-Tree.js — layer "i", buyable 11 (abridged)
+buyMax(maximum){
+    let base1 = (hasIUpg(22) ? 1 : 2 / 1.01)
+    let pttarget = player.i.points.div(10).log(1.01)      // c
+    let b = Math.log(base1) / Math.log(1.01) - 1          // b
+    let target = pttarget.times(4).plus(b * b).sqrt().minus(b).div(2).floor().plus(1)
+    target = target.min(5e5)
+    let diff = target.minus(player.i.buyables[11]).max(0)
+    if (maximum != undefined) diff = diff.min(maximum)
+    player.i.buyables[11] = player.i.buyables[11].plus(diff)
+}
+```
+
+---
+
+### P55 — Segmented Formula Disclosure  `[recommended]`
+
+**What:** every custom gain is written as `getGainMultPre() → getGainExp() → getGainMultPost()`, a "Details" tab explains each segment in prose, and buyables show cost/effect formulas on Shift — P17's formula-on-Shift promoted to a whole-layer teaching structure.
+
+**Why:** formula-as-content: players learn the economy by reading it, and the generator can emit the prose from the same constants that build the formula — they can't desync.
+
+```js
+// pg132_The-Modding-Tree.js — layer "i" exposes its pipeline as three named segments
+getResetGain() { let ret = pts.max(10).log10().times(pre).pow(exp).times(pst).minus(1); ... }
+getGainMultPre()  { /* things referencing BASE incrementy gain */ }
+getGainExp()      { /* Stamina exponent */ }
+getGainMultPost() { /* things referencing final incrementy gain */ }
+// "Details" tab: "The base Incrementy formula is log10(points)... then raised by Stamina... then multiplied by..."
+```
+
+---
+
+### P56 — Reset-Count Global Buff  `[advanced]`
+
+**What:** one milestone applies `10^(x.log10()^(1.01^resetCount))` to *every* layer's `getResetGain` via a single shared helper called at each gain's tail — the act of resetting itself becomes a global growth resource.
+
+**Why:** one line per layer buys a game-wide growth axis; the log-domain exponent means the buff compounds smoothly instead of exploding.
+
+```js
+// pg132_The-Modding-Tree.js — shared tail hook, called by every getResetGain
+function doMilestoneC1Buff(x){
+    let buffexp = Decimal.pow(1.01, player.c.times)   // c-layer reset count
+    if (x.lte(10)) return x
+    return Decimal.pow(10, x.log10().pow(buffexp))
+}
+```
+
+---
+
+### P57 — Logistic Production  `[recommended]`
+
+**What:** production runs `getLogisticAmount(points, gain, lossRate, diff)` — gain minus decay toward an equilibrium — with `logisticTimeUntil(cost, points, gain, loss)` rendering "estimated time to afford" on every purchasable; a milestone later swaps it for plain production.
+
+**When:** resources whose *stock* (not flow) matters — chemistry/population themes fit naturally.
+
+**Why:** equilibrium dynamics create a soft endgame pressure that pure accumulation lacks, and the time-estimate turns waiting into a visible curve.
+
+---
+
+### P58 — Challenge Depth System  `[advanced]`
+
+**What:** challenges are re-enterable at increasing *depths* (`getChallengeDepths[n]`), the depths feed global formulas (dilation coefficients scale with depth), and the challenge sequence beyond a base ID (801+) is procedurally generated with nCk-combination penalties.
+
+**Why:** one challenge definition becomes an endgame's worth of content; depth is the time dimension of completion limits.
+
+```js
+// pg132_The-Modding-Tree_evolution.js:151-179 (abridged)
+let c6Layers = (86 + c2depth) * c6depth ** (1/8)
+portion = portion.times(Decimal.pow(.665, Math.sqrt(c5depth)))
+portion = portion.times(Decimal.pow(c6Base, c6Layers))
+if (challId > 803) portion = portion.div(Decimal.pow(2.2, nCk(challId-802, 2)))
+```
+
+---
+
+### P59 — Mutually Exclusive Paths  `[recommended]`
+
+**What:** buying one branch upgrade raises the other's cost steeply and hides it (`unlocked()` gates on NOT having the sibling); exclusion is expressible as data, not prose.
+
+**When:** hydrogen→two-isotope choices, tech-fork themes; anywhere the build should commit.
+
+**Why:** cheap to implement (one condition per side), and the "price of the road not taken" makes the fork feel weighty. P20 is the row-local version; this is the full-path version.
+
+```js
+// pg132_The-Modding-Tree_evolution.js — h-15 unlocks Deuterium OR Atomic Hydrogen, not both
+cost(){ if (!player.hardMode) return hasUpgrade("h", 31) ? new Decimal(5e5) : decimalOne ... },
+unlocked(){ return hasUpgrade("h", 15) && (!hasUpgrade("h", 31) || hasUpgrade("h", 35) || hasUpgrade("h", 25)) },
+```
+
+---
+
+### P60 — Difficulty Modes Throughout  `[advanced]`
+
+**What:** `easyMode/hardMode/extremeMode` flags woven into every formula (rewards ×4 / costs ×2 / gains `pow(.75)`) *and* into description text variants — one codebase, three difficulty replays.
+
+**When:** only worth it for long games; the flags must be set at save creation (not runtime toggles) to keep balance coherent.
+
+**Why:** the Tree Of Life ships three games for the price of one; for generators this is a multiplier registry (each mode = a modifier entry, see the type registry).
+
+---
+
+### P61 — Generalized Buyable Factory  `[recommended for large]`
+
+**What:** `getGeneralizedBuyableData(layer, id, unlockFn)` table-drives entire buyable grids — cost/effect/total/extra/buyMax templates plus generalized prestige gain and autobuy handlers — 13 isomorphic layers from one factory (The Prestige Chain).
+
+**Warning:** the corpus's 1.0-rated game is its cleanest-engineered sample — factory elegance ≠ fun. Use the factory to *generate* variety, then inject per-layer twists via the parameters (the fun-quota registry exists for exactly this).
+
+---
+
+### P62 — Chained Challenges + Completion Factor  `[advanced]`
+
+**What:** `countsAs: [11, 12]` makes a high challenge include all lower ones' penalties; repeatable completions scale goals through `getChallengeFactor` — a four-stage escalation ending in `tetrate(1.0011)`.
+
+**Why:** chains give challenge grids narrative ("Beach = Big AND Body at once"), and the staged factor keeps repeat completions meaningful for thousands of runs.
+
+```js
+// pg132_The-Modding-Tree_buyables.js (abridged)
+22: { challengeDescription: "Beach and square root point gain", countsAs: [11, 12, 21], completionLimit: 20, ... }
+function getChallengeFactor(comps){
+    let b1 = new Decimal(comps).pow(1.5).plus(1)
+    if (b1.gt(1e10))  b1 = b1.tetrate(1.01)
+    if (b1.gt(1e200)) b1 = b1.tetrate(1.0001)
+    if (b1.gt("1ee3")) b1 = b1.tetrate(1.0002)
+    return b1
+}
+```
+
+---
+
+### P63 — Ghost Nodes & Goal Grid  `[optional]`
+
+**What:** decorative tree nodes via `layerShown(){ return "ghost" }` (a truthy-string trick — the checker's `D-LAYERSHOWNBOOL` wants this as an explicit boolean), and a 5×5 goal board ("00"–"44") paying medals/tokens with five independent autobuy toggles.
+
+**When:** pure flavor; the goal grid doubles as a challenge-hub progress dashboard.
+
 ---
 
 ## 3. Progress blueprints
@@ -513,7 +1241,7 @@ content:   5×5+ grids per layer, 10×5 mega-layers, 200+ milestones total,
 automation: full ladder ×2 per layer + achievements backfill (P11) + package deals at phase ends +
            row≥N doReset free pass (P9) so late phases don't wipe early phases
 softcaps:  layered caps on every long-lived currency (P12), cap-delay upgrades sold 2–3 rows later
-endgame:   dedicated final layer(s) (the_end pattern) + post-victory rebirth layers (C0v1d U* pattern) [O]
+           endgame:   dedicated final layer(s) (the_end pattern) + post-victory rebirth layers (C0v1d U* pattern, P46) [O]
 QoL:       hotkeys on every resettable layer (Shift+letter for same-row second layer), formula-on-Shift, stats layer
 ```
 

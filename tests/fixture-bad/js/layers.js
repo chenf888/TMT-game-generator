@@ -14,6 +14,20 @@ addLayer("a", {
     exponent: 0.5,
     gainMult() { return new Decimal(1) },
     passiveGeneration() { return hasMilestone("c", 0) },  // [N-PGBOOL] boolean, not a number
+    // [N-BUYABLEDEAD] a buyable NOTHING outside this layer consumes — stale once later rows arrive
+    buyables: {
+        11: {
+            title: "Dead Weight",
+            display() { return "Cost: " + format(this.cost()) },
+            cost() { return new Decimal(10).times(new Decimal(2).pow(getBuyableAmount("a", 11))) },
+            effect() { return getBuyableAmount("a", 11).add(1).pow(0.5) },
+            canAfford() { return player.a.points.gte(this.cost()) },
+            buy() {
+                player.a.points = player.a.points.sub(this.cost())
+                setBuyableAmount("a", 11, getBuyableAmount("a", 11).add(1))
+            },
+        },
+    },
     layerShown() { return true },
     hotkeys: [
         { key: "a", description: "A: Reset for prestige points", onPress() { if (canReset(this.layer)) doReset(this.layer) } },

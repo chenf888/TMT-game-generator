@@ -1,5 +1,5 @@
 {
-  "_comment": "Fun-density quotas by blueprint size. Source: 10-Fun-Mechanics-and-Content-Organization.md §5, derived from crawl/fun-metrics.json rating-tier aggregates (great(8+) n=4 vs lower tiers) and the phase-⑥ test-game diagnosis (385 upgrades, 88% constant-mult, 0 clickables/bars/microtabs). Mechanics catalog M1-M10 and effect taxonomy K1-K8 are defined in handbook 10. Quotas are FLOORS, not targets - theme fit (P14) decides which mechanics are used.",
+  "_comment": "Fun-density quotas by blueprint size. Source: 10-Fun-Mechanics-and-Content-Organization.md §5, derived from crawl/fun-metrics.json rating-tier aggregates (great(8+) n=4 vs lower tiers) and the phase-⑥ test-game diagnosis (385 upgrades, 88% constant-mult, 0 clickables/bars/microtabs). Mechanics catalog M1-M10 and effect taxonomy K1-K8 are defined in handbook 10. Quotas are FLOORS, not targets - theme fit (P14) decides which mechanics are used. | autoBuyableDrivers = P4 step-5 buyable-autobuyer floors (brief-time enforced; closed-form buyMax per P54, consumer required per N-BUYABLEDEAD).",
   "byBlueprint": {
     "small": {
       "minDistinctMechanics": 2,
@@ -12,7 +12,8 @@
       "customRitualLayer": "optional",
       "maxK1SharePerLayer": 0.6,
       "microtabsRequiredAtContentItems": 14,
-      "tabFormatRequiredEverywhere": true
+      "tabFormatRequiredEverywhere": true,
+      "autoBuyableDrivers": 0
     },
     "medium": {
       "minDistinctMechanics": 4,
@@ -26,7 +27,8 @@
       "customRitualLayer": "optional",
       "maxK1SharePerLayer": 0.4,
       "microtabsRequiredAtContentItems": 12,
-      "tabFormatRequiredEverywhere": true
+      "tabFormatRequiredEverywhere": true,
+      "autoBuyableDrivers": 1
     },
     "large": {
       "minDistinctMechanics": 6,
@@ -40,7 +42,8 @@
       "customRitualLayer": "required",
       "maxK1SharePerLayer": 0.4,
       "microtabsRequiredAtContentItems": 12,
-      "tabFormatRequiredEverywhere": true
+      "tabFormatRequiredEverywhere": true,
+      "autoBuyableDrivers": 2
     }
   },
   "staticCheckThresholds": {
@@ -61,7 +64,7 @@
   "corpusEffectShares": {
     "_source": "Full archive of 329 real TMT games, 6,274 effect-bearing upgrades (phase 8, 2026-10-03). E:\\Idle-Skill\\archive\\TMT_生成式AI增量游戏数值设计指南.md section 1.3.",
     "sharesOfEffectsCarryingUpgrade": {
-      "pow": 0.770,
+      "pow": 0.77,
       "add": 0.536,
       "log10": 0.534,
       "mul_or_times": 0.263,
@@ -69,7 +72,12 @@
     },
     "upgradesWithNoOwnEffect": 0.544,
     "reading": "Overlapping shares (one effect can use several ops). The 3:1 pow:times ratio is the design lesson: a layer of flat x2 multipliers reads as unfinished. Target >=30% of a layer's upgrades using a pow/log shape.",
-    "layerComponentCounts": { "p25": 6, "median": 15, "p75": 29, "p90": 56 },
+    "layerComponentCounts": {
+      "p25": 6,
+      "median": 15,
+      "p75": 29,
+      "p90": 56
+    },
     "challengeShareOfAllComponents": 0.018
   },
   "effectKinds": {

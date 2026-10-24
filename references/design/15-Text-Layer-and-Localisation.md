@@ -110,7 +110,43 @@ skipped silently, so it is safe to run on every build.
 
 ---
 
-## §4 Checklist
+## §4 The engine's own chrome (the strings you don't own but the player reads)
+
+The stock template speaks English in places no layer file reaches: the options menu, tree
+tooltips and dialogs, the time units ("seconds ago"), the milestone/achievement popups, the
+respec/master buttons, and the three end-screen lines inside `index.html`. `main-display`
+(F7) is only the most visible one. A T2 game can ship with English chrome and a note; a **T3+
+build must localize the chrome too**, or the picker promises four modes and three of them
+still say "You have".
+
+The proven method (one real T3 build shipped it across four packs):
+
+1. **Swap the engine's English literals for `t("ui.*")` calls** in the six chrome files —
+   `components.js`, `technical/systemComponents.js`, `utils/NumberFormating.js`,
+   `utils/save.js`, `utils.js`, `game.js` — plus the end-screen text nodes in `index.html`.
+   String-literal swaps ONLY: no logic changes, no signature changes. This is the one
+   sanctioned exception to "never edit engine files", and it stays safe because step 2 makes
+   every swap verifiable.
+2. **Generate the packs from one source.** Keep every string in a single `texts.js` and emit
+   the packs from it with a build-time script; the script hard-fails on any `t("…")` key the
+   source does not define, so a half-swapped chrome cannot ship.
+3. **Let the checker see the chrome.** `scripts/i18n_check.js` scans those same six files and
+   `index.html` for `t()` calls (double- or single-quoted — Vue attribute contexts force
+   single quotes), so a missing `ui.*` key is an I-MISSING FAIL, not a silent English leak.
+   A stock (unswapped) engine file contains no `t()` calls and scans as a no-op.
+4. **Bump the preference key when changing the default language** (`<id>.lang` →
+   `<id>.lang.v2`): a saved old choice otherwise silently masks the new default, and the
+   "default changed" that you verified never reaches an existing profile.
+
+Script-specific rendering note: writing systems rendered as Unicode symbols (braille cells
+U+2800–28FF, IPA, CJK extensions) have no soft-wrap points — long lines force horizontal
+scrolling. Give such a mode a body class (`html.brl-mode`) applying `word-break: break-all`
+and `overflow-wrap: anywhere`, and render digits through the script's own number signs
+rather than leaving ASCII numerals inside a translated sentence.
+
+---
+
+## §5 Checklist
 
 - [ ] Q7 answered as one of T1–T4, and the tier written into the brief.
 - [ ] Lang files are loaded **before `js/mod.js`** in `index.html`.
@@ -118,6 +154,10 @@ skipped silently, so it is safe to run on every build.
 - [ ] Keys namespaced `<layer>.<component><id>.<field>`; no key reused for a second meaning.
 - [ ] Descriptions/titles/tooltips/`winText` are **functions**, not module-scope values.
 - [ ] `main-display` overridden (F7) in any non-English game.
+- [ ] T3+: the engine's chrome localized via §4 — `i18n_check` covers the six chrome files
+      and `index.html`, with 0 missing `ui.*` keys.
+- [ ] A changed default language bumped the preference key (`<id>.lang` → `<id>.lang.v2`), so
+      a saved old choice cannot mask it.
 - [ ] Language preference + polyglot offset persisted outside the save, keyed off `modInfo.id`.
 - [ ] `node scripts/i18n_check.js <game>` reports 0 missing, 0 duplicate codes, 0 duplicate
       endonyms, 0 parity gaps, 0 suspicious tokens.

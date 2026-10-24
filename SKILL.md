@@ -19,7 +19,7 @@ This skill is self-contained. Everything it needs is in this folder:
 |---|---|
 | `references/core/00–08` | Engine + coding handbook copies (00 overview, 01 Decimal rules, 02 mod.js, 03 layers API, 04 components, 05 UI, 06 idioms, 07 pitfalls/checklist, 08 real-game catalog) |
 | `references/design/09-Layer-Design-Patterns.md` | Design patterns P1–P17, blueprints, measured heuristics, anti-patterns A1–A10 |
-| `references/design/10-Fun-Mechanics-and-Content-Organization.md` | The fun pass: effect-kind taxonomy K1–K8, microtabs organization standard, mechanic catalog M1–M10, per-blueprint fun quotas |
+| `references/design/10-Fun-Mechanics-and-Content-Organization.md` | The fun pass: effect-kind taxonomy K1–K9, microtabs organization standard, mechanic catalog M1–M21, per-blueprint fun quotas |
 | `references/design/11-Corpus-Numeric-Design.md` | **The wiring pass**: measured numeric baselines over all 329 real games — the 54.4%-no-effect finding, cost-ladder shapes, gain-curve ratios, softcap forms, and the ghost-field table |
 | `references/design/12-Author-Design-Wisdom.md` | **The author's own design notes** (Acamaeda, 2020–2023): pacing, upgrade/buyable discipline, cost-vs-softcap, gates, readability. §0 lists the four places this skill previously taught the opposite |
 | `references/design/13-Types.md` | Game-type judgment aid (Q4b): the four interaction models, modifiers + hard dependencies, routing |
@@ -46,8 +46,8 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 
 | Stage | Output | Gate to next stage |
 |---|---|---|
-| 1. Interview | answers mapped to generation parameters | all 7 questions answered **by the user** + a game type **the user confirmed** (Q4b) |
-| 2. Design brief & self-check | filled `design-brief` doc | every self-check passes (21 checks) |
+| 1. Interview | answers mapped to generation parameters | all 8 questions answered **by the user**, each with a ledger row in brief §2 (Q4b included) + a game type **the user confirmed** |
+| 2. Design brief & self-check | filled `design-brief.md` in the game folder | every self-check passes (23 checks) **and the user confirmed the brief** |
 | 3. Scaffold | game folder + recorded `modInfo.id` | scaffold exits 0 |
 | 4. Generate code | js/mod.js, layer files, tree.js, theming | all files written & registered; **every upgrade classified token-vs-value and, if it has an effect, wired to a consumer** |
 | 5. Static checks | check report (type profile applied) | 0 FAIL (WARNs justified in brief) |
@@ -75,7 +75,7 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 
 ## Stage 1 — Interview
 
-Goal: ≤7 structured questions, each locking concrete generation parameters. Ask via your
+Goal: ≤8 structured questions, each locking concrete generation parameters. Ask via your
 tool's question UI (2–4 options + free-text "Other") or plain conversation. Output the
 question text **in the user's language**; record answers in English in the brief.
 
@@ -83,6 +83,13 @@ question text **in the user's language**; record answers in English in the brief
 guesses, or defaults a question on the user's behalf. Anything the AI derives (a theme
 proposal, a routed type, a modifier pick) is *shown* to the user and locked only on their
 explicit confirmation, recorded next to the answer in the brief.
+
+**The ledger is the receipt.** Every question (S0, Q1–Q8, the Q4b type + modifier asks) gets
+a row in the brief's §2 ledger with the user's verbatim answer — or, when the user says "you
+decide", the words *user-delegated*, the AI's choice, and the user's confirmation of that
+choice. A question without a ledger row was **not asked**; Stage 2 check 22 fails and Stage 3
+is blocked. Asking every one of them is the pipeline's job, not a courtesy — the historical
+failure mode was the AI quietly deciding Q5/Q8-flavored choices itself.
 
 **Step 0 (only if the user gave no theme):** ask what the game is about (free text), then do Q1.
 If the user said "you pick the theme", propose 2–3 candidates **and wait for their pick** —
@@ -163,14 +170,23 @@ a proposal, never an answer. Exit 3 = the script could not decide and returns a 
 | `active-tick` | pushes a continuous quantity that fills over time | + `bars` + `update()` | — |
 | `board-minigame` | plays on a 2D board | + `grid` | — |
 
-Then propose modifiers, checking each hard dependency — both the picks and the drops go in
-front of the user together with the type confirmation (drops are logged in brief §10):
+Then **ask the user which optional mechanics to include** — a multi-select over the six
+flavor modifiers (`score-attack`, `minigame`, `boss-rush`, `gacha`, `casino`, `story`; split
+across two question calls if your UI caps at 4 options; *none* is a valid answer). Check each
+hard dependency, and put both the picks and the dependency-driven drops in front of the user
+together with the type confirmation (drops are logged in brief §10). The structural modifiers
+`sim`/`board`/`challenges`/`caps` are derived from the type and Q3/Q5, not taste — propose
+them, still user-confirmed:
 
 | Modifier | Requires | Drop it (and log why in brief §10) if… |
 |---|---|---|
 | `sim` | — | more than 3 layers would use it |
 | `score-attack` (M2) | type `active-*` **and** `sim` | the game has no tick — M2 records a peak inside `update()`, and the engine has **no** score-attack API |
 | `minigame` (M3) | type `active-*` | there are no clickables to click |
+| `boss-rush` (M12) | type `active-*` **and** `sim` | no tick for the revive/overflow loop, or the user did not pick it — 1 boss layer max (09 P19) |
+| `gacha` (M13) | type `active-*` | nothing to draw with — the bus arrays need a clickable writer (`D-GACHADATA`) |
+| `casino` (M14) | type `active-*` | nothing to bet with — every casino game is a bet/roll clickable |
+| `story` (M15) | — | never — the cheapest add; the cutscene engine inside it is large-blueprint only |
 | `board`, `challenges`, `caps` | — | never |
 
 **At most one interaction type.** Everything else is a modifier. If the user wants all of
@@ -214,14 +230,28 @@ descriptions/titles/tooltips/`winText` are **functions**, never module-scope val
 is **overridden** (it hard-codes `You have` / `(x/sec)` — 07 Part F7); `scripts/i18n_check.js`
 reports 0 FAIL.
 
+**Q8 — Endgame flavor (medium/large; small answers `classic` by default — still ask).** The
+deep-read corpus (10-Fun M19–M21) shows three named endgame verbs beyond "prestige until the
+last milestone". Ask which one the endgame is built around:
+
+- `Consumable reset` — a prestige-scale reset that also burns resources, itemized in the UI (M19 rocket-launch shape)
+- `Tuning manifold` — the player allocates one shared pool across resource exponents (M20; needs ≥7 resource types)
+- `Erosion` — a forced periodic reset whose accumulated duration is the buff, escapable by one special reset (M21)
+- `Classic` — none of these; the endgame is the last milestone chain (the small-blueprint default)
+
+The pick is recorded in brief §2 and drives the fun plan's endgame row (10 §5 addenda).
+Asking it even when the answer seems obvious is the point — "small game, so classic" is the
+AI deciding; "small game, so classic — right?" is the user confirming.
+
 Record every answer; they are inputs to Stage 2 and must be traceable in the brief's §2 table.
 
 ---
 
 ## Stage 2 — Design brief & self-check
 
-**Write the brief BEFORE any code.** Copy `assets/design-brief-template.md` (next to the
-future game folder or in your notes) and fill every section:
+**Write the brief BEFORE any code.** Copy `assets/design-brief-template.md` into the game
+folder as **`design-brief.md`** and fill every section — the checker audits it there
+(`D-QLEDGER`; sibling-file or notes-only copies predate the rule and cannot be audited):
 
 1. Select the blueprint from `assets/blueprints.json` per Q2 and copy its row plan, side
    layers, automation ladder, and endgame into the layer-chain table.
@@ -232,9 +262,10 @@ future game folder or in your notes) and fill every section:
    plan/doReset keeps/branches). This table is the code-generation contract.
 4. Fill the brief's **§4.1 fun-density table** (effect-kind plan + organization + mechanics per
    layer) and **§4b game-level fun plan** against `assets/fun-quota.json` for the locked
-   blueprint: label every upgrade/milestone with an effect kind K1–K8 (handbook 10 §2), choose
-   the M1–M10 mechanics the theme supports, and plan each layer's tabFormat/microtabs sections
-   (handbook 10 §3).
+   blueprint: label every upgrade/milestone with an effect kind K1–K9 (handbook 10 §2), choose
+   the M1–M21 mechanics the theme supports **and the user picked** (Q4b modifier multi-select +
+   Q8 endgame flavor — the ledger rows are the authority), and plan each layer's
+   tabFormat/microtabs sections (handbook 10 §3).
 
 **Self-check the brief** (fix the table, not the code, when any fails):
 
@@ -249,7 +280,7 @@ future game folder or in your notes) and fill every section:
 | 7 | anti-pattern sweep A1–A10: none present | 09 §5 |
 | 8 | effect diversity: K1 flat-mult share within `fun-quota.json` maxK1SharePerLayer; ≥3 distinct non-K1 kinds per layer (K7 unlocks excluded from the K1 count) | 10 §2 |
 | 9 | organization: tabFormat on every main layer; microtabs planned once a layer has ≥3 content groups; context display-texts (base, best, softcap warning) above tabs | 10 §3 |
-| 10 | game-level fun quota met (mechanics M1–M10 count, challenge style, clickables/bars/update floors for the blueprint) | 10 §5; fun-quota.json |
+| 10 | game-level fun quota met (mechanics M1–M21 count — the ones the user picked via Q4b/Q8, challenge style, clickables/bars/update floors for the blueprint) | 10 §5; fun-quota.json |
 | 11 | multiplier budget: **every `.times()` source is an independent multiplicative zone and zones compound** — at most ONE self-scaling upgrade per layer (reads own points, pow ≤0.5, softcapped); Σ self-exponents wired into any gainMult ≤ 0.6; product of all multiplier zones reachable when layer N+1 unlocks must stay within the requires ladder's assumed production (if end-of-row-0 sugar mult > ~1e4 the ladder is fiction) | 09 P12; static rule N-SELFTOTAL |
 | 12 | **wiring plan**: every upgrade is classified in the brief as token/gate (K7, no `effect`) or value (has `effect` → the brief names its consumer, e.g. "wired into layer N `gainMult` via `hasUpgrade`"). No upgrade may sit in neither column. | 11 §2; N-UNWIRED |
 | 13 | cost ladder per layer spans ≥6 orders of magnitude, with at least one deliberate drop marked as a key upgrade; ≥30% of a layer's upgrades use a `pow`/`log` shape | 11 §3–§4; D-COSTSPAN, D-EFFECTSHAPE |
@@ -261,9 +292,18 @@ future game folder or in your notes) and fill every section:
 | 19 | **reset lifecycle**: every layer whose milestones read `best`/`total` keeps both in `doReset`; `autoPrestige` implies `resetsNothing` (compare milestone sets); no `update()` assigns `player[layer].points`; every static layer has `canBuyMax()` | 03 §4.1; N-MSDESTROY, N-AUTOWIPE, N-POINTSWRITE, N-STATICMAX |
 | 20 | **type contract (Q4b)**: every module the locked type makes mandatory is planned and every forbidden one is absent; each modifier's hard dependency holds (M2 needs a tick, M3 needs clickables); every dropped modifier has a reason in §10 | 13 §1–§3; `assets/type-registry.json`; T-CLICKABLE, T-GRID |
 | 21 | **measurement plan**: the brief names the pacing constants and where they live (`js/tuning.js`, read by the game *and* the simulator), and every quantity the pacing depends on is exposed as a callable function — a pacing that cannot be simulated cannot be verified | 14 §3.3; Stage 6 |
+| 22 | **question ledger complete**: every question ID (S0, Q1–Q8, Q4b type + modifier multi-select) has a §2 ledger row holding a user answer or a `user-delegated → … (user confirmed)` entry; a blank row or an un-asked question blocks Stage 3 | Stage 1; `D-QLEDGER` |
+| 23 | **buyable persistence**: every buyable has a consumer outside its own layer — a later layer's formula reads `buyableEffect('<this>', id)` or gates on `getBuyableAmount` — or is marked capped phase content in §4.1; the automation ladder includes the P4 step-5 `autoBuyable` (closed-form buyMax, P54 — never `+1` per tick) per the blueprint's `autoBuyableDrivers` quota | 09 P4/P27/P54; `N-BUYABLEDEAD`; fun-quota.json |
 
 Also check no two milestones of the same layer claim the same automation grant (the Mario
-Maker 2 "conflict point" incident). Gate: proceed only when all 21 checks pass.
+Maker 2 "conflict point" incident). Gate: proceed only when all 23 checks pass.
+
+**The user confirms the brief before any code.** Stage 2 is where the AI makes its last
+unconfirmed choices — mechanic selection within the quotas, softcap plans, per-layer effect
+kinds, the endgame flavor. Show the user the layer-chain table, the §4b fun plan, and the §2
+ledger ("this is what will be built") and lock Stage 2 only on their explicit confirmation,
+folding adjustments back into the tables. Scaffolding before that confirmation is exactly the
+"the AI decided by itself" failure this pipeline bans.
 
 **Write the brief so it can be refuted.** These checks verify *internal consistency*; Stage 5.5
 and Stage 6 verify *the game*, and three real briefs that passed all 21 were then overturned by
@@ -346,6 +386,12 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
 - Content to the density floor: ≥10 upgrades on a single-digit-column grid, first ~cost 1, last an
   exit ticket; ≥3 milestones chained by `unlocked()`, scoring on `.best`/`.total`; buyables with an
   exponential cost; challenges/bars/clickables per Q5 and the locked type.
+- **Buyable automation is a ladder step, not an afterthought (P4 step 5).** Every buyable needs a
+  consumer outside its own layer (`N-BUYABLEDEAD`) — wire its effect into a later layer's formula
+  or gate later content on `getBuyableAmount`. Then plan the blueprint's `autoBuyableDrivers`
+  milestones: each grants a closed-form buyMax auto-buyer (P54 inverse of the cost curve) for an
+  EARLIER layer's load-bearing buyable. Never emit `+1`-per-tick loops (`D-AUTOINVERT`) — they
+  never catch up after offline time.
 - The four budget rules that are hard FAILs: **N-UNWIRED** (every `effect()` id must be consumed),
   **N-PGBOOL** (`passiveGeneration()` returns a plain number), **N-SELFTOTAL** (Σ self-scaling
   exponents ≤ 0.6, and `ln(effect)/ln(cost) < 1` for buyables), **N-UNLOCKDEAD** (every
@@ -380,7 +426,7 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
 
 ### 4.5 Structures no tool can see through (07 Part F)
 
-Each of these shipped as a defect in a real build, and each is invisible to all 72 rules:
+Each of these shipped as a defect in a real build, and each is invisible to all 84 rules:
 - **Never build a layer at runtime.** `addLayer(id, factory())` hides `row`, `startData` and every
   component from the checker and the harness (F11) — one build took 8 FAILs from this.
 - **One home for pacing constants** (`js/tuning.js`), read by the game *and* the simulator: a

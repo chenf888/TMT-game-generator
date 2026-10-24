@@ -9,7 +9,10 @@
 > **Provenance:** `crawl/extract_fun.js` → `crawl/fun-metrics.json` (132 games + phase-⑥ test
 > game). Deep-read sources: Gaokao Tree 8.0 (`loader3229_gaokaotree.js`), Mario Maker 2 Tree 8.1
 > (`angrystar6k_The-Mario-Maker-2-Tree.js`), Mining Incremental Table 9.6 (ExpantaNum — formulas
-> only, never numeric calls), Spring Festival Tree 2026 7.8 (`qqqe308_The-Spring-Festival-Tree-2026.js`).
+> only, never numeric calls), Spring Festival Tree 2026 7.8 (`qqqe308_The-Spring-Festival-Tree-2026.js`),
+> plus the 2026-10-24 deep-reads: One Dev One Layer (接力树, 8-author relay), Celestial Incremental,
+> C0v1d Plague Tree 7.6, Incrementreeverse 8.0, The Tree Of Life 5.0, The Prestige Chain 1.0
+> (reports in each game folder; their pattern-level counterparts are 09 §2 P18–P63).
 
 ---
 
@@ -85,6 +88,11 @@ fun-density table. **K1 (flat mult) may not exceed ~40% of a layer's upgrades** 
 - **K8 production/conversion** — the effect produces a *new* currency per second instead of
   multiplying one: coin 31 "generate 1 pink key coin every second" (`update()` + multiplier
   chain on that currency).
+- **K9 state/duration effect** (2026-10-24 add) — the effect banks a *state* that pays out over
+  time instead of multiplying now: "instantly gain N seconds of production" (One Dev One Layer
+  black-hole surge, 09 P28), erosion duration-as-buff (09 P25), a shared tuning pool the player
+  allocates across formulas (09 P24). Counts as non-K1; the payout side must target a resource
+  or named mechanic (the K4 discipline applies).
 
 **Brief-time rule:** in the layer-chain table, add an "effect kinds" column and plan ≥3 distinct
 non-K1 kinds per layer (K2/K3/K4/K5 rotate well: a layer gets one shape, one cross-source, one
@@ -140,6 +148,12 @@ Rules of thumb (all from 8+ games):
    margins in — 25 upgrades fit in ~2 screens, not 10.
 7. **Story/lore lives in its own microtab or infoboxes** with unlock-gated paragraphs
    (`hm('d',23) ? story : "剧情暂未解锁"`), never interleaved with buy buttons.
+8. **Sub-game layers go off-tree** (2026-10-24 add): Mining positions its craft systems at
+   `position: 20002, row: 2001` with a dedicated `layerType: "craft"` — a 7,500-line crafting
+   board must never crowd the tree layout (09 P50).
+9. **Mega-layers must microtab** (2026-10-24 add): celestial's 17.8k-line `ct` layer stays
+   navigable only because every content group is a tab. Past ~40 content items without
+   microtabs is A-level scroll hell (`D-MICROTABS` already fires at 16).
 
 ---
 
@@ -229,6 +243,71 @@ Achievements whose `done()` checks *collection state* (`player.sm.upgrades.lengt
 upgrades/milestones across the tree (P11 guarded pushes). Degree/collection ladders
 (bachelor → master per subject) double as K7 unlock content.
 
+### M11 — Farm challenges (`canComplete: false`) (One Dev One Layer l5; 09 P18)
+The challenge never completes — it is entered and exited repeatedly and the in-challenge
+progress banks as a completion *count* (`countcalc()` settled on exit with `.max()`
+no-regression), the count granting `10^n` rewards while the next threshold rises. One layer
+can host 4–9 isomorphic farms; l8 milestones eventually settle them outside the challenge —
+the end of grinding is still automation. Checker: `D-FARMCHAL` (countcalc/goal inverse pair).
+
+### M12 — Segmented-HP boss (One Dev One Layer l4; modifier `boss-rush`; 09 P19)
+Damage = layer currency × mult × points^exp through overflow softcaps; HP split into fixed
+segments; milestones key on segments destroyed; a full kill revives the boss at level+1 with
+damage ÷ MAX_VALUE^level. The attack is a P28 cooldown clickable. Budget: exactly one per
+game. Advanced form (celestial matos, 09 P35): rotating attack timers with counter rules —
+beyond generated-game budget, segments only.
+
+### M13 — Sacrifice gacha + buff bus (One Dev One Layer l7; modifier `gacha`; 09 P21/P39)
+Sacrifice a resource → draw N effects from tiered pools into `neffX[]/ncalcX[]` arrays that
+ALL earlier layers read; drawing out-of-pool burns the sacrifice; milestones raise
+simultaneous slots 1→3→5→12. The arrays MUST be declared in startData (`D-GACHADATA`) and
+sized pool-cap + 1. Celestial's pet gacha (09 P39) adds four rarities + banner rotation
+timers — the advanced form, needs `sim`.
+
+### M14 — Casino distributions (celestial Zar; modifier `casino`; 09 P38)
+One luck economy expressed as random distributions: dice (multi-point products), coin flip
+(binary duality + symmetric softcap), slots (reel 2/3-match), cards (`100*suit + rank`).
+Pick 1–2, never all four; each payout formula carries its own softcap. The quartet is a
+selection table, not a shopping list.
+
+### M15 — Story chapter layer (Mining `stories`; modifier `story`; 09 P51/P32)
+Numbered chapters unlock via a condition array (`storyPending()` = progression milestones),
+tracked by `storyUnlocked`, with per-chapter glitch-text slots. The cheapest lore/retention
+mechanic observed; the full data-driven cutscene engine (39 scenes, portraits, BGM) is
+large-blueprint only.
+
+### M16 — Grid mining field (Mining `general`; 09 P48)
+10×10 grid, move/mine modes (WASD), a find-ore button rolling ore count from rarity
+(`speed×3/rarity` expectation + fractional chance), progress = speed×diff integrated against
+`hardness(ore)`, area effects (underwater), find-cooldown cleared on clearing the field.
+This is M4's spatial full form — keep to one layer (the P15 cost warning stands).
+
+### M17 — Recipe crafting (Mining `crafting_table`; 09 P50)
+Boolean blueprint table (831 items), pagination, progressive `maxCraftID` unlocks, a
+hide-blueprints mode for when the grid overflows, progress-bar crafting with cooldown+speed;
+positioned off-tree at row 2001. Checklist crafting is the strongest collection retention
+loop observed in the corpus-adjacent set.
+
+### M18 — Check-back collection (celestial "Check Back" family; 09 P41)
+AFK-time rewards as a named layer family: golden cookies (floating clickable + fly text),
+timed orbs (claimable on schedule + claim popup), treasure rooms, limited banners — returning
+always has something to claim. Composes with M13 banners and M12 cooldowns.
+
+### M19 — Consumable reset (celestial rocket launch; 09 P42)
+A prestige-scale reset that also *burns* resources — four fuels each contributing one term
+(base/mult/mult/mult, itemized in the UI) — with selective keeps. The reset stops being a
+free button and becomes a resource decision.
+
+### M20 — Tuning manifold (One Dev One Layer l8; 09 P24)
+N resources each get a player-set "tuning level" that rewrites their gain exponent (÷10
+neutral, <10 weakens, >10 strengthens), all fed from ONE shared pool — balance becomes a
+player-owned allocation puzzle. Endgame only, once ≥7 resource types exist.
+
+### M21 — Erosion (One Dev One Layer l8; 09 P25)
+Past a threshold the layer force-resets its own resource on a 1–15s cycle — but the erosion's
+accumulated duration IS the buff (production exponent ^0.95^time); one special reset clears
+all of it. Threat and reward share a source; pairs with M12's pressure.
+
 **Supporting cast:** hotkeys per prestige layer; `createToggle` QoL switches (MM2);
 `respecBuyables()`; `deactivated()`/`shouldNotify()`; grids (Mining uses 14 of them for
 tile-based mechanics — powerful but highest effort; optional for generated games).
@@ -245,6 +324,7 @@ tile-based mechanics — powerful but highest effort; optional for generated gam
 | Bars | 0+ | ≥1 | ≥2 |
 | Layers with `update()` | ≥1 | ≥3 | ≥6 |
 | Secondary currency (M5) | 0+ | ≥1 | ≥2 |
+| Buyable autobuyer step in the ladder (P4 step 5, closed-form P54; needs `N-BUYABLEDEAD` consumers) | 0+ | ≥1 | ≥2 |
 | Shop/meta layer (M8) | — | ≥1 | ≥1 |
 | Custom-type ritual layer (M7) | 0+ | 0+ | ≥1 |
 | Rebirth/NG+ (M9) | — | — | 0+ |
@@ -254,6 +334,21 @@ tile-based mechanics — powerful but highest effort; optional for generated gam
 
 Quotas are floors, not targets: pick mechanics that fit the theme (P14). A quiet puzzle game
 with M2 + M7 + M8 can out-rate a busy one with all ten.
+
+**Deep-read addenda (2026-10-24, brief-time judgment only — not yet machine-readable in
+`fun-quota.json`):**
+
+| Addendum (per game) | small | medium | large |
+|---|---|---|---|
+| Farm-challenge layer (M11) | — | 0+ | ≥1 |
+| Boss layer (M12, modifier `boss-rush`) | — | — | 0+ |
+| Gacha / casino side layer (M13/M14, one of) | — | 0+ | 0+ |
+| Story chapters (M15, modifier `story`) | 0+ | 0+ | 0+ |
+| Check-back family (M18) | — | 0+ | 0+ |
+| Endgame verbs, at least one of M19–M21 | — | 0+ | ≥1 |
+
+All optional floors — pick what fits the theme (P14). Wiring these into `fun-quota.json` and
+the checker is future work; until then they inform the brief's fun-density table only.
 
 ---
 
@@ -270,6 +365,9 @@ with M2 + M7 + M8 can out-rate a busy one with all ten.
 - [ ] Meta-effect upgrades (K4) actually appear in the target's formula (`ret.pow(1.1)`) — and target a
       resource or named mechanic, never another upgrade's hidden number (handbook 12 §3-15).
 - [ ] Story (if any) in its own microtab/infoboxes, unlock-gated.
+- [ ] Gacha arrays (`neffX[]`/`ncalcX[]`) declared in startData, sized pool-cap + 1 (`D-GACHADATA`).
+- [ ] Farm challenges ship `countcalc()`/`goal()` as an inverse pair and bank onExit with `.max()` (`D-FARMCHAL`).
+- [ ] Sub-game/map layers: location-switch clickables guard on the in-progress battle state (`D-BATTLELOCK`).
 
 ---
 
@@ -282,3 +380,7 @@ with M2 + M7 + M8 can out-rate a busy one with all ten.
   patterns only; their numeric calls must never be copied into standard Decimal games (09 §6).
 - MM2 `easy`-layer minigame and 春节树 score-attack hub are the two patterns with no equivalent
   in 09; they motivated this handbook.
+- The 2026-10-24 deep-reads (One Dev One Layer, Celestial Incremental, C0v1d, Incrementreeverse,
+  Tree Of Life, Prestige Chain — reports in each game folder) contributed M11–M21 and the K9
+  effect kind. Their pattern-level counterparts are 09 §2 P18–P63; their interaction-model
+  classification lives in 13 §1–§2 (registry v1.1.0 modifiers `boss-rush`/`gacha`/`casino`/`story`).

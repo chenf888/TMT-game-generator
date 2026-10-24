@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="tmt-game-generator: an agent skill that turns one sentence into a complete, balanced, playable The Modding Tree incremental game. 72 static rules, statistics from 329 real games, measured pacing.">
+<meta name="description" content="tmt-game-generator: an agent skill that turns one sentence into a complete, balanced, playable The Modding Tree incremental game. 84 static rules, statistics from 329 real game files, measured pacing.">
 <meta property="og:title" content="TMT Game Generator — an agent skill for The Modding Tree">
-<meta property="og:description" content="Your agent interviews you, designs the tree from 329 measured games, writes the layers, runs 72 static rules, simulates the pacing, verifies it in a browser, then hands you the game.">
+<meta property="og:description" content="Your agent interviews you, designs the tree from 329 measured game files, writes the layers, runs 84 static rules, simulates the pacing, verifies it in a browser, then hands you the game.">
 <meta property="og:type" content="website">
 <title>TMT Game Generator — an agent skill for The Modding Tree</title>
 
@@ -281,8 +281,8 @@ footer a { color: var(--blue); }
     <h1 class="lang-en">One sentence in,<br>a mod tree out.</h1>
     <h1 class="lang-zh">一句话进来，<br>一棵模组树出去。</h1>
 
-    <p class="sub lang-en">tmt-game-generator is an agent skill. Say “make me an incremental game about X” and your agent runs the full measured pipeline — interview, data-driven design, scaffold, layer-by-layer generation, 72 static rules, a load-time smoke test, a pacing simulation, browser verification — and hands you a game that <strong>opens and plays, balanced, with a clean console</strong>.</p>
-    <p class="sub lang-zh">tmt-game-generator 是一个 Agent Skill：对它说一句「给我做一个关于 X 的增量游戏」，你的 agent 就走完一条带实测的流水线——采访、数据设计、脚手架、逐层生成、72 条静态规则、载入冒烟、平衡实测、浏览器实测——交付一个<strong>打开即玩、曲线平衡、控制台零报错</strong>的游戏。</p>
+    <p class="sub lang-en">tmt-game-generator is an agent skill. Say “make me an incremental game about X” and your agent runs the full measured pipeline — interview, data-driven design, scaffold, layer-by-layer generation, 84 static rules, a load-time smoke test, a pacing simulation, browser verification — and hands you a game that <strong>opens and plays, balanced, with a clean console</strong>.</p>
+    <p class="sub lang-zh">tmt-game-generator 是一个 Agent Skill：对它说一句「给我做一个关于 X 的增量游戏」，你的 agent 就走完一条带实测的流水线——采访、数据设计、脚手架、逐层生成、84 条静态规则、载入冒烟、平衡实测、浏览器实测——交付一个<strong>打开即玩、曲线平衡、控制台零报错</strong>的游戏。</p>
   </div>
 </section>
 
@@ -295,7 +295,7 @@ footer a { color: var(--blue); }
     <div class="stats">
       <div class="stat">
         <div class="num">329</div>
-        <div class="label"><span class="lang-en">public games, counted component by component</span><span class="lang-zh">局公开游戏被逐个组件统计</span></div>
+        <div class="label"><span class="lang-en">real game files from 132 public games, counted component by component</span><span class="lang-zh">个真实游戏文件（来自 132 局公开游戏），逐组件统计</span></div>
       </div>
       <div class="stat">
         <div class="num">1,156</div>
@@ -330,7 +330,7 @@ footer a { color: var(--blue); }
         <div class="no">1</div>
         <div>
           <h3><span class="lang-en">Interview</span><span class="lang-zh">采访</span></h3>
-          <p class="desc"><span class="lang-en">At most 7 structured questions: how the theme decides the structure, the scale blueprint, natural ceilings, pacing and interactivity, automation tolerance, language. A final question locks the game type — classify.js proposes, you confirm.</span><span class="lang-zh">最多 7 个结构化问题：主题如何决定结构、规模蓝图、自然上限、节奏与互动、自动化容忍、语言。最后一步锁定游戏类型——classify.js 提议，由你确认。</span></p>
+          <p class="desc"><span class="lang-en">At most 8 structured questions: how the theme decides the structure, the scale blueprint, natural ceilings, pacing and interactivity, side content, automation tolerance, language, endgame flavor. A final question locks the game type and an optional-modifier multi-select — classify.js proposes, you confirm — and every answer lands in the brief's question ledger.</span><span class="lang-zh">最多 8 个结构化问题：主题如何决定结构、规模蓝图、自然上限、节奏与互动、支线内容、自动化容忍、语言、终局风味。最后一步锁定游戏类型并勾选可选修饰符——classify.js 提议，由你确认——每个答案都记入设计书的问题台账。</span></p>
         </div>
         <div class="tool">scripts/classify.js</div>
       </div>
@@ -338,7 +338,7 @@ footer a { color: var(--blue); }
         <div class="no">2</div>
         <div>
           <h3><span class="lang-en">Design brief</span><span class="lang-zh">设计书</span></h3>
-          <p class="desc"><span class="lang-en">A layer-chain table, one row per layer — the code-generation contract. Every number comes from the four data assets. All 21 self-checks must pass before any code exists.</span><span class="lang-zh">层链表一行一层，就是代码生成契约；数字全部来自四份数据资产。21 项自检全部通过才允许写代码。</span></p>
+          <p class="desc"><span class="lang-en">A layer-chain table, one row per layer — the code-generation contract. Every number comes from the four data assets. All 23 self-checks must pass — including the question ledger and the buyable-wiring plan — and you confirm the brief before any code exists.</span><span class="lang-zh">层链表一行一层，就是代码生成契约；数字全部来自四份数据资产。23 项自检全部通过——含问题台账与可购买项接线计划——且你确认设计书之后，才允许写代码。</span></p>
         </div>
         <div class="tool">assets/*.json</div>
       </div>
@@ -354,7 +354,7 @@ footer a { color: var(--blue); }
         <div class="no">4</div>
         <div>
           <h3><span class="lang-en">Generate</span><span class="lang-zh">生成</span></h3>
-          <p class="desc"><span class="lang-en">Layer files written bottom-row-first: Decimal discipline, every upgrade classified token-vs-value and wired to a consumer, microtabs organization, M1–M10 mechanics, the automation ladder, softcaps.</span><span class="lang-zh">自底向上逐层写：Decimal 纪律、每个升级分类 token/value 并接上消费者、microtabs 组织、M1–M10 机制、自动化阶梯、软上限。</span></p>
+          <p class="desc"><span class="lang-en">Layer files written bottom-row-first: Decimal discipline, every upgrade classified token-vs-value and wired to a consumer, microtabs organization, M1–M21 mechanics, the automation ladder through buyable autobuyers, softcaps.</span><span class="lang-zh">自底向上逐层写：Decimal 纪律、每个升级分类 token/value 并接上消费者、microtabs 组织、M1–M21 机制、直到可购买项自动购买的自动化阶梯、软上限。</span></p>
         </div>
         <div class="tool"><span class="lang-en">per the brief</span><span class="lang-zh">按层链表</span></div>
       </div>
@@ -362,7 +362,7 @@ footer a { color: var(--blue); }
         <div class="no">5</div>
         <div>
           <h3><span class="lang-en">Static checks</span><span class="lang-zh">静态检查</span></h3>
-          <p class="desc"><span class="lang-en">72 rules read the code. FAIL blocks testing; every WARN needs a written acceptance in the brief — an unexplained WARN counts as a failure.</span><span class="lang-zh">72 条规则读代码。FAIL 阻塞测试；WARN 必须在设计书里书面豁免——无解释的 WARN 算失败。</span></p>
+          <p class="desc"><span class="lang-en">84 rules read the code. FAIL blocks testing; every WARN needs a written acceptance in the brief — an unexplained WARN counts as a failure.</span><span class="lang-zh">84 条规则读代码。FAIL 阻塞测试；WARN 必须在设计书里书面豁免——无解释的 WARN 算失败。</span></p>
         </div>
         <div class="tool">scripts/static_checks.js</div>
       </div>
@@ -445,8 +445,8 @@ footer a { color: var(--blue); }
       </tbody>
       <caption><span class="lang-en">Type gates load from .tmt-profile.json; a game with no declared type produces a byte-identical report.</span><span class="lang-zh">类型守卫按 .tmt-profile.json 生效；没有声明类型的游戏，检查报告与从前逐字节一致。</span></caption>
     </table>
-    <p class="type-note lang-en">On top of the type, <strong>6 modifiers</strong> can stack (themable challenges, offline progress and friends). A modifier whose hard dependency is unmet is <strong>downgraded with a written reason</strong>, never silently dropped.</p>
-    <p class="type-note lang-zh">在类型之上还可以叠加 <strong>6 个修饰符</strong>（主题化挑战、离线进度等）。硬依赖不满足时，修饰符会被<strong>降级并写明理由</strong>，绝不静默丢弃。</p>
+    <p class="type-note lang-en">On top of the type, <strong>10 modifiers</strong> can stack (themable challenges, story chapters, boss-rush, gacha, casino and friends). A modifier whose hard dependency is unmet is <strong>downgraded with a written reason</strong>, never silently dropped.</p>
+    <p class="type-note lang-zh">在类型之上还可以叠加 <strong>10 个修饰符</strong>（主题化挑战、剧情章节、boss-rush、扭蛋、赌场等）。硬依赖不满足时，修饰符会被<strong>降级并写明理由</strong>，绝不静默丢弃。</p>
   </div>
 </section>
 

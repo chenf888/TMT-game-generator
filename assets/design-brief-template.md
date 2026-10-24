@@ -14,20 +14,25 @@
 | Language mode (interview Q7) | English only / Chinese only / Bilingual (P17 ternaries) |
 | One-line pitch | |
 
-## 2. Interview record (answers → parameters)
+## 2. Interview record (answers → parameters) — the question ledger
 
 Every Answer cell is the user's own answer — or a proposal the user explicitly confirmed.
-No cell is filled by inference.
+No cell is filled by inference. When the user delegates ("you decide"), write
+`user-delegated → <AI choice> (user confirmed: yes/no)` in the cell. **A blank row means the
+question was never asked** — Stage 2 check 22 fails and Stage 3 is blocked (`D-QLEDGER`).
 
 | # | Question | Answer | Locked parameter |
 |---|---|---|---|
+| S0 | Theme (only if the user gave none) | | feeds Q1 |
 | Q1 | Theme-structure confirmation | | theme = structure mapping (P14) in §3 |
 | Q2 | Scale | small / medium / large | blueprint `blueprints.<key>` — all rows/components/automation/endgame params |
 | Q3 | Natural ceilings | yes / no / mixed | cap table §8 (hard caps via `softcap(x, cap, 0)` vs P12 softcaps) |
 | Q4 | Pacing | idle / active / balanced | gain-curve style (P8b log-custom vs P1 normal) + loop-layer allowance (P15) |
+| Q4b | Type + modifier multi-select | see §2b | §2b rows |
 | Q5 | Side content | full / standard / light | challenges? story dashboard? achievements grid size |
 | Q6 | Automation & timewalls | | ladder length (4–8 steps), wall budget |
 | Q7 | Language & style | | i18n convention (P17), color/naming voice |
+| Q8 | Endgame flavor (medium/large; small still asked) | consumable-reset / tuning / erosion / classic | fun plan §4b endgame row (M19–M21) |
 
 Paste the Q1 theme-structure recap the user confirmed:
 
@@ -58,6 +63,10 @@ Modifiers (max **one interaction type**; everything else is a modifier here):
 | `sim` | — | | max 3 layers |
 | `score-attack` (M2) | type `active-*` + `sim` | | dropped if no tick — the engine has no score-attack API |
 | `minigame` (M3) | type `active-*` | | dropped if no clickables |
+| `boss-rush` (M12) | type `active-*` + `sim` | | 1 boss layer max (09 P19) |
+| `gacha` (M13) | type `active-*` | | bus arrays in startData — `D-GACHADATA` |
+| `casino` (M14) | type `active-*` | | 1 side layer, 1–2 of the four distributions |
+| `story` (M15) | — | | cheapest add; cutscene engine large-only |
 | `board` | — | | |
 | `challenges` (M1) | — | | prefer `canComplete()` |
 | `caps` | — | | hard ceilings from Q3 |

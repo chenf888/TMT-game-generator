@@ -61,7 +61,8 @@
           { "step": 2, "grant": "passiveGeneration on row-0 layer", "threshold": "milestone at ~30x past the row-0 unlock point" },
           { "step": 3, "grant": "autoPrestige on row-0 layer" },
           { "step": 4, "grant": "autoUpgrade on row-0 layer" },
-          { "step": 5, "grant": "autoPrestige on row-1 layer" }
+          { "step": 5, "grant": "autoBuyable on row-0 layer's load-bearing buyable — closed-form buyMax (P54), only for buyables with a cross-layer consumer (N-BUYABLEDEAD)" },
+          { "step": 6, "grant": "autoPrestige on row-1 layer" }
         ],
         "spacingPerStep": "x2 threshold spacing (P4 measured median)",
         "crossLayerGrants": "higher layers' milestones automate lower layers"
@@ -125,6 +126,7 @@
         "source": "09 §3.2 automation line; P4",
         "ladder": "full ladder per branch, cross-layer grants",
         "packageDealAtRow3": ["autoPrestige", "autoUpgrade", "resetsNothing"],
+        "autoBuyable": ">=1 milestone-granted autoBuyable step (P4 step 5): closed-form buyMax driver on an earlier layer's load-bearing buyable — the buyable must have a cross-layer consumer (N-BUYABLEDEAD)",
         "note": "granting the three flags together as one package is the standard endgame QoL move (P4)"
       },
       "milestonesPerMajorLayer": [8, 12],
@@ -161,6 +163,7 @@
         "achievementsBackfill": "P11 — push with !hasUpgrade/!hasMilestone idempotence guards",
         "packageDeals": "at phase ends",
         "doResetFreePass": "doReset returns undefined when resettingLayer row >= N, so late phases never wipe early phases (P9)",
+        "autoBuyable": ">=2 autoBuyable steps (P4 step 5): closed-form buyMax drivers (P54) on earlier layers' load-bearing buyables — each needs a cross-layer consumer (N-BUYABLEDEAD)",
         "source": "09 §3.3 automation lines"
       },
       "softcaps": {

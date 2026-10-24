@@ -43,6 +43,32 @@
  *                   (Mario Maker 2 Tree "//冲突点位" incident; 09 P4/P17)
  *     D-PUSHGUARD   (WARN) achievements-backfill .push() without a !has* idempotence guard (09 P11)
  *     D-BRANCH      branches edge points at a nonexistent layer/node id
+ *   Phase-⑪ pattern-library guardrails (2026-10-24, P18–P63 merged into 09 §2):
+ *     D-SOFTCAPSEG  (WARN) same-line softcap segment whose .gte threshold and .div divisor are
+ *                   different Decimal.pow(10, n) constants — the c0v1d u-12 typo class (09 P45)
+ *     D-IMPLICITGLOBAL (WARN) assignment to an undeclared 3+ char identifier (mult = ... without
+ *                   let/var/const) — leaks to window and collides across layers (09 P45 source)
+ *     D-GOALEXHAUST (WARN) goal()/done() whose every return sits inside an if — returns undefined
+ *                   past the last branch (c0v1d u-11 goal shape; 09 P18 pairing law)
+ *     D-LAYERSHOWNBOOL (WARN) layerShown(){ return "string" } truthy-string trick — make it an
+ *                   explicit boolean so visibility audits stay sound (09 P63)
+ *     D-KNOCKOUT    (WARN) a doomed/knockout state exists (09 P23) but some main layer never
+ *                   references it in unlocked() — knockout would strand that layer visible
+ *     D-GACHADATA   (FAIL) player.<id>.<neff|ncalc|gacha|pool|roll|draw…>[…] read somewhere but
+ *                   that layer's startData() never declares the array (09 P21 bus contract)
+ *     D-FARMCHAL    (WARN) farm challenge (canComplete:false) without countcalc, or an onExit
+ *                   that doesn't .max() the banked value (09 P18 regression guard)
+ *     D-AUTOINVERT  (WARN) per-tick setBuyableAmount(... .add(1)) auto-buy — never catches up
+ *                   offline and hides non-invertible costs; prefer closed-form inverse (09 P27/P54)
+ *     D-BATTLELOCK  (WARN) onClick writes a .location while the layer has battle state but no
+ *                   canClick guard on that state — players can flee mid-fight (09 P49)
+ *     D-QLEDGER     (WARN) design-brief.md missing from the game folder, or its §2 question
+ *                   ledger lacks a question ID / holds a blank answer — the "AI decided by
+ *                   itself" tripwire (SKILL.md Stage 1 ledger law, Stage 2 check 22)
+ *     N-BUYABLEDEAD (WARN) a layer's buyables have no consumer outside their own layer — they
+ *                   go stale in later rows, which is why generated games always shipped
+ *                   upgrade autobuyers but never buyable ones (user report 2026-10-24;
+ *                   09 P4 step 5 autoBuyable / P27/P54)
  *     B-DEPRECATED  (WARN) deprecated features: challenge goal:, goalTooltip/doneTooltip (07 Part B)
  *   Fun-density assertions (handbook 10 §2/§3/§5; phase-⑤b; thresholds in assets/fun-quota.json):
  *     D-EFFECTMONO  (WARN) main layer with >=8 upgrades where >60% are flat multipliers
@@ -2560,6 +2586,318 @@ const ID_COLLECTIONS = ["upgrades", "buyables", "milestones", "challenges", "ach
         }
     }
     if (!hits) pass("C-CONTENTSTR", "no bare-string content: property");
+}
+
+// ---------------------------------------------------------------------------
+// pattern-library guardrails (09 §2 P18–P63; 2026-10-24)
+// ---------------------------------------------------------------------------
+
+// D-SOFTCAPSEG — same-line softcap segment where the .gte threshold and the .div divisor are
+// different Decimal.pow(10, n) constants. Real incident: c0v1d u-12 gated at 1e15000 but
+// divided by 1e1500 (copy-paste lost a zero) — the effect jumps erratically past the stage.
+{
+    let hits = 0;
+    const re = /\.gte\(\s*Decimal\.pow\(\s*10\s*,\s*([\d.eE+]+)\s*\)\s*\)[^;\n]{0,220}?\.div\(\s*Decimal\.pow\(\s*10\s*,\s*([\d.eE+]+)\s*\)/g;
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        let m;
+        while ((m = re.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            const a = parseFloat(m[1]), b = parseFloat(m[2]);
+            if (!isFinite(a) || !isFinite(b) || a === b) continue;
+            hits++;
+            add(WARN, "D-SOFTCAPSEG", f, m.index, `softcap stage gated at Decimal.pow(10, ${m[1]}) but divides by Decimal.pow(10, ${m[2]}) — threshold and divisor disagree on one line`, "Keep every stage's threshold/divisor/recoat constants identical (they are one scale point, 09 P44/P45). If the offset is deliberate, rewrite so the intent is visible.");
+        }
+    }
+    if (!hits) pass("D-SOFTCAPSEG", "no threshold/divisor mismatch on a softcap line");
+}
+
+// D-IMPLICITGLOBAL — assignment to an undeclared 3+ char identifier (`mult = decimalOne` with
+// no let/var/const anywhere in the file). Implicit globals leak to window and collide across
+// layers; c0v1d's v.gainMult/i.gainMult both leak `mult`/`imult`.
+{
+    let hits = 0;
+    const KEYWORDS = new Set(["if", "for", "while", "switch", "catch", "return", "typeof", "void", "delete", "throw", "new", "case", "else", "do", "in", "of", "await", "yield"]);
+    // engine-scope globals a mod file may legitimately reassign (save import: player = tempPlr)
+    const ENGINE_GLOBALS = new Set(["player", "tempPlr", "tmp", "options", "modInfo", "layers", "Decimal", "Vue", "break_eternity"]);
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        const re = /^[ \t]+([A-Za-z_$][\w$]{2,})[ \t]*=(?![=>])/gm;
+        const byName = new Map(); // name -> {idx, count}
+        let m;
+        while ((m = re.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            const name = m[1];
+            if (KEYWORDS.has(name) || ENGINE_GLOBALS.has(name)) continue;
+            // line-wrapped declaration (`let a = b,` then `c = 1`) — previous line ends with a comma
+            const lineStart = rec.clean.lastIndexOf("\n", m.index) + 1;
+            if (lineStart > 0) {
+                const prev = rec.clean.slice(rec.clean.lastIndexOf("\n", lineStart - 2) + 1, lineStart - 1);
+                if (/,[ \t]*$/.test(prev)) continue;
+            }
+            if (new RegExp("\\b(?:var|let|const)\\s+" + name + "\\b").test(rec.clean)) continue;
+            // a function/arrow parameter of the file — assignment to a param is local, not a leak
+            const paramRe = new RegExp("(?:function[\\s\\w$]*\\([^)]*\\b" + name + "\\b|\\(\\s*[^()]*\\b" + name + "\\b[^()]*\\)\\s*=>)");
+            if (paramRe.test(rec.clean)) continue;
+            if (!byName.has(name)) byName.set(name, { idx: m.index, count: 0 });
+            byName.get(name).count++;
+        }
+        for (const [name, info] of byName) {
+            hits++;
+            add(WARN, "D-IMPLICITGLOBAL", f, info.idx, `assignment to "${name}" without let/var/const (${info.count} site(s)) — implicit global, leaks to window and can collide across layers`, "Declare it (let " + name + " = ...) or attach it to a layer/local scope.");
+        }
+    }
+    if (!hits) pass("D-IMPLICITGLOBAL", "no undeclared identifier assignments");
+}
+
+// D-GOALEXHAUST — goal()/done() whose every `return` sits inside an `if`: past the last branch
+// the function returns undefined, and undefined goals compare as NaN (c0v1d u-11: three ifs,
+// three returns, no default — harmless only because completionLimit happens to equal the arm count).
+{
+    let hits = 0;
+    for (const L of layers) {
+        const re = /\b(goal|done)\s*\(\s*\)\s*\{/g;
+        let m;
+        while ((m = re.exec(L.code))) {
+            const body = functionBody(L.code, m.index);
+            if (!body || !/\breturn\b/.test(body)) continue;
+            const nIf = (body.match(/\bif\s*\(/g) || []).length;
+            const nRet = (body.match(/\breturn\b/g) || []).length;
+            if (nIf > 0 && nRet <= nIf) {
+                hits++;
+                add(WARN, "D-GOALEXHAUST", L.file, L.start + m.index, `layer "${L.id}" ${m[1]}(): ${nRet} return(s) across ${nIf} if-arm(s) — no default return, so the value is undefined past the last arm`, "Add a trailing `return <fallback>;` (for goal(): the fully-completed value; for done(): false).");
+            }
+        }
+    }
+    if (!hits) pass("D-GOALEXHAUST", "every goal()/done() if-chain has a default return");
+}
+
+// D-LAYERSHOWNBOOL — layerShown(){ return "ghost" } truthy-string trick (The Prestige Chain's
+// ghost nodes). TMT coerces to true, but every visibility audit downstream now reads a string.
+{
+    let hits = 0;
+    const re = /\blayerShown\s*\(\s*\)\s*\{\s*return\s*(["'])[^"']*\1\s*\}/g;
+    for (const L of layers) {
+        let m;
+        while ((m = re.exec(L.code))) {
+            hits++;
+            add(WARN, "D-LAYERSHOWNBOOL", L.file, L.start + m.index, `layer "${L.id}" layerShown() returns a string literal — truthy for every value, so the layer is effectively always-visible and visibility tooling sees garbage`, "Return an explicit boolean (true/false or a real condition). For decorative ghost nodes use `return true` plus a nodeStyle that greys them out.");
+        }
+    }
+    if (!hits) pass("D-LAYERSHOWNBOOL", "no string-returning layerShown()");
+}
+
+// D-KNOCKOUT — a layer-knockout state (P23, One Dev One Layer `chal7doomed`) exists but some
+// main layer never references it: that layer stays visible and ticking while "disabled".
+{
+    const knockNames = new Set();
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        const re = /\b(\w*(?:[Dd]oomed|knockout|Knockout)\w*)\b/g;
+        let m;
+        while ((m = re.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            knockNames.add(m[1]);
+        }
+    }
+    if (knockNames.size === 0) {
+        pass("D-KNOCKOUT", "no layer-knockout state (P23 not in use)");
+    } else {
+        const missing = [];
+        for (const L of layers) {
+            if (L.isUtility || L.isSide) continue;
+            let guarded = false;
+            for (const name of knockNames) if (L.code.includes(name)) { guarded = true; break; }
+            if (!guarded) missing.push(L.id);
+        }
+        if (missing.length) {
+            const firstName = [...knockNames][0];
+            for (const id of missing) {
+                const L = layers.find((x) => x.id === id);
+                add(WARN, "D-KNOCKOUT", L.file, L.start, `layer "${id}" never references knockout state "${[...knockNames].join("/")}" in unlocked()/update() — it stays visible and productive while "disabled" (09 P23)`, `Add the two guard lines: unlocked() { return !(player.<x>.${firstName}[n] > 0) } and the same early-return at the top of update(). P23 is only legal when a single generator emits ALL layers.`);
+            }
+        } else pass("D-KNOCKOUT", "knockout state referenced by every main layer");
+    }
+}
+
+// D-GACHADATA — the P21 buff-bus contract: arrays read as player.<id>.<neff|ncalc|...>[…] must be
+// declared in that layer's startData(), or a fresh save / an old save throws on the first read.
+{
+    const usage = new Map(); // layerId -> Set(array names)
+    const reUse = /player\s*\.\s*(\w+)\s*\.\s*((?:neff|ncalc|gacha|pool|roll|draw)\w*)\s*\[/gi;
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        let m;
+        while ((m = reUse.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            if (!usage.has(m[1])) usage.set(m[1], new Set());
+            usage.get(m[1]).add(m[2]);
+        }
+    }
+    if (usage.size === 0) {
+        pass("D-GACHADATA", "no gacha buff-bus arrays in use (P21 not in use)");
+    } else {
+        let hits = 0;
+        for (const L of layers) {
+            const names = usage.get(L.id);
+            if (!names) continue;
+            const sdM = L.code.match(/\bstartData\s*\(/);
+            if (!sdM) continue; // D-STARTDATA already fails this layer
+            const body = functionBody(L.code, sdM.index);
+            const missing = [...names].filter((n) => !new RegExp("\\b" + n + "\\b").test(body));
+            if (missing.length) {
+                hits++;
+                add(FAIL, "D-GACHADATA", L.file, L.start, `layer "${L.id}" reads ${[...names].join(", ")} as player.${L.id}.*[…] but startData() never declares ${missing.join(", ")} — first draw on a fresh/old save throws`, "Declare every bus array (sized pool-cap + 1) in startData() (09 P21).");
+            }
+        }
+        if (!hits) pass("D-GACHADATA", "gacha bus arrays all declared in startData()");
+    }
+}
+
+// D-FARMCHAL — P18 pairing law: a farm challenge (canComplete:false) needs countcalc(), and its
+// onExit must bank with .max() so a worse run can never regress the completion count.
+{
+    let hits = 0;
+    for (const L of layers) {
+        if (!/canComplete\s*\(\s*\)\s*\{\s*return\s+false/.test(L.code)) continue;
+        const missing = [];
+        if (!/\bcountcalc\b/.test(L.code)) missing.push("countcalc()");
+        const re = /\bonExit\s*\(\s*\)\s*\{/g;
+        let m;
+        while ((m = re.exec(L.code))) {
+            const body = functionBody(L.code, m.index);
+            if (body && !/\.max\(/.test(body)) { missing.push("onExit() must .max() the banked count"); break; }
+        }
+        if (missing.length) {
+            hits++;
+            add(WARN, "D-FARMCHAL", L.file, L.start, `layer "${L.id}" has a farm challenge (canComplete:false) but is missing: ${missing.join("; ")}`, "Generate countcalc() and goal() as an inverse pair, and bank onExit as `player.x.comp[i] = tmp.x.challenges[id].countcalc.floor().max(player.x.comp[i])` (09 P18).");
+        }
+    }
+    if (!hits) pass("D-FARMCHAL", "farm challenges (if any) carry countcalc + .max() onExit");
+}
+
+// D-AUTOINVERT — the P27/P54 law: per-tick `+1` auto-buys never catch up after offline time and
+// paper over non-invertible cost curves. Closed-form inversion (or buyMax) is the fix.
+{
+    let hits = 0;
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        // buy() handlers legitimately do amount+1 — that IS the manual purchase. Only
+        // per-tick auto-buy code (update/automate) is the debt this rule flags.
+        const buySpans = [];
+        const bre = /\bbuy\s*\(\s*\)\s*\{/g;
+        let bm;
+        while ((bm = bre.exec(rec.clean))) {
+            if (rec.mask[bm.index] !== 0) continue;
+            const brace = rec.clean.indexOf("{", bm.index);
+            const bEnd = matchBracketFrom(rec.clean, brace);
+            if (bEnd > 0) buySpans.push([bm.index, bEnd]);
+        }
+        const re = /setBuyableAmount\s*\(/g;
+        let m, count = 0, firstIdx = null;
+        while ((m = re.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            if (buySpans.some(([s, e]) => m.index > s && m.index < e)) continue;
+            const open = rec.clean.indexOf("(", m.index);
+            const close = matchBracketFrom(rec.clean, open);
+            if (close < 0) continue;
+            const args = rec.clean.slice(open, close + 1);
+            if (!/getBuyableAmount\s*\(/.test(args) || !/\.add\(\s*1\s*\)/.test(args)) continue;
+            count++;
+            if (firstIdx === null) firstIdx = m.index;
+        }
+        if (count > 0) {
+            hits++;
+            add(WARN, "D-AUTOINVERT", f, firstIdx, `${count} auto-buy(s) increment by 1 per tick (setBuyableAmount(..., getBuyableAmount(...).add(1))) — they never catch up after offline time and hide whether the cost curve is invertible at all`, "Inverse-solve the cost curve to a target level and set the amount directly (09 P27/P54), or route through buyMax().");
+        }
+    }
+    if (!hits) pass("D-AUTOINVERT", "no per-tick +1 auto-buys");
+}
+
+// D-BATTLELOCK — P49: a layer that owns battle state must lock location-switch clickables while
+// a fight is in progress, or the player teleports out of the encounter for free.
+{
+    let hits = 0;
+    for (const L of layers) {
+        const hasBattle = /\b(battle|enemy)\b/i.test(L.code);
+        const writesLoc = /\.location\s*=\s*[^=]/.test(L.code);
+        if (!hasBattle || !writesLoc) continue;
+        const guarded = /canClick\s*\(\s*\)\s*\{[^}]*\b(enemy|battle|inBattle|destroying|busy|fighting|combat|curHP)\b/i.test(L.code);
+        if (!guarded) {
+            hits++;
+            add(WARN, "D-BATTLELOCK", L.file, L.start, `layer "${L.id}" writes a .location state and owns battle state, but no canClick() guards the switch on an in-progress fight — the player can teleport away mid-battle (09 P49)`, "Gate every location-switch clickable: canClick() { return !player.<x>.battle.enemy && ... }.");
+        }
+    }
+    if (!hits) pass("D-BATTLELOCK", "location switches (if any) are guarded against in-progress fights");
+}
+
+// D-QLEDGER — the "AI decided by itself" tripwire. SKILL.md Stage 1 requires every question
+// (S0, Q1-Q8, Q4b type + modifier multi-select) to have a ledger row in design-brief.md §2
+// holding the user's answer or a user-confirmed delegation; Stage 2 check 22 gates on it.
+// The checker audits the copy inside the game folder.
+{
+    const REQUIRED_Q = ["S0", "Q1", "Q2", "Q3", "Q4", "Q4B", "Q5", "Q6", "Q7", "Q8"];
+    const briefPath = path.join(gameDir, "design-brief.md");
+    if (!fs.existsSync(briefPath)) {
+        add(WARN, "D-QLEDGER", briefPath, null, "no design-brief.md in the game folder — the question ledger cannot be audited (games generated before this rule may keep their brief elsewhere; new games must write it into the game folder per SKILL.md Stage 2)", "Copy assets/design-brief-template.md into the game folder as design-brief.md and fill the §2 ledger for every question ID — every answer comes from the user, never from inference.");
+    } else {
+        const src = fs.readFileSync(briefPath, "utf8");
+        const rowRe = /^\|\s*(S0|Q[1-8]b?)\s*\|([^|]*)\|([^|]*)\|/gm;
+        const ledger = new Map();
+        let m;
+        while ((m = rowRe.exec(src))) ledger.set(m[1].toUpperCase(), m[3].trim());
+        const problems = [];
+        for (const q of REQUIRED_Q) {
+            const ans = ledger.get(q);
+            if (ans === undefined) problems.push(`${q}: no ledger row`);
+            else if (!ans) problems.push(`${q}: blank answer — the question was not asked`);
+            else if (/user-delegated/i.test(ans) && !/confirmed\s*:\s*yes/i.test(ans)) problems.push(`${q}: delegation without a recorded user confirmation`);
+        }
+        if (problems.length) {
+            add(WARN, "D-QLEDGER", briefPath, null, `question ledger incomplete (§2): ${problems.join("; ")}`, "Ask the missing questions (or get the delegation confirmed) and fill the §2 rows — SKILL.md Stage 1: there is no auto-answer mode.");
+        } else pass("D-QLEDGER", "question ledger complete (all 10 IDs answered or user-confirmed)");
+    }
+}
+
+// N-BUYABLEDEAD — a buyable whose effect/amount NOTHING outside its own layer consumes goes
+// stale the moment a later row arrives: automating it (P4 step 5) would automate a dead effect.
+// Root cause found in the generated games: upgrades always got autobuyers (P4 step 4) but
+// buyables never did, because buyables were never wired into later progression
+// (user report 2026-10-24; every real top game keeps buyables load-bearing all game —
+// Incrementreeverse's three buyables ARE the layer's gain formula, celestial's feed the
+// global point exponent).
+{
+    let hits = 0;
+    const hasConsumer = (rec, re, from, to) => {
+        re.lastIndex = 0;
+        const base = from || 0;
+        const hay = to === undefined ? rec.clean : rec.clean.slice(from, to);
+        let m;
+        while ((m = re.exec(hay))) {
+            if (rec.mask[base + m.index] === 0) return true;
+        }
+        return false;
+    };
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        if (!/\bbuyables\s*:\s*\{/.test(L.code)) continue;
+        const idEsc = L.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const consumers = new RegExp("(?:\\b(?:get)?[Bb]uyableEffect\\s*\\(\\s*['\"]" + idEsc + "['\"]|\\bgetBuyableAmount\\s*\\(\\s*['\"]" + idEsc + "['\"]|\\btmp\\." + idEsc + "\\.buyables\\b|\\blayers\\." + idEsc + "\\.buyables\\b)", "g");
+        let consumed = false;
+        for (const f of allModderCandidates) {
+            const rec = loadRec(f);
+            if (f === L.file) {
+                // same file: search OUTSIDE this layer's own span (self-references don't count)
+                if (hasConsumer(rec, consumers, 0, L.start) ||
+                    (L.end != null && hasConsumer(rec, consumers, L.end, rec.clean.length))) { consumed = true; break; }
+            } else if (hasConsumer(rec, consumers)) { consumed = true; break; }
+        }
+        if (!consumed) {
+            hits++;
+            add(WARN, "N-BUYABLEDEAD", L.file, L.start, `layer "${L.id}" has buyables that nothing outside this layer consumes (no buyableEffect/getBuyableEffect/getBuyableAmount on "${L.id}" anywhere else) — they go stale once later rows arrive, so an autobuyer for them would automate a dead effect`, "Wire each buyable's effect into a later layer's formula (buyableEffect('this', id) in its gainMult/getResetGain) or gate later content on getBuyableAmount — or mark the buyable as capped phase content in brief §4.1 (09 P4 step 5 / P27 / P54).");
+        }
+    }
+    if (!hits) pass("N-BUYABLEDEAD", "every buyable is consumed outside its own layer");
 }
 
 // ---------------------------------------------------------------------------

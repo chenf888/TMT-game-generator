@@ -11,7 +11,7 @@ There are **two independent axes** in this skill. Do not merge them.
 | Axis | Question | Source | Where it lands |
 |---|---|---|---|
 | **Scale** | how big is the game? | interview **Q2** | `assets/blueprints.json` → `blueprints.small\|medium\|large` |
-| **Type** | how does the player *act*? | interview **Q1.5** | `assets/type-registry.json` → `types.*` |
+| **Type** | how does the player *act*? | interview **Q4b** | `assets/type-registry.json` → `types.*` |
 
 Q2 stays exactly as it was: a 1:1 map onto one blueprint, and `selectionRules` still says
 *"do not mix blueprints or improvise parameters"*. The type axis is orthogonal and adds no
@@ -102,6 +102,20 @@ charging, producing. Something fills over time.
 > layout from handbook 10 §3 — it is not a grid component and does not make a board game.
 > Ask the disambiguating question before routing here.
 
+### Candidates observed in the deep-reads — documented, NOT routable
+
+Four more interaction models surfaced in the 2026-10-24 full-game reads (One Dev One Layer,
+Celestial Incremental, and five corpus games in depth — patterns live in 09 §2 P18–P63).
+None becomes a primary type: each lacks a code-generation contract a generated game can
+afford, or rides on an existing type.
+
+| Candidate | Signature | Why not a type | Where it actually lives |
+|---|---|---|---|
+| **arena** (bullet-hell / ship roguelite) | real-time canvas entity simulation, 3,570–3,947 lines in celestial alone | far beyond any blueprint's budget; one exemplar; fails "distinct generation contract" on cost | 09 P36/P37 with an explicit cost warning — not enabled for generation |
+| **story-engine** | data-driven cutscenes (`{trigger, portrait, dialogue[]}` tables), 39 scenes in celestial | the *data* is generatable, but the engine is content, not an interaction model | modifier `story` (M15) |
+| **multi-universe** | `layers[].universe` + per-region tickspeed, seven trees one save (09 P30/P46) | an architecture, not an interaction model; large-blueprint-only | documented in 09; revisit only if a large blueprint ever needs it |
+| **luck as THE core verb** | one casino/gacha economy as the whole game | every observed instance (Zar, l7) is a side layer; no corpus game routes here | modifiers `casino` (M14) / `gacha` (M13) |
+
 ---
 
 ## §2 Modifiers — orthogonal extras with hard dependencies
@@ -117,9 +131,20 @@ A modifier is added on top of one interaction type. **Max one interaction type p
 | `board` | — | the grid contract |
 | `challenges` (M1) | — | Prefer `canComplete()` — it is the corpus majority dialect (45/57), not the `goal:` shape (20/57) |
 | `caps` | — | Hard ceilings from Q3 |
+| `boss-rush` (M12) | type `active-click`/`active-tick` **and** modifier `sim` | Segmented-HP boss (09 P19): damage runs through overflow softcaps inside `update()`, attack is a P28 cooldown clickable, milestones key on segments destroyed. **1 layer max** |
+| `gacha` (M13) | type `active-click`/`active-tick` | Draw clickables write a buff-bus array declared in startData (09 P21) — `D-GACHADATA` enforces the declaration. Banner rotation (09 P39) is the advanced form and additionally needs `sim`. **1 layer max** |
+| `casino` (M14) | type `active-click`/`active-tick` | One luck economy through 1–2 of the four distributions — dice/coin/slots/cards (09 P38). **1 layer max, never all four** |
+| `story` (M15) | — | Chapter-condition side layer (09 P51); the cutscene engine (09 P32) is large-blueprint only. Costs almost nothing — the safest "more fun" add |
 
 **When a hard dependency is missing: downgrade the modifier and record why in brief §10.**
 Never drop it silently — a silently missing M2 looks exactly like a game that never needed it.
+
+**Deep-read modifiers (M12–M15, registry v1.1.0).** These four come from the full-game
+analyses, so their corpus prior is **0** — the router will never propose them. Declare them
+explicitly (`scaffold.js --modifier boss-rush,gacha`) and record the choice in brief §10.
+Unlike M1–M3 they carry no corpus dialect statistics; each contract cites its one exemplar.
+Checker coverage already wired: `D-GACHADATA` (bus arrays in startData), `D-FARMCHAL`
+(farm-challenge pairing, 10-Fun M11), `D-KNOCKOUT` (09 P23, if a game uses layer knockout).
 
 ---
 
@@ -130,7 +155,8 @@ node scripts/classify.js --request "<what the user asked>" --recap "<Q1 recap>" 
 node scripts/classify.js --from-brief <design-brief.md> --json
 ```
 
-Exit code **0** = routed, **3** = a question must be asked, **1** = error.
+Exit code **0** = a route is proposed (show it to the user for confirmation before locking),
+**3** = a question must be asked, **1** = error.
 
 **Signals, in weight order** (`routing.weights` in the registry):
 
@@ -145,7 +171,9 @@ Exit code **0** = routed, **3** = a question must be asked, **1** = error.
 5. **corpus prior (0.15)** — a tiebreaker only. The corpus unit is a *file*, not a game
    (171/329 are `__part.js` fragments), so this weight may never outvote a stated intent.
 
-**Decision:** `auto` when top ≥ 0.60 **and** margin ≥ 0.20; otherwise ask.
+**Decision:** `auto` (a proposal shown to the user, locked only on their confirmation) when
+top ≥ 0.60 **and** margin ≥ 0.20; otherwise ask. The script never answers Q4b on the user's
+behalf — a high confidence changes *who proposes*, not *who decides*.
 
 | Situation | Action |
 |---|---|
@@ -153,6 +181,7 @@ Exit code **0** = routed, **3** = a question must be asked, **1** = error.
 | click vs passive | "点击是核心玩法,还是偶尔的加速手段?" |
 | tick vs passive | "进度条只是显示状态,还是玩家真正在推的进度?" |
 | board anything | "需要二维棋盘,还是只要把升级排成网格?" |
+| boss / gacha / casino / story mentioned | these are **modifiers, not types** — keep the type routing and propose the matching modifier(s), one layer each |
 | nothing above 0.45 | "你想要纯挂机体验,还是希望手上有事可做?" |
 
 **At most one interaction type.** The skill already holds this line: at most ONE
@@ -160,8 +189,9 @@ Exit code **0** = routed, **3** = a question must be asked, **1** = error.
 Mining — the game that does this properly — is 2.7MB and 59k lines. Any further difference
 is expressed as modifiers.
 
-**Unknown types.** Ask once. If the user cannot name one, fall back to `passive-prestige`
-and record *unrecognised, defaulted* in brief §10. Then **add a modifier** to the registry
+**Unknown types.** Ask once. If the user cannot name one, propose `passive-prestige` and lock
+it only after the user confirms; record *unrecognised, user-confirmed fallback* in brief §10.
+Then **add a modifier** to the registry
 if the mechanic is new — never a new primary type without a distinct code-generation contract.
 
 ---

@@ -1,7 +1,7 @@
 # TMT Game Generator — an agent skill for The Modding Tree
 
 A [SKILL.md-format](https://agentskills.io) agent skill that generates **complete, playable,
-balanced [The Modding Tree](https://github.com/Acamaeda/The-Modding-Tree) (TMT v2.7) incremental
+balanced [The Modding Tree](https://github.com/Acamaeda/Modding-Tree) (TMT v2.7) incremental
 games** from a short conversation. Load it into any agent tool that supports skills
 (ZCode, Claude Code, Codex, Cursor, …), say "make me an incremental game about X", and the
 agent runs the full pipeline: interview → data-driven design brief → scaffold → code
@@ -13,8 +13,9 @@ No dataset downloads, no workspace-specific paths — install it anywhere.
 
 ## What you get
 
-Games are held to a concrete quality bar (verified by two full play-throughs during
-development — a 25-layer and a 10-layer generated game):
+Games are held to a concrete quality bar (verified across **nine full generated games**
+during development — a 25-layer large blueprint, a 10-layer medium, a 104-layer postmortem
+source, a one-layer 100-hour monolith, a 16.7-million-layer colour cube, and more):
 
 - Opens `index.html` and plays immediately: full prestige-layer chain, balanced number
   curves, automation milestones, achievements, reachable endgame, zero console errors,
@@ -23,35 +24,41 @@ development — a 25-layer and a 10-layer generated game):
   (hard caps for exam scores, percentages, etc.), not just names.
 - **Data-driven balance** — requires ladders, cost curves, exponent falloff, and automation
   ladders come from measured statistics across 132 real published TMT games.
-- **Fun-density quotas** — effect-kind diversity (K1–K8), microtabs content organization,
-  and mechanic variety (challenges, clickables, bars, secondary currencies, active loops)
-  are quota-checked per blueprint, because measured 8+/10 games separate on mechanic
-  variety, not layer count.
+- **Fun-density quotas** — effect-kind diversity (K1–K9), microtabs content organization,
+  and mechanic variety (M1–M21: farm challenges, bosses, gacha, casino, story chapters,
+  crafting, check-backs, erosion, …) are quota-checked per blueprint, because measured 8+/10
+  games separate on mechanic variety, not layer count.
 - **The engine author's own design notes, built in.** Acamaeda's guidance (2020–2023) is
   folded in as `references/design/12`: pacing targets, upgrade/buyable discipline, cost-before-
   softcap, threshold gates, readability. Where it disagreed with our corpus statistics, **it won**
   — four previously-taught positions were corrected, and §0 of chapter 12 lists them.
-- **Corpus-calibrated numbers** — measured over **every component of 329 real TMT games**
-  (1,156 layers, 29,141 components, every figure traceable to file + line). This is what
-  produced the wiring rule: **54.4% of real upgrades carry no `effect()` at all**, because
-  their power is a branch in the layer's `gainMult()`. See `references/design/11`.
+- **Corpus-calibrated numbers** — measured over **every component of 329 real TMT game
+  files** (132 games; 1,156 layers, 29,141 components, every figure traceable to file +
+  line). This is what produced the wiring rule: **54.4% of real upgrades carry no `effect()`
+  at all**, because their power is a branch in the layer's `gainMult()`. See
+  `references/design/11`.
 - **Type recognition, then per-type generation** — the interview locks a *game type*
   alongside the scale blueprint (interaction model, orthogonal to small/medium/large):
   `passive-prestige`, `active-click`, `active-tick`, or `board-minigame`. The type decides
   which components are mandatory, which are forbidden, and which acceptance rules apply —
   a passive game is explicitly **exempt** from the "you need tick logic" rule, while an
-  active-click game must pass a clickable contract the old checker never checked. See
-  `references/design/13`.
-- **The pipeline verifies the game, not just the source.** A 72-rule static checker reads the
+  active-click game must pass a clickable contract the old checker never checked. Ten
+  stackable **modifiers** (registry v1.1.0) add optional mechanics with hard dependencies:
+  `score-attack`, `minigame`, `boss-rush`, `gacha`, `casino`, `story`, and the structural
+  `sim`/`board`/`challenges`/`caps`. See `references/design/13`.
+- **The pipeline verifies the game, not just the source.** An 84-rule static checker reads the
   code; a load-time harness runs it and a pacing simulator plays it. All three were added because
   real briefs kept passing every text-level rule and then failing in play.
-- **72-rule static checker** — every hard rule and every regression caught in real
+- **84-rule static checker** — every hard rule and every regression caught in real
   generated games is automated (`scripts/static_checks.js`): Decimal discipline, row
   contiguity, requires monotonicity, dead-end unlock upgrades, self-scaling compounding
   budgets, achievement visibility, **effects that nothing consumes**, unread engine fields,
-  flat cost ladders, all-flat gain curves, and the three type rules
-  (`T-CLICKABLE`, `T-GRID`, `T-TICKREG`). Rules are gated per type: a game with no declared
-  type is checked exactly as before.
+  flat cost ladders, all-flat gain curves, the three type rules
+  (`T-CLICKABLE`, `T-GRID`, `T-TICKREG`), pattern guardrails from the 63-pattern library
+  (softcap-segment typos, gacha bus arrays, farm-challenge pairing, implicit globals,
+  layer-knockout coverage, per-tick +1 auto-buys), and **D-QLEDGER** — the audit that every
+  interview question was actually asked and answered by the user. Rules are gated per type:
+  a game with no declared type is checked exactly as before.
 
 ## Requirements
 
@@ -96,10 +103,10 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 
 | Stage | What happens |
 |---|---|
-| 1. Interview | ≤7 structured questions: theme-structure confirmation, scale (locks a small/medium/large blueprint), natural ceilings, pacing & interactivity, side content, automation/timewall tolerance, language & style — then **Q4b locks the game type**: `node scripts/classify.js` proposes a route and the user confirms it, or it asks one question when the intent is unclear. No question is ever auto-answered on the user's behalf |
-| 2. Design brief | A layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/type-registry.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 20 rules before any code exists |
+| 1. Interview | ≤8 structured questions: theme-structure confirmation, scale (locks a small/medium/large blueprint), natural ceilings, pacing & interactivity, side content, automation/timewall tolerance, language & style, **endgame flavor** — plus **Q4b locks the game type**: `node scripts/classify.js` proposes a route, the user confirms it, and a **modifier multi-select** (boss-rush / gacha / casino / story / …) asks which optional mechanics to include. Every answer lands in the brief's question ledger; nothing is ever auto-answered on the user's behalf |
+| 2. Design brief | `design-brief.md` written **into the game folder**: a layer-chain table (one row per layer — the code-generation contract) filled from `assets/blueprints.json` + `assets/type-registry.json` + `assets/balance-defaults.json` + `assets/fun-quota.json`, self-checked against 23 rules, then **confirmed by the user** before any code exists |
 | 3. Scaffold | `node scripts/scaffold.js "Game Name" <dir> --type <id> --modifier a,b` copies the bundled TMT template, patches `js/mod.js` (unique permanent `modInfo.id`, name, author, modFiles, charset meta), writes `.tmt-profile.json`, self-verifies and syntax-checks the result. A modifier whose hard dependency is unmet is **downgraded with a reason, never silently dropped** |
-| 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M10 mechanics, automation ladder, softcaps, theming |
+| 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M21 mechanics, automation ladder, softcaps, theming |
 | 5. Static checks | `node scripts/static_checks.js <game-folder>` — reads `.tmt-profile.json` and applies that type's gates, exemptions and per-blueprint thresholds; FAIL blocks manual testing; WARNs need a written justification in the brief. Plus `node scripts/i18n_check.js` when the game has a `js/lang/` text layer |
 | 5.5 Load-time smoke | `node tools/smoke.js` (copied from `assets/harness/`) — the real mod files loaded in Node: load-time throws, duplicate layer ids, `startData` contract, NaN/undefined hooks against a fresh save. 0 FAIL before the browser opens |
 | 6. Balance walkthrough | **Measured, not estimated.** `node tools/simulate.js` drives the real economy and reports the first-purchase time, each layer's first prestige and the total to `isEndgame()`. Three real briefs passed every static rule and were then overturned by play (8–18 h promised → 2.5 h delivered; 28-second detonation; six automation steps with unreachable thresholds). Rebalance the brief, not the code |
@@ -107,9 +114,10 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
 References load **on demand** (`references/core/00–08` engine handbook,
-`references/design/09–13` design patterns, fun mechanics, corpus-calibrated numeric
-design, the engine author's own notes, and the game-type judgment guide), keeping context
-small.
+`references/design/09–15` — 63 design patterns (P1–P63, from the corpus crawl plus full-game
+deep-reads), fun mechanics & content organization (M1–M21), corpus-calibrated numeric design,
+the engine author's own notes, the game-type judgment guide, measurement & harness, and the
+text layer), keeping context small.
 
 ## Folder layout
 
@@ -126,11 +134,12 @@ tmt-game-generator/
 ├── assets/
 │   ├── blueprints.json       # small/medium/large progress blueprints (per-field corpus sources)
 │   ├── type-registry.json    # game types: verdict signals, code contracts, rule exemptions,
-│   │                         #   modifiers + hard dependencies, routing weights (add a type here)
+│   │                         #   10 modifiers + hard dependencies (v1.1.0), routing weights
+│   │                         #   (add a type here)
 │   ├── balance-defaults.json # measured balance defaults + when-to-deviate policy
 │   ├── fun-quota.json        # per-blueprint fun-density quotas + the thresholds the
 │   │                         #   checker READS AT RUN TIME
-│   ├── design-brief-template.md
+│   ├── design-brief-template.md  # with the §2 question ledger the checker audits (D-QLEDGER)
 │   └── harness/              # copy into <game>/tools/ — these RUN the game, they don't read it
 │       ├── smoke.js          #   load-time harness (stage 5.5): loads the real mod files with
 │       │                     #   engine stubs; catches load-time throws, duplicate ids,
@@ -143,7 +152,7 @@ tmt-game-generator/
 │   ├── scaffold.js           # template copy + mod.js patcher + .tmt-profile.json writer
 │   ├── pack.js               # builds dist/<name>/ — the shippable package the platform
 │   │                         #   requires (frontmatter + directory name must match `name`)
-│   ├── static_checks.js      # 72-rule mod-code checker (FAIL/WARN/PASS report, --json,
+│   ├── static_checks.js      # 84-rule mod-code checker (FAIL/WARN/PASS report, --json,
 │   │                         #   --profile <typeId> | --no-profile)
 │   └── i18n_check.js         # text-layer integrity (missing keys, duplicate language codes,
 │                             #   duplicate endonyms, pack parity, placeholder tokens);

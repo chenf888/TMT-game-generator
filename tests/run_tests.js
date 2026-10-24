@@ -140,6 +140,10 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             // phase-⑪ browser-verified rules (2026-10-24, from three generated games):
             "D-UPDATELOCK",    // layers.js layer c: update() calls addPoints with no
                                // unlocked guard — locked layers run update() too
+            // pattern-library era (2026-10-24):
+            "D-QLEDGER",       // fixture-bad has no design-brief.md — the ledger cannot be
+                               // audited (models a game generated before the ledger law)
+            "N-BUYABLEDEAD",   // layer a: buyable 11 consumed by nobody outside layer a
         ];
         ok(status === 1, "exit code 1 (FAILs present)", `status=${status}`);
         for (const rule of expectedFails)
