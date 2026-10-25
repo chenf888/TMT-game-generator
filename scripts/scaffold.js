@@ -484,12 +484,16 @@ Next steps (full pipeline in SKILL.md):
        js/mod.js      : getPointGen(), isEndgame(), displayThings (reference: references/core/02)
        layer files    : one addLayer per layer, bottom row first. EVERY new layer file
                         must be appended to modInfo.modFiles (paths relative to js/).
+                        Gate each layer before the next (SKILL.md Stage 4.2): re-run static
+                        checks (0 FAIL), boot, open the tab, press once, console clean.
        js/tree.js     : usually no changes needed for the default tree.
   3. STAGE 5 — run static checks:
        node "${path.resolve(__dirname, "static_checks.js")}" "${outDir}"
      Fix every FAIL before manual testing.
   4. STAGE 7 — serve the folder with the no-store server (node tools/serve.js, copied from
-     assets/harness/) — or any static file server — and open index.html.`);
+     assets/harness/) — or any static file server — and open index.html. Late layers open in
+     seconds: node tools/simulate.js --save-at <layerId> writes a console one-liner that
+     reloads the page at that layer's unlock moment.`);
 }
 
 main();

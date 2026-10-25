@@ -281,8 +281,8 @@ footer a { color: var(--blue); }
     <h1 class="lang-en">One sentence in,<br>a mod tree out.</h1>
     <h1 class="lang-zh">一句话进来，<br>一棵模组树出去。</h1>
 
-    <p class="sub lang-en">tmt-game-generator is an agent skill. Say “make me an incremental game about X” and your agent runs the full measured pipeline — interview, data-driven design, scaffold, layer-by-layer generation, 88 static rules, a load-time smoke test, a pacing simulation, browser verification — and hands you a game that <strong>opens and plays, balanced, with a clean console</strong>.</p>
-    <p class="sub lang-zh">tmt-game-generator 是一个 Agent Skill：对它说一句「给我做一个关于 X 的增量游戏」，你的 agent 就走完一条带实测的流水线——采访、数据设计、脚手架、逐层生成、88 条静态规则、载入冒烟、平衡实测、浏览器实测——交付一个<strong>打开即玩、曲线平衡、控制台零报错</strong>的游戏。</p>
+    <p class="sub lang-en">tmt-game-generator is an agent skill. Say “make me an incremental game about X” and your agent runs the full measured pipeline — interview, data-driven design, scaffold, layer-by-layer generation (each layer browser-gated as it is written), 88 static rules, a load-time smoke test, a pacing simulation, browser verification — and hands you a game that <strong>opens and plays, balanced, with a clean console</strong>.</p>
+    <p class="sub lang-zh">tmt-game-generator 是一个 Agent Skill：对它说一句「给我做一个关于 X 的增量游戏」，你的 agent 就走完一条带实测的流水线——采访、数据设计、脚手架、逐层生成（层层浏览器即测）、88 条静态规则、载入冒烟、平衡实测、浏览器实测——交付一个<strong>打开即玩、曲线平衡、控制台零报错</strong>的游戏。</p>
   </div>
 </section>
 
@@ -354,7 +354,7 @@ footer a { color: var(--blue); }
         <div class="no">4</div>
         <div>
           <h3><span class="lang-en">Generate</span><span class="lang-zh">生成</span></h3>
-          <p class="desc"><span class="lang-en">Layer files written bottom-row-first: Decimal discipline, every upgrade classified token-vs-value and wired to a consumer, microtabs organization, M1–M21 mechanics, the automation ladder through buyable autobuyers, softcaps.</span><span class="lang-zh">自底向上逐层写：Decimal 纪律、每个升级分类 token/value 并接上消费者、microtabs 组织、M1–M21 机制、直到可购买项自动购买的自动化阶梯、软上限。</span></p>
+          <p class="desc"><span class="lang-en">Layer files written bottom-row-first: Decimal discipline, every upgrade classified token-vs-value and wired to a consumer, microtabs organization, M1–M21 mechanics, the automation ladder through buyable autobuyers, softcaps. Each layer is gated before the next is written — static re-run, boot, one prestige, clean console.</span><span class="lang-zh">自底向上逐层写：Decimal 纪律、每个升级分类 token/value 并接上消费者、microtabs 组织、M1–M21 机制、直到可购买项自动购买的自动化阶梯、软上限。每层写完即门禁——重跑静态、启动、声望一次、控制台干净。</span></p>
         </div>
         <div class="tool"><span class="lang-en">per the brief</span><span class="lang-zh">按层链表</span></div>
       </div>
@@ -370,7 +370,7 @@ footer a { color: var(--blue); }
         <div class="no">5.5</div>
         <div>
           <h3><span class="lang-en">Load-time smoke</span><span class="lang-zh">载入冒烟</span></h3>
-          <p class="desc"><span class="lang-en">The real mod files load in Node: boot-time throws, duplicate layer ids, the startData contract, NaN hooks — all before a browser opens.</span><span class="lang-zh">真实的 mod 文件在 Node 里加载：启动抛错、重复层 id、startData 契约、NaN 钩子，全部在浏览器打开之前。</span></p>
+          <p class="desc"><span class="lang-en">The real mod files load in Node: boot-time throws, duplicate layer ids, the startData contract, NaN hooks — all before the full browser pass.</span><span class="lang-zh">真实的 mod 文件在 Node 里加载：启动抛错、重复层 id、startData 契约、NaN 钩子，全部在整局浏览器实测之前。</span></p>
         </div>
         <div class="tool">assets/harness/smoke.js</div>
       </div>
@@ -386,7 +386,7 @@ footer a { color: var(--blue); }
         <div class="no">6.5</div>
         <div>
           <h3><span class="lang-en">Browser verification</span><span class="lang-zh">浏览器实测</span></h3>
-          <p class="desc"><span class="lang-en">The generator opens the served game itself: boot errors empty, every tab and microtab opens, one real prestige per layer kind, save/reload intact, console clean.</span><span class="lang-zh">生成器自己打开这个游戏：启动零报错、每个标签页能开、每层真实声望一次、存档往返完好、控制台干净。</span></p>
+          <p class="desc"><span class="lang-en">The generator opens the served game itself: boot errors empty, every tab and microtab opens, one real prestige per layer kind, save/reload intact, console clean. Late layers open in seconds — the simulator exports a save at that layer's unlock moment.</span><span class="lang-zh">生成器自己打开这个游戏：启动零报错、每个标签页能开、每层真实声望一次、存档往返完好、控制台干净。后期层秒开——模拟器导出该层解锁时刻的存档。</span></p>
         </div>
         <div class="tool">Stage 6.5</div>
       </div>

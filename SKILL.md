@@ -32,8 +32,8 @@ This skill is self-contained. Everything it needs is in this folder:
 | `scripts/scaffold.js` | Creates the game folder from the TMT template |
 | `scripts/static_checks.js` | Post-generation static checks (FAIL/WARN/PASS report) |
 | `scripts/i18n_check.js` | Text-layer integrity (only when the game has `js/lang/`; exits 0 silently otherwise) |
-| `assets/harness/smoke.js` | **Load-time harness** — copy to `<game>/tools/`, run before the browser (Stage 5.5) |
-| `assets/harness/simulate.js` | **Pacing simulator** — copy to `<game>/tools/`, run before rebalancing (Stage 6) |
+| `assets/harness/smoke.js` | **Load-time harness** — copy to `<game>/tools/`, run before the full browser pass (Stage 5.5) |
+| `assets/harness/simulate.js` | **Pacing simulator** — copy to `<game>/tools/`, run before rebalancing (Stage 6); `--probe <layer>` before any knob turn, `--save-at <layerId>` exports an engine-format save for the Stage 6.5 browser pass |
 | `template/` | Bundled TMT v2.7 engine template (verbatim minus demo/docs — upstream MIT licenses included) |
 
 The engine template ships **bundled** at `template/`, so the skill works from any install
@@ -67,7 +67,7 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 | Stage 4, language scope | `references/design/15` + `scripts/i18n_check.js` (T2 and above only) |
 | Stage 4, theming/UI | `references/core/05` |
 | Stage 5.5–6 | `references/design/14` (smoke harness, simulator, calibration doctrine) |
-| Stage 6.5 | `references/design/14` §5 (the browser-verification checklist and why each line exists) |
+| Stage 6.5 | `references/design/14` §5 (the browser-verification checklist, the per-layer micro-gate, the `--save-at` injector, the feel protocol, and why build-while-playing is not the primary loop) |
 | Stage 5–7 | `references/core/07` (hard rules + Part C crash table + **Part F engine facts** + Part D checklist) |
 | Design inspiration | `references/core/08` (real-game catalog) |
 
@@ -411,6 +411,25 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
 - `gainMult()` = the P10 web: list every older layer's boost that reaches this layer, and make
   this layer boost ≥2 older layers.
 - `doReset(resettingLayer)` only when keeping things (P9); softcaps per P12.
+
+**Gate each layer before writing the next (the per-layer micro-gate).** Bottom-row-first order
+means every intermediate state is already a playable game — the engine row-gates absent later
+layers, so nothing needs stubbing. After each layer file is written and appended to modFiles:
+1. `node scripts/static_checks.js "<game>"` — the scaffold baseline is 0 FAIL, so the FAIL
+   count stays 0 at every gate. Only the cross-layer wiring rules (N-UNWIRED, N-BUYABLEDEAD)
+   may be temporarily red for ids whose consumer lives in a LATER layer per the brief's wiring
+   plan — they clear at the consuming layer's gate, and always by Stage 5.
+2. Boot the partial game (`tools/serve.js`), open the new layer's tab, press its prestige
+   once, buy one upgrade (and one buyable if it has them), console clean. This is where the
+   browser-only crash class dies at write time — factory display bare lines, render throws
+   stuck on "Loading...", layer-color leaks, static-L i18n fields — instead of at Stage 6.5
+   with every layer as a suspect.
+3. Observations made while playing route through the BRIEF, never the code: a number that
+   felt wrong while pressing becomes a §10 deviation row → a `js/tuning.js` constant → a
+   re-run of the sim. Editing a layer file's literal mid-play is exactly the "hand-tune the
+   code" failure Stage 6 forbids.
+The micro-gate does NOT replace Stage 6.5 — the final pass stays mandatory (cross-layer
+cascades, save/export, offline, and wiring that only exists once every layer is written).
 ### 4.3 Tree, hotkeys, achievements side layer
 - `js/tree.js` usually needs no change (default tree from rows/positions); add ghost spacers
   or `addNode` decorations only if the design wants them.
@@ -500,7 +519,7 @@ node scripts/static_checks.js "<game-folder>"
 
 ---
 
-## Stage 5.5 — Load-time smoke (gate: before the browser, before Stage 6)
+## Stage 5.5 — Load-time smoke (gate: before the full browser pass, before Stage 6)
 
 The static checker reads source text. It cannot tell you that a file throws while loading, that two
 `addLayer()` calls share an id, or that a hook returns NaN against a fresh save — all three shipped
@@ -540,6 +559,12 @@ policy-independent and it is where the author rules bite. Do **not** quote the t
 policy has been fitted to one known playthrough value — the script says so out loud when a run
 finishes implausibly fast. Then complete the paper pass below and reconcile the two:
 **where they disagree, the simulation wins and the brief is what changes.**
+
+The simulator is the **sole pacing authority**. A browser session is one real-time sample of a
+±25% dt-spread distribution, and real-time play cannot reach the hour-scale regime where the
+pacing decisions actually live — "play-tuned" numbers are one noisy sample with no ledger.
+Anything noticed while playing (Stage 4.2 micro-gates, Stage 6.5, user feedback) becomes a
+brief §10 row, a tuning.js constant, and a re-run — never an edit justified by how it felt.
 
 Quote the total at three step sizes (dt 0.5 / 1 / 2) and cite the dt-1 value with the spread —
 a real build measured 12.4 / 15.0 / 19.7 h for the same game (±25%). A total that swings more
@@ -601,6 +626,10 @@ exists so the **generator** finds these, not the player.
    custom) and confirm the currency rises and survives per the `doReset` contract; buy one
    upgrade and one buyable and confirm the number it promises actually moves (dead effects are
    invisible to every file-level check); click a clickable; for a board type, complete one match.
+   Late layers need no replay: `node tools/simulate.js <game> --save-at <layerId>` writes
+   `tools/save-at-<layerId>.js` — paste its line into the console and the page reopens at the
+   instant that layer unlocks (in an automated browser, run the setItem expression and the
+   reload as two separate steps — an in-script reload raced the 5 s autosave in testing).
 4. **Lifecycle probe**: save → reload → values intact; if the game has non-ASCII in `player`
    (bilingual microtab keys do), also round-trip a manual export/import (the engine's Export
    button is Latin1-only — 07 Part F). After injecting state for a test, **wait one frame
@@ -612,7 +641,14 @@ exists so the **generator** finds these, not the player.
    doubles as regression notes for the next build. The full checklist and the engine traps it
    has caught live in `references/design/14 §5`.
 
-**Gate to Stage 7: all five green.** Hand-off to the user is for *balance feel*, not for
+While verifying, fill the **feel table** in brief §12 — per layer: seconds to its first press,
+clicks before its first upgrade, and whether the next action is named on screen. These are
+machine-checkable proxies for legibility, and they are **observations, not a tuning signal**
+(Stage 6 owns pacing); a row that looks bad becomes a §10 deviation row first.
+
+**Gate to Stage 7: all five green.** Per-layer micro-gates (Stage 4.2) shrink this pass; they
+never replace it — cross-row cascades, save/export round-trips and offline behavior only exist
+once every layer is written. Hand-off to the user is for *balance feel*, not for
 discovering that the game does not boot.
 
 ---
@@ -620,7 +656,8 @@ discovering that the game does not boot.
 ## Stage 7 — Manual test handoff
 
 Hand the user the 07 Part D checklist plus these four steps:
-1. Serve the folder statically and open `index.html` — **the console must show no errors**.
+1. Serve the folder with `node tools/serve.js` (no-store — a cached `mod.js` once made a fix
+   look ineffective) and open `index.html` — **the console must show no errors**.
 2. Verify in this order: first prestige within minutes; hotkey works; upgrades purchasable and
    their effects visible in the numbers; resets cascade per the `doReset` contract; save → reload
    intact; export/import and hard reset work; offline time capped by `offlineLimit`; endgame

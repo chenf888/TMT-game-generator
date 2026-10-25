@@ -7,7 +7,8 @@
  *   the contract, or that a formula returns NaN. All four were real defects in
  *   generated games, and all four are invisible until the page is opened.
  *   This harness loads the REAL mod files in Node with engine stubs and asserts
- *   them, so the first browser open is not the first test.
+ *   them, so no defect class waits for the full browser pass (Stage 6.5) — the
+ *   per-layer micro-gates (Stage 4.2) boot partial games even earlier.
  *
  * USAGE
  *   node assets/harness/smoke.js <game-folder> [--json]

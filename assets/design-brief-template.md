@@ -190,6 +190,11 @@ accepted 15 WARNs this way and fixed a 16th in place; the discipline is what mak
 |---|---|---|
 | | | |
 
+Numbers noticed while playing (per-layer micro-gates, Stage 6.5, user feedback) enter HERE
+first — as a row, then a `js/tuning.js` constant, then a sim re-run. A layer-file literal
+edited mid-play is a §10 violation, not a fix: it has no ledger, bypasses the Stage 2
+confirmation, and the next build cannot inherit it.
+
 ## 11. Stage-6 measured retune (authoritative — only if the measurement contradicted the brief)
 
 Record what the first simulation showed, the root cause, and each fix with where the constant
@@ -211,6 +216,14 @@ Each entry was invisible to static checks, smoke and the simulator; it was found
 build (SKILL.md Stage 6.5 / handbook 14 §5). Numbered, symptom → root cause → fix.
 
 | # | Symptom | Root cause | Fix |
+|---|---|---|---|
+| | | | |
+
+Feel proxies, per layer (handbook 14 §5.3 — observations recorded while verifying, NOT a
+tuning signal; a bad row routes through §10 → tuning.js → sim). Late layers opened with
+`--save-at` (handbook 14 §5.2) count.
+
+| Layer | First press (s) | Clicks to first upgrade | Next action named on screen? |
 |---|---|---|---|
 | | | | |
 

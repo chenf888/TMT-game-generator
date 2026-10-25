@@ -43,6 +43,7 @@
  *   node assets/harness/simulate.js <game-folder> [--max-hours 200] [--json]
  *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --max-hours 200
  *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --probe <endgame-layer>
+ *   node assets/harness/simulate.js <game-folder> --save-at <layerId>   (browser handoff)
  *   Copy to <game>/tools/simulate.js next to the game. Put every tunable
  *   constant in a modFile (e.g. js/tuning.js) that BOTH the game and this script
  *   read — otherwise you are tuning a number the game does not use.
@@ -61,6 +62,30 @@
  *                 PROBE BEFORE KNOB: on The Smallpox Tree two blind knob turns
  *                 did nothing, then the probe showed one gate at <0.1% slack
  *                 while the others had 50× — a single knob fixed the pacing.
+ *
+ * BROWSER HANDOFF (--save-at <layerId>) — open a LATE layer in the browser in seconds
+ *   The sim runs the whole economy in ≤120 s of wall clock; the browser runs it in real
+ *   time, so "play to layer 5" costs hours there. --save-at snapshots the sim's
+ *   engine-shaped player at the instant layer <id> first unlocks, serializes it exactly
+ *   as js/utils/save.js:7 does, and writes tools/save-at-<id>.js — a localStorage
+ *   one-liner to paste into the browser console (then reload). Fidelity notes:
+ *     · the engine stores localStorage[modInfo.id] = btoa(unescape(encodeURIComponent(
+ *       JSON.stringify(player)))); Node has no escape/btoa, but
+ *       Buffer.from(json,"utf8").toString("base64") is byte-identical to that trick
+ *     · Decimal.toJSON() is toString(), and load()'s fixData() rebuilds Decimals
+ *       wherever getStartPlayer() has one — so the sim's player serializes as-is and
+ *       every field the sim does not track is filled from the start player
+ *     · after the reload, WAIT ONE FRAME before asserting state — tmp recomputes per
+ *       frame (a same-frame read sees the pre-tick value)
+ *     · pasting the whole line into a normal browser console is one step. In an
+ *       AUTOMATED browser (ZCode IAB) run it as TWO: evaluate the localStorage.setItem
+ *       expression, then reload via the browser API — calling location.reload() inside
+ *       the same evaluated script plus a second reload raced the engine's 5 s autosave
+ *       and the injected save was overwritten before load() saw it (found live,
+ *       2026-10-25: setItem → API-reload loaded the state field-for-field).
+ *   The greedy policy's banks are a plausible ENTRY state, not a human's: the save is
+ *   for interaction testing (tab opens, prestige works, save survives), never a pacing
+ *   verdict — the sim alone owns pacing.
  *
  * ENGINE-FIDELITY PATCHES (each one was a real mis-measurement before it existed)
  *   · static prestige is gated on baseAmount ≥ getNextAt (game.js:124), never on
@@ -119,9 +144,13 @@ const TRACE_EVERY = traceEveryIdx >= 0 ? Number(argv[traceEveryIdx + 1]) : 0;
  * single knob (6 → 6.3) brought the run back in band. Probe before knob. */
 const probeIdx = argv.indexOf("--probe");
 const PROBE = probeIdx >= 0 ? argv[probeIdx + 1] : null;
+/* --save-at <layerId>: dump an engine-format save at the instant that layer first unlocks
+ * (see BROWSER HANDOFF above) and end the run — the pacing report needs the flag dropped. */
+const saveAtIdx = argv.indexOf("--save-at");
+const SAVE_AT = saveAtIdx >= 0 ? argv[saveAtIdx + 1] : null;
 /* the value after a flag is not a path; when the flag is absent there is no such index, so the
  * guards must not become 0 — that would eat the game folder argument. */
-const FLAG_VALUE_IDX = new Set([maxHoursIdx, dtIdx, budgetIdx, clickIdx, traceEveryIdx, probeIdx].filter((i) => i >= 0).map((i) => i + 1));
+const FLAG_VALUE_IDX = new Set([maxHoursIdx, dtIdx, budgetIdx, clickIdx, traceEveryIdx, probeIdx, saveAtIdx].filter((i) => i >= 0).map((i) => i + 1));
 const game = path.resolve(argv.filter((a, i) => !a.startsWith("--") && !FLAG_VALUE_IDX.has(i))[0] || path.join(__dirname, "..", ".."));
 if (!fs.existsSync(path.join(game, "js", "mod.js"))) {
     console.error("no js/mod.js under " + game + " — pass the game folder as the first argument");
@@ -228,6 +257,10 @@ for (const f of files) {
 // ---- player ----------------------------------------------------------------
 // the engine tags every layer with its own id so layer hooks can read this.layer
 for (const id of layerOrder) LAYERS[id].layer = id;
+if (SAVE_AT !== null && !LAYERS[SAVE_AT]) {
+    console.error("--save-at: no layer \"" + SAVE_AT + "\" (this game's layers: " + layerOrder.join(", ") + ")");
+    process.exit(2);
+}
 let player = {};
 for (const id of layerOrder) {
     let sd = {};
@@ -441,6 +474,33 @@ function refreshUnlocks() {
     }
 }
 
+// ---- browser handoff (--save-at) --------------------------------------------
+let saveDumped = false, saveAtPath = null;
+/* Serializes the sim's player EXACTLY as the engine saves it (js/utils/save.js:7):
+ * localStorage[modID] = btoa(unescape(encodeURIComponent(JSON.stringify(player)))).
+ * load() is Object.assign(getStartPlayer(), parsed) + fixSave(), so a partial,
+ * engine-shaped save is legal — every field the sim does not track is filled from the
+ * start player, and Decimal.toJSON() (= toString) round-trips through fixData's
+ * new Decimal(...) wherever the start player holds a Decimal. */
+function dumpSaveAt() {
+    saveDumped = true;   // set FIRST — a throw below must not re-trigger the dump next tick
+    const info = global.modInfo || {};
+    const modId = (info.id !== undefined && info.id !== null) ? info.id
+        : String(info.name || "game").replace(/\s+/g, "-") + "-" + String(info.author || "ai").replace(/\s+/g, "-");   // save.js getModID fallback
+    const b64 = Buffer.from(JSON.stringify(player), "utf8").toString("base64");
+    const line = 'localStorage.setItem(' + JSON.stringify(modId) + ', ' + JSON.stringify(b64) + '); location.reload();';
+    saveAtPath = path.join(game, "tools", "save-at-" + SAVE_AT + ".js");
+    fs.mkdirSync(path.dirname(saveAtPath), { recursive: true });
+    fs.writeFileSync(saveAtPath, line + "\n");
+    LOG("  --save-at " + SAVE_AT + " @ " + (t / 3600).toFixed(2) + " h: entry save written to " + path.relative(process.cwd(), saveAtPath));
+    LOG("    serve the game (tools/serve.js), open it, paste that file's one line into the");
+    LOG("    browser console, and the page reloads into the moment " + SAVE_AT + " unlocks.");
+    LOG("    WAIT ONE FRAME after the reload before asserting anything — tmp recomputes per");
+    LOG("    frame. In an automated browser, run setItem and the reload as TWO separate steps");
+    LOG("    (an in-script location.reload() raced the 5 s autosave in testing). This save is");
+    LOG("    for interaction testing, never a pacing verdict.");
+}
+
 // ---- the run ---------------------------------------------------------------
 const STEP = DT;
 const events = { firstPurchase: null, firstPrestige: {}, firstMilestone: {}, unlocks: {} };
@@ -485,6 +545,8 @@ const tick = () => {
     }
     updateMilestones();
     refreshUnlocks();
+    if (SAVE_AT !== null && !saveDumped && player[SAVE_AT] && player[SAVE_AT].unlocked) dumpSaveAt();
+    if (saveDumped) return;
     for (const id of layerOrder) if (LAYERS[id].type) { tryBuyUpgrades(id); tryBuyBuyables(id); }
     // prestige greedily, deepest row first so cascades settle
     for (const id of [...layerOrder].sort((a, b) => (LAYERS[b].row || 0) - (LAYERS[a].row || 0))) {
@@ -506,11 +568,13 @@ const tick = () => {
 const started = Date.now();
 while (t < MAXH * 3600) {
     tick();
+    if (saveDumped) break;   // --save-at ends the run at the snapshot tick
     const bought = layerOrder.reduce((n, id) => n + (player[id].upgrades.length || 0), 0);
     if (events.firstPurchase === null && bought > 0) events.firstPurchase = +t.toFixed(2);
     try { if (ENDGAME()) break; } catch (_) {}
     if (Date.now() - started > BUDGET) { LOG("(stopped at the " + Math.round(BUDGET / 1000) + " s wall-clock budget)"); break; }
 }
+if (SAVE_AT !== null && !saveDumped) LOG("  !! --save-at " + SAVE_AT + ": the layer never unlocked within the run — no save dumped.");
 for (const id of layerOrder) if (player[id].milestones.length) events.firstMilestone[id] = player[id].milestones.slice();
 
 // ---- report ---------------------------------------------------------------
@@ -526,6 +590,7 @@ const report = {
     layers: layerOrder.length,
     upgradesBought: layerOrder.reduce((n, id) => n + player[id].upgrades.length, 0),
     milestonesEarned: layerOrder.reduce((n, id) => n + player[id].milestones.length, 0),
+    saveAt: saveDumped ? path.basename(saveAtPath) : null,
     simIsLowerBound: true,
 };
 if (asJson) { console.log(JSON.stringify(report, null, 2)); }
@@ -536,7 +601,7 @@ else {
     LOG("  first prestige by layer   : " + (Object.keys(events.firstPrestige).length ? JSON.stringify(events.firstPrestige) : "none"));
     LOG("  peak income              : " + report.peakIncome + " at " + report.peakAtSeconds + " s");
     LOG("  upgrades / milestones    : " + report.upgradesBought + " / " + report.milestonesEarned);
-    LOG("  total to isEndgame()     : " + hours.toFixed(2) + " h" + (reached ? "" : "  (DID NOT REACH — check the endgame target vs the production curve)"));
+    LOG("  total to isEndgame()     : " + hours.toFixed(2) + " h" + (saveDumped ? "  (run cut short by --save-at — not a pacing run)" : reached ? "" : "  (DID NOT REACH — check the endgame target vs the production curve)"));
     if (reached && hours < 0.1)
         LOG("  !! NOT CALIBRATED: finishing this fast means the generic policy out-prestiged the\n" +
             "     game's own guards. The early timeline above is still valid; the total is not.\n" +
