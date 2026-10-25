@@ -346,7 +346,8 @@ function writeGameReadme(outDir, opts, modId) {
         `**${name}** is an incremental game built on [The Modding Tree](https://github.com/Acamaeda/The-Modding-Tree) v2.7.`,
         ``,
         `**Play:** open \`index.html\` in a browser — no build step. A local static server is optional`,
-        `(\`npx http-server .\`, \`python -m http.server\`).`,
+        `(\`npx http-server .\`, \`python -m http.server\`); after edits prefer the no-store server`,
+        `(\`node tools/serve.js\`, copied with the harness) so the browser never serves stale mod files.`,
         ``,
         `**Saving:** autosaves to localStorage under the save key derived from \`modInfo.id = "${modId}"\`.`,
         `Never change the id — changing it erases every save.`,
@@ -404,16 +405,27 @@ function main() {
         },
     });
 
-    // Patch index.html: ensure a charset meta so theme glyphs (×, —, emoji) survive
-    // any static server (M-CHARSET: without it some servers render them as mojibake).
+    // Patch index.html: (a) ensure a charset meta so theme glyphs (×, —, emoji) survive
+    // any static server (M-CHARSET: without it some servers render them as mojibake);
+    // (b) inject a boot-error collector that records message + stack first line — a bare
+    // message names the mood, not the file (The Smallpox Tree §12 #4: __bootErrors held
+    // only "X is not a function" until the collector learned to carry the stack's first line).
     const indexPath = path.join(outDir, "index.html");
     if (fs.existsSync(indexPath)) {
         let html = fs.readFileSync(indexPath, "utf8");
+        let touched = false;
         if (!/charset/i.test(html)) {
             html = html.replace(/<head>/i, '<head>\n\t<meta charset="utf-8" />');
-            fs.writeFileSync(indexPath, html, "utf8");
+            touched = true;
             console.log("Patched index.html: charset meta injected");
         }
+        if (!/__bootErrors/.test(html)) {
+            const collector = '<script>window.__bootErrors=[];window.addEventListener("error",e=>__bootErrors.push(String(e.message)+" @ "+(e.error&&e.error.stack?e.error.stack.split("\\n")[1]:"?")));window.addEventListener("unhandledrejection",e=>__bootErrors.push(String(e.reason)));</script>';
+            html = html.replace(/<\/head>/i, "\t" + collector + "\n</head>");
+            touched = true;
+            console.log("Patched index.html: boot-error collector injected (message + stack line)");
+        }
+        if (touched) fs.writeFileSync(indexPath, html, "utf8");
     }
 
     // Patch js/mod.js
@@ -476,7 +488,8 @@ Next steps (full pipeline in SKILL.md):
   3. STAGE 5 — run static checks:
        node "${path.resolve(__dirname, "static_checks.js")}" "${outDir}"
      Fix every FAIL before manual testing.
-  4. STAGE 7 — serve the folder with any static file server and open index.html.`);
+  4. STAGE 7 — serve the folder with the no-store server (node tools/serve.js, copied from
+     assets/harness/) — or any static file server — and open index.html.`);
 }
 
 main();

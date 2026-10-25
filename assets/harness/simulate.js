@@ -42,6 +42,7 @@
  * USAGE
  *   node assets/harness/simulate.js <game-folder> [--max-hours 200] [--json]
  *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --max-hours 200
+ *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --probe <endgame-layer>
  *   Copy to <game>/tools/simulate.js next to the game. Put every tunable
  *   constant in a modFile (e.g. js/tuning.js) that BOTH the game and this script
  *   read — otherwise you are tuning a number the game does not use.
@@ -54,6 +55,22 @@
  *                 prestige is bespoke needs its own branch
  *   · production  — getPointGen() is called directly; a game whose rate lives in
  *                 a helper must expose it (see js/tuning.js in the references)
+ *   · endgame probe — --probe <layer> prints the state at every press of that
+ *                 layer; give the layer a sim-only simProbeGates() hook returning
+ *                 [label, have, need] rows to see WHICH gate is the hard one.
+ *                 PROBE BEFORE KNOB: on The Smallpox Tree two blind knob turns
+ *                 did nothing, then the probe showed one gate at <0.1% slack
+ *                 while the others had 50× — a single knob fixed the pacing.
+ *
+ * ENGINE-FIDELITY PATCHES (each one was a real mis-measurement before it existed)
+ *   · static prestige is gated on baseAmount ≥ getNextAt (game.js:124), never on
+ *     gain ≥ 1 — gainOf floors to 1 below the requirement (Smallpox: a row-2
+ *     static cascade-wiped the root every tick; var frozen at 65 for 40 h)
+ *   · onPrestige(gain) runs BEFORE the gain is banked; resetsNothing() returns
+ *     AFTER banking and BEFORE the root is zeroed/cascade (game.js:211)
+ *   · update() receives a NUMERIC diff, exactly as the engine passes it
+ *     (game.js:353) — a layer that calls diff.times() without normalizing is
+ *     reported, not masked
  * ========================================================================== */
 "use strict";
 
@@ -94,9 +111,17 @@ const TRACE = argv.includes("--trace");
  * which only shows the instant each layer first fires. */
 const traceEveryIdx = argv.indexOf("--trace-every");
 const TRACE_EVERY = traceEveryIdx >= 0 ? Number(argv[traceEveryIdx + 1]) : 0;
+/* --probe <layer>: at EVERY prestige press of that layer, print the state line — and if the
+ * layer defines a sim-only simProbeGates() hook (returning [label, have, need] rows), print
+ * each endgame gate's surplus at that instant. Origin (The Smallpox Tree, 2026-10-25): after
+ * the measured total drifted out of band, two blind knob turns did nothing; the launch-
+ * instant surplus print then showed ONE gate at <0.1% slack while the others held 50× — a
+ * single knob (6 → 6.3) brought the run back in band. Probe before knob. */
+const probeIdx = argv.indexOf("--probe");
+const PROBE = probeIdx >= 0 ? argv[probeIdx + 1] : null;
 /* the value after a flag is not a path; when the flag is absent there is no such index, so the
  * guards must not become 0 — that would eat the game folder argument. */
-const FLAG_VALUE_IDX = new Set([maxHoursIdx, dtIdx, budgetIdx, clickIdx, traceEveryIdx].filter((i) => i >= 0).map((i) => i + 1));
+const FLAG_VALUE_IDX = new Set([maxHoursIdx, dtIdx, budgetIdx, clickIdx, traceEveryIdx, probeIdx].filter((i) => i >= 0).map((i) => i + 1));
 const game = path.resolve(argv.filter((a, i) => !a.startsWith("--") && !FLAG_VALUE_IDX.has(i))[0] || path.join(__dirname, "..", ".."));
 if (!fs.existsSync(path.join(game, "js", "mod.js"))) {
     console.error("no js/mod.js under " + game + " — pass the game folder as the first argument");
@@ -187,7 +212,10 @@ const modSrc = fs.readFileSync(path.join(game, "js", "mod.js"), "utf8");
 const mf = modSrc.match(/modFiles\s*:\s*\[([\s\S]*?)\]/);
 const modFiles = mf ? [...mf[1].matchAll(/["']([^"']+)["']/g)].map((m) => "js/" + m[1]) : [];
 const files = [];
-const push = (f) => { if (f && !files.includes(f) && !ENGINE.test(f) && !/tree\.js$/.test(f)) files.push(f); };
+/* Vendored third-party bundles (vue.min.js) are not mod code — Node has no `document`
+ * (same exclusion as tools/smoke.js; found after localizing Vue per the T2+ rule). */
+const VENDOR = /\/vue(\.min)?\.js$/;
+const push = (f) => { if (f && !files.includes(f) && !ENGINE.test(f) && !/tree\.js$/.test(f) && !VENDOR.test(f)) files.push(f); };
 htmlScripts.filter((f) => /\/lang\//.test(f)).forEach(push);
 push("js/mod.js"); modFiles.forEach(push); htmlScripts.forEach(push);
 for (const f of files) {
@@ -258,10 +286,52 @@ function gainOf(l) {
     if (g.gte(sc)) g = g.pow(layerSoftcapPower(l)).times(sc.pow(new Decimal(1).sub(layerSoftcapPower(l))));
     return g.floor().max(0);
 }
-const canPrestige = (l) => isPrestige(l) && gainOf(l).gte(1) && (typeof LAYERS[l].canReset !== "function" || LAYERS[l].canReset());
+/* Engine fidelity (game.js getNextAt, static branch): the next static level costs
+ * requires × base^(points^exponent / gainExp) × gainMult, and canReset for statics is
+ * baseAmount ≥ nextAt (game.js:124) — NOT gain ≥ 1. Gating statics on gain≥1 let them
+ * press below the requirement (gainOf returns the floor value 1 there), so a row-2
+ * static cascade-wiped the root currency every tick and starved rows 0-1 (found live on
+ * The Smallpox Tree: var frozen at 65 接种者 for 40 h with income 2e5/s). */
+const staticNextAt = (l) => {
+    const L = LAYERS[l];
+    const rm = reqOf(l);
+    const exp = L.exponent || 1;
+    const gexp = (typeof L.gainExp === "function") ? L.gainExp() : (L.gainExp || 1);
+    const dmult = (typeof L.directMult === "function") ? L.directMult() : (L.directMult || 1);
+    const baseNum = (L.base === undefined) ? 2 : L.base;
+    /* engine game.js:55 gates the resetGain term on `baseAmount.gte(nextAt)` — at rest
+     * (base below nextAt) the next-level cost is computed from points alone. Adding the
+     * buy-max gain unconditionally inflated the next-level cost and froze cc/mob at 0
+     * points for 29 h of sim time despite gain 21/16. */
+    let amt = player[l].points.div(dmult);
+    let cost = Decimal.pow(baseNum, amt.pow(exp).div(gexp)).times(layerGainMult(l)).times(rm).max(rm);
+    if (L.roundUpCost) cost = cost.ceil();
+    return cost;
+};
+const canPrestige = (l) => {
+    if (!isPrestige(l)) return false;
+    const L = LAYERS[l];
+    if (typeof L.canReset === "function") return !!L.canReset();
+    const base = (typeof L.baseAmount === "function") ? L.baseAmount() : player.points;
+    if (base.lt(reqOf(l))) return false;   // engine doReset's own gate (game.js:182)
+    if (L.type === "static") return base.gte(staticNextAt(l));   // game.js:124
+    return gainOf(l).gte(1);
+};
 function doPrestige(l) {
     const g = gainOf(l);
     if (g.lt(1)) return false;
+    if (PROBE === l) {
+        LOG("  probe " + l + " press @ " + (t / 3600).toFixed(2) + " h  gain=" + global.format(g) +
+            "  points=" + global.format(player[l].points));
+        if (typeof LAYERS[l].simProbeGates === "function") {
+            try {
+                for (const row of LAYERS[l].simProbeGates() || []) {
+                    const slack = (row[2] && row[2].gt && row[2].gt(0)) ? " (" + row[1].div(row[2]).toFixed(3) + "×)" : "";
+                    LOG("    gate " + row[0] + ": have " + global.format(row[1]) + " / need " + global.format(row[2]) + slack);
+                }
+            } catch (e) { LOG("    (simProbeGates threw: " + e.message + ")"); }
+        }
+    }
     if (TRACE && events.firstPrestige[l] === undefined) {
         const L = LAYERS[l];
         const base = (typeof L.baseAmount === "function") ? L.baseAmount() : player.points;
@@ -270,10 +340,18 @@ function doPrestige(l) {
             " exp=" + (L.exponent || 0.5) + " -> gain=" + global.format(g) +
             "  (points before=" + global.format(player[l].points) + ")");
     }
+    /* Engine fidelity (game.js doReset order): onPrestige(gain) runs BEFORE the gain is
+     * banked; resetsNothing() short-circuits AFTER banking and BEFORE the root currency is
+     * zeroed and the cascade runs (game.js:211). Skipping either line makes the port harsher
+     * than the engine and masks the game's real behavior (found live on The Smallpox Tree:
+     * var autoPrestige+resetsNothing was simulated as wiping cases every tick, so the row-2
+     * statics never unlocked and the run reported a false DID-NOT-REACH). */
+    if (typeof LAYERS[l].onPrestige === "function") { try { LAYERS[l].onPrestige(g); } catch (_) {} }
     player[l].points = player[l].points.add(g);
     if (player[l].best === undefined || player[l].points.gt(player[l].best)) player[l].best = player[l].points;
     if (player[l].total === undefined) player[l].total = new Decimal(0);
     player[l].total = player[l].total.add(g);
+    if (LAYERS[l].resetsNothing && LAYERS[l].resetsNothing()) return true;
     /* The engine zeroes the ROOT currency on every prestige (game.js doReset:
      * `player.points = (row == 0 ? 0 : getStartPoints())`) — the gain is measured against
      * a base the player has to earn back, so skipping this line hands the sim free income. */
@@ -367,6 +445,7 @@ function refreshUnlocks() {
 const STEP = DT;
 const events = { firstPurchase: null, firstPrestige: {}, firstMilestone: {}, unlocks: {} };
 const lastPress = {};   // per layer: the last simulated second the policy pressed its button
+const updateThrew = {}; // per layer: update() threw at least once (reported once, never swallowed)
 let t = 0, peakIncome = new Decimal(0), peakAt = 0;
 const tick = () => {
     // base currency
@@ -377,7 +456,22 @@ const tick = () => {
     // per-layer passive generation + custom ticks
     for (const id of layerOrder) {
         const L = LAYERS[id];
-        if (typeof L.update === "function") { try { L.update(new Decimal(DT)); } catch (_) {} }
+        if (typeof L.update === "function") {
+            /* The engine passes a NUMERIC diff to update() (game.js:353 `layers[layer].update(diff)`).
+             * Handing a Decimal here once masked a per-frame crash: the layer called diff.times(),
+             * which only exists on a Decimal — the real browser threw every tick while the sim ran
+             * clean (The Smallpox Tree §12 #2). So: numeric diff, and a throw is reported once,
+             * never silently swallowed. */
+            try { L.update(DT); }
+            catch (e) {
+                if (!updateThrew[id]) {
+                    updateThrew[id] = true;
+                    LOG("  !! layer " + id + " update() threw: " + e.message +
+                        "\n     The engine hands update() a NUMERIC diff — normalize with new Decimal(diff) before" +
+                        "\n     calling any method on it (static rule D-DIFFNUM catches this before the sim does).");
+                }
+            }
+        }
         if (typeof L.passiveGeneration === "function") {
             try {
                 const rate = L.passiveGeneration();

@@ -99,6 +99,13 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
             // phase-⑪ browser-verified rules (2026-10-24, from three generated games):
             "C-CONTENTSTR",    // layers.js layer z: a microtab's content: property is the bare
                                // string "upgrades" — the engine iterates it per character
+            // player-save hard-defect rules (2026-10-25, The Smallpox Tree round-3 feedback):
+            "D-CUSTOMNEXTAT",  // defects.js layer cu: custom with neither getNextAt nor
+                               // getResetGain — engine custom branches call both unguarded
+                               // every frame (game.js:32/:67); only a real browser hits it
+            "D-DIFFNUM",       // layers.js layer c: update() calls diff.times() on the raw
+                               // NUMERIC diff the engine passes (game.js:353) — the sim
+                               // passing a Decimal is exactly what masked this crash class
             // D-STARTDATA appears twice on purpose — layers.js layer "a" lacks `unlocked`, and
             // defects.js layer "q" has no startData AT ALL because it lives inside the factory.
             // That second instance is N-FACTORY's cascade, and the cascade is the point: one

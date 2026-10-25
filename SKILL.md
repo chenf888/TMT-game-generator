@@ -1,8 +1,8 @@
 ---
 name: tmt-game-generator
-description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 72 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
-description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 72 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
-description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 72 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
+description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 88 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
+description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 88 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
+description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 88 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
 version: 1.0.0
 author: TMT GG
 ---
@@ -18,7 +18,7 @@ This skill is self-contained. Everything it needs is in this folder:
 | Path | Role |
 |---|---|
 | `references/core/00–08` | Engine + coding handbook copies (00 overview, 01 Decimal rules, 02 mod.js, 03 layers API, 04 components, 05 UI, 06 idioms, 07 pitfalls/checklist, 08 real-game catalog) |
-| `references/design/09-Layer-Design-Patterns.md` | Design patterns P1–P17, blueprints, measured heuristics, anti-patterns A1–A10 |
+| `references/design/09-Layer-Design-Patterns.md` | Design patterns P1–P65, blueprints, measured heuristics, anti-patterns A1–A10 |
 | `references/design/10-Fun-Mechanics-and-Content-Organization.md` | The fun pass: effect-kind taxonomy K1–K9, microtabs organization standard, mechanic catalog M1–M21, per-blueprint fun quotas |
 | `references/design/11-Corpus-Numeric-Design.md` | **The wiring pass**: measured numeric baselines over all 329 real games — the 54.4%-no-effect finding, cost-ladder shapes, gain-curve ratios, softcap forms, and the ghost-field table |
 | `references/design/12-Author-Design-Wisdom.md` | **The author's own design notes** (Acamaeda, 2020–2023): pacing, upgrade/buyable discipline, cost-vs-softcap, gates, readability. §0 lists the four places this skill previously taught the opposite |
@@ -225,6 +225,12 @@ much of Stage 4 changes (handbook 15):
   real build: 370 sentences, 370 languages).
 - Optional style notes via Other: colour mood, naming voice (feeds per-layer `color`/`symbol`).
 
+For every tier above T1, also ask **which language is the DEFAULT** — a toggle is not a default
+(a real bilingual build shipped Chinese-default to an English-reading player, who had to ask).
+T2 records it as the flag's initial value in `startData` (`chinesemode: false` = English
+default) and it goes into brief §1; never change it silently afterwards — flipping it rewrites
+the saved preference of every existing player.
+
 T2 and above add four mandatory items regardless of tier: lang files load **before `js/mod.js`**;
 descriptions/titles/tooltips/`winText` are **functions**, never module-scope values; `main-display`
 is **overridden** (it hard-codes `You have` / `(x/sec)` — 07 Part F7); `scripts/i18n_check.js`
@@ -342,6 +348,12 @@ unseen.
   the generated source over-counts (it once reported 200 upgrades / 30 achievements for 100/15).
 - If template lookup fails, pass `--from <template-dir>` explicitly.
 - If the output dir exists, choose another or pass `--force`.
+- **Diff the engine copies the scaffolder wrote** against the bundled template's
+  `js/technical/` + `js/utils/` — two copies with the same version number have shipped
+  different `displays.js` behavior (one dimmed uncompleted achievements, one hid them:
+  N-ACHVIS). A divergence is not fatal; an unrecorded one is — note it in brief §10. When the
+  right fix is presentational and the engine file is the wrong place, a stylesheet rule with
+  `!important` over the inline style is the legitimate channel (no engine edits).
 
 **Scaffolding from a UI fork (`--from`).** A user may hand you their own TMT fork (one real build
 did: a restyled "Nebula" fork). Before generating a single layer:
@@ -413,6 +425,10 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
   name + tooltip, completed ones color-highlight (`.bought` green); the template's
   `achievementStyle()` is patched to dim instead of `visibility: hidden` (static rule
   N-ACHVIS fails if that engine default reappears). Never define `unlocked()` to hide goals.
+  The achievements tab carries an explicit **count row** (`X / N` — a display-text reading
+  `player.<id>.achievements.length / <total>`) at the top of its tabFormat: the engine renders
+  no counter, and players read one (a real build's players reported the page as broken
+  without it).
 
 ### 4.4 Theme pass (P14/P17)
 - Theme = structure (already fixed in Q1/brief): themed resource names, `symbol`s (2 chars),
@@ -426,7 +442,7 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
 
 ### 4.5 Structures no tool can see through (07 Part F)
 
-Each of these shipped as a defect in a real build, and each is invisible to all 84 rules:
+Each of these shipped as a defect in a real build, and each is invisible to all 88 rules:
 - **Never build a layer at runtime.** `addLayer(id, factory())` hides `row`, `startData` and every
   component from the checker and the harness (F11) — one build took 8 FAILs from this.
 - **One home for pacing constants** (`js/tuning.js`), read by the game *and* the simulator: a
@@ -453,7 +469,7 @@ node scripts/static_checks.js "<game-folder>"
   failure. Legitimate reasons do exist: a deliberate ×150 requires leap for a multi-row jump, a
   hard-capped currency whose ladder cannot span three orders, a sink layer that must never reset.
 - **The rule catalogue is the checker's own header, not this file.** `scripts/static_checks.js`
-  documents all 72 ids with their level, their provenance and the incident that produced each.
+  documents every rule id with their level, their provenance and the incident that produced each.
   Read it there: a second copy here would drift, and had already (this section was 20 rules
   behind). `--json` gives machine-readable output; the rules span `M-*` mod.js completeness,
   `C-*` banned calls, `D-*` design assertions, `N-*` negative examples from real builds, and
@@ -525,6 +541,18 @@ policy has been fitted to one known playthrough value — the script says so out
 finishes implausibly fast. Then complete the paper pass below and reconcile the two:
 **where they disagree, the simulation wins and the brief is what changes.**
 
+Quote the total at three step sizes (dt 0.5 / 1 / 2) and cite the dt-1 value with the spread —
+a real build measured 12.4 / 15.0 / 19.7 h for the same game (±25%). A total that swings more
+than that is measuring the harness, not the game.
+
+**Probe before knob.** When the measured total lands outside the band, do not turn pacing
+knobs blind: on a real build two blind knob turns did nothing, then a launch-instant surplus
+print showed ONE endgame gate at <0.1% slack while the others held 50× — a single knob
+(`6 → 6.3`) brought the run back in band. `tools/simulate.js --probe <layer>` prints the
+state at every press of that layer; give the layer a sim-only `simProbeGates()` hook returning
+`[label, have, need]` rows, read which gate is the hard one, then touch `js/tuning.js` — and
+revert the knobs that did nothing.
+
 Go through brief §4's table against `assets/balance-defaults.json` and annotate each number
 PASS/deviate-with-reason. Then do the reachability estimate (09 §4):
 
@@ -554,9 +582,17 @@ port auto-kept `points` and masked it), a render-time throw that aborted the Vue
 the page on "Loading...", and a custom layer whose `canReset()` could never be true. Stage 6.5
 exists so the **generator** finds these, not the player.
 
-1. **Boot.** Serve the folder and open it in a real browser. If console capture is unavailable,
+1. **Boot.** Serve the folder with the bundled no-store server — copy
+   `assets/harness/serve.js` to `<game>/tools/` alongside simulate.js and run
+   `node tools/serve.js`. `python -m http.server` / `npx http-server` send no cache headers,
+   and Chrome's heuristic cache keeps serving the pre-fix `js/mod.js` you just edited —
+   "the fix doesn't take effect" was a whole feedback round. The engine loader reads modFiles
+   from mod.js, so modFiles URLs cannot take a `?v=`; the server side is the only channel.
+   CSS links CAN and should: bump `?v=N` on the stylesheet link after any CSS edit.
+   Then open it in a real browser. If console capture is unavailable,
    add a collector to `index.html` (a per-game shell — scaffold already patches it):
-   `<script>window.__bootErrors=[];window.addEventListener("error",e=>__bootErrors.push(String(e.message)));window.addEventListener("unhandledrejection",e=>__bootErrors.push(String(e.reason)));</script>`
+   `<script>window.__bootErrors=[];window.addEventListener("error",e=>__bootErrors.push(String(e.message)+" @ "+(e.error&&e.error.stack?e.error.stack.split("\n")[1]:"?")));window.addEventListener("unhandledrejection",e=>__bootErrors.push(String(e.reason)));</script>`
+   — message plus stack first line, so a boot error names its file, not just its mood.
    **Gate: `__bootErrors` empty and the tree renders** (not stuck on "Loading..." — a Vue mount
    abort means one component threw at render time; bisect by opening tabs).
 2. **Open every layer tab and every microtab.** A layer that cannot be opened (`layerShown` /
@@ -567,7 +603,10 @@ exists so the **generator** finds these, not the player.
    invisible to every file-level check); click a clickable; for a board type, complete one match.
 4. **Lifecycle probe**: save → reload → values intact; if the game has non-ASCII in `player`
    (bilingual microtab keys do), also round-trip a manual export/import (the engine's Export
-   button is Latin1-only — 07 Part F).
+   button is Latin1-only — 07 Part F). After injecting state for a test, **wait one frame
+   before asserting** — `tmp` recomputes per frame, and a same-frame read after a write sees
+   the pre-tick value (a real build chased a phantom crash that existed only in the injected
+   same-frame assertion).
 5. **Console clean at the end.** Re-run Stage 5 after every fix; record each browser-only fix
    in the brief's **browser-verification section** (§12 of the template) — the pattern list
    doubles as regression notes for the next build. The full checklist and the engine traps it

@@ -12,6 +12,7 @@
 | Author | |
 | Points name (`modInfo.pointsName`) | |
 | Language mode (interview Q7) | English only / Chinese only / Bilingual (P17 ternaries) |
+| Default language (bilingual+ only, Q7) | English / Chinese — the toggle's initial value; flipping it later rewrites every player's saved preference |
 | One-line pitch | |
 
 ## 2. Interview record (answers → parameters) — the question ledger

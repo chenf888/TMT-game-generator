@@ -47,6 +47,22 @@ function shimLayerDef() {
 }
 addLayer("q", shimLayerDef())
 
+// [D-CUSTOMNEXTAT] custom layer defining NEITHER getNextAt nor getResetGain — the engine's
+// custom branches call both unguarded every frame (game.js:32 and game.js:67), so a real
+// browser throws "layers[layer].getNextAt is not a function" at boot, while static checks
+// and the Node smoke harness never call either path.
+addLayer("cu", {
+    name: "bespoke",
+    symbol: "U",
+    position: 2,
+    startData() { return { unlocked: false, points: new Decimal(0) } },
+    color: "#B341E0",
+    resource: "bespoke marks",
+    row: 4,
+    type: "custom",
+    layerShown() { return true },
+})
+
 addLayer("k", {
     name: "contract",
     symbol: "K",

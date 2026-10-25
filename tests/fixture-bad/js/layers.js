@@ -67,6 +67,7 @@ addLayer("c", {
     },                                   // [D-AUTOCOLLIDE] two milestones both claim autoUpgrade
     update(diff) {
         addPoints("c", new Decimal(1)) // [D-UPDATELOCK] production with no unlocked guard — locked layers run update() too
+        let boost = diff.times(2)      // [D-DIFFNUM] Decimal method on the raw diff — the engine passes a NUMERIC (game.js:353)
         player.c.milestones.push(0)      // [D-PUSHGUARD] no !hasMilestone guard
         let r = player.c.points.mod(2)   // [C-MOD] Decimal has no .mod
         player.c.points = player.c.points.sub(r)

@@ -2900,6 +2900,192 @@ const ID_COLLECTIONS = ["upgrades", "buyables", "milestones", "challenges", "ach
     if (!hits) pass("N-BUYABLEDEAD", "every buyable is consumed outside its own layer");
 }
 
+// D-TMPPOINTS — `tmp.<id>.<prop>` where the layer never defines <prop>: engine's updateTempData
+// caches ONLY layer-defined functions/values plus a fixed engine set; anything else is
+// permanently undefined, and a chained `.times`/`.gte` on it throws EVERY tick. The engine loop
+// guards re-entry with a bare `ticking` boolean, so one throw leaves it stuck true = the whole
+// game silently freezes (live case, The Smallpox Tree 2026-10-25: tmp.cc.points; 09 P64).
+{
+    let hits = 0;
+    const ENGINE_TMP_PROPS = new Set(["resetGain", "nextAt", "nextAtDisp", "canReset", "notify", "prestigeNotify", "trueGlowColor", "computedNodeStyle"]);
+    const TMP_TOPLEVEL = new Set(["pointGen", "other", "backgroundStyle", "displayThings", "scrolled", "gameEnded"]); // tmp.<these> are engine-owned, not layers
+    // names defined at the TOP LEVEL of the addLayer(...) object, by brace depth (indentation-style
+    // independent: monolith files use spaces, per-layer files use tabs — both yield depth 1)
+    const layerTopProps = new Map();
+    for (const L of layers) {
+        const props = new Set();
+        const start = L.code.indexOf("{");
+        if (start >= 0) {
+            const depthAt = new Array(L.code.length).fill(0);
+            let depth = 0;
+            for (let j = start; j < L.code.length; j++) {
+                const c = L.code[j];
+                if (c === "{") depth++;
+                else if (c === "}") depth--;
+                depthAt[j] = depth;
+            }
+            const identRe = /([A-Za-z_$][\w$]*)\s*:[^=]/g; // `prop:` object keys (not `==`)
+            const fnRe = /([A-Za-z_$][\w$]*)\s*\(/g;        // `prop(` method shorthand (also matches calls — filtered by depth)
+            let m;
+            while ((m = fnRe.exec(L.code))) {
+                if (m.index > start && depthAt[m.index] === 1) props.add(m[1]);
+            }
+            while ((m = identRe.exec(L.code))) {
+                if (m.index > start && depthAt[m.index] === 1) props.add(m[1]);
+            }
+        }
+        layerTopProps.set(L.id, props);
+    }
+    for (const f of allModderCandidates) {
+        const rec = loadRec(f);
+        const re = /\btmp\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)/g;
+        let m;
+        while ((m = re.exec(rec.clean))) {
+            if (rec.mask[m.index] !== 0) continue;
+            const id = m[1], prop = m[2];
+            if (TMP_TOPLEVEL.has(id)) continue;
+            if (!layerIds.has(id)) {
+                hits++;
+                add(FAIL, "D-TMPPOINTS", f, m.index, `tmp.${id}.${prop}: "${id}" is not a layer id (typo? engine never populates it)`, "Read player state or a real layer id; tmp.<id>.<prop> exists only for layers the engine knows.");
+                continue;
+            }
+            if (ENGINE_TMP_PROPS.has(prop)) continue;
+            // layer-defined = top level of the addLayer object; deeper hits (e.g. `points:` inside
+            // startData's return) are player state, which the engine never caches into tmp
+            if (layerTopProps.get(id).has(prop)) continue;
+            hits++;
+            add(FAIL, "D-TMPPOINTS", f, m.index, `tmp.${id}.${prop}: layer "${id}" never defines "${prop}", so the engine never caches it — it is permanently undefined and any chained Decimal call throws every tick (one throw leaves the engine's ticking flag stuck = silent whole-game freeze)`, "Read player.<id>.<prop> (player state) instead, or define the value as a layer function so updateTemp caches it (09 P64).");
+        }
+    }
+    if (!hits) pass("D-TMPPOINTS", "every tmp.<layer>.<prop> read targets a layer-defined or engine-populated field");
+}
+
+// D-CHALOWNRES — a challenge whose canComplete goal is the challenge layer's OWN prestige
+// resource AND whose onEnter zeroes that resource AND whose layer has no in-challenge passive
+// generation. The engine exits a challenge the moment its own layer prestiges, using the stale
+// pre-press cached verdict (game.js doReset -> completeChallenge), and the wiped resource has no
+// other in-challenge source — so this exact triple is mathematically unwinnable (live case,
+// The Smallpox Tree 2026-10-25: vac 11/12, sur 12, int 11; 09 P65). A goal on a banked resource
+// that SURVIVES entry (kept via the layer's doReset guard, no onEnter wipe — Solar Terms' sui
+// trials) is the legal variant and is not flagged.
+{
+    let hits = 0;
+    // helper function bodies from mod.js (own-resource reads can hide behind them, e.g. covPct())
+    const helperBodies = new Map();
+    {
+        const re = /function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g;
+        let m;
+        while ((m = re.exec(modRec.clean))) {
+            let depth = 0, i = m.index + m[0].length - 1;
+            for (; i < modRec.clean.length; i++) {
+                if (modRec.clean[i] === "{") depth++;
+                else if (modRec.clean[i] === "}") { depth--; if (depth === 0) break; }
+            }
+            helperBodies.set(m[1], modRec.clean.slice(m.index, i + 1));
+        }
+    }
+    for (const L of layers) {
+        // per-challenge scan: { id, start } chunks inside the challenges block
+        const chalRe = /(\d+)\s*:\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g;
+        let cm;
+        while ((cm = chalRe.exec(L.code))) {
+            const chalBody = cm[2];
+            const cc = chalBody.match(/canComplete\s*\(\s*\)\s*\{([^}]*)\}/);
+            if (!cc) continue;
+            const body = cc[1];
+            const ownRe = new RegExp("\\bplayer\\." + L.id + "\\.points\\b");
+            let via = "";
+            let hit = ownRe.test(body);
+            if (!hit) {
+                for (const [name, hb] of helperBodies) {
+                    if (new RegExp("\\b" + name + "\\s*\\(").test(body) && ownRe.test(hb)) { hit = true; via = ` (indirectly via ${name}())`; break; }
+                }
+            }
+            if (!hit) continue;
+            // legal variant: resource survives entry (no onEnter zeroing) -> satisfiable at entry
+            const oe = chalBody.match(/onEnter\s*\(\s*\)\s*\{([^}]*)\}/);
+            const wipesOnEnter = oe && new RegExp("player\\." + L.id + "\\.points\\s*=").test(oe[1]);
+            if (!wipesOnEnter) continue;
+            const pg = L.code.match(/passiveGeneration\s*\(\s*\)\s*\{([^}]*)\}/);
+            if (pg && new RegExp('inChallenge\\(\\s*["\']' + L.id + '["\']').test(pg[1])) continue; // in-challenge passive gen: goal can climb on its own
+            hits++;
+            add(FAIL, "D-CHALOWNRES", L.file, L.start + cm.index, `layer "${L.id}" challenge ${cm[1]}: canComplete goal${via} is the layer's own prestige resource (player.${L.id}.points), onEnter zeroes it, and the layer has no inChallenge passive generation — prestiging this layer immediately exits the challenge on a stale cached verdict, so the challenge is unwinnable`, "Add an inChallenge(\"" + L.id + "\") branch to the layer's passiveGeneration() (goal climbs on its own; claim by clicking the challenge), or stop wiping the resource in onEnter so a pre-banked amount satisfies the goal at entry (09 P65).");
+        }
+    }
+    if (!hits) pass("D-CHALOWNRES", "no challenge wipes its own prestige-resource goal on entry without in-challenge passive generation");
+}
+
+// D-CUSTOMNEXTAT — a custom layer must define getNextAt() AND getResetGain(): the engine's
+// getNextAt() custom branch calls `layers[layer].getNextAt(canMax)` with NO guard
+// (game.js:67), and getResetGain() likewise (game.js:32) — both run every frame from temp
+// recompute, so an undefined hook is "layers[layer].getNextAt is not a function" at boot
+// with Vue stuck on Loading. Static checks and the Node smoke harness never call these
+// paths — ONLY a real browser does, which is exactly the class this checker exists to
+// pre-empt (live case, The Smallpox Tree 2026-10-25 §12 #1: cmp/cert booted into a white
+// screen until getNextAt was added; 09 P8).
+{
+    let hits = 0;
+    for (const L of layers) {
+        if (L.isUtility || L.type !== "custom") continue;
+        const mask = maskOf(L);
+        if (!mask) continue;
+        const has = (name) => codeMatches(L.code, mask, new RegExp("(?:^|[,{\\n])\\s*" + name + "\\s*[(:]", "g")).length > 0;
+        if (!has("getNextAt")) {
+            hits++;
+            add(FAIL, "D-CUSTOMNEXTAT", L.file, L.start,
+                `CUSTOM layer "${L.id}" defines no getNextAt() — the engine's getNextAt() custom branch calls layers.${L.id}.getNextAt(canMax) unguarded (game.js:67) every frame from temp recompute, so a real browser throws "layers[layer].getNextAt is not a function" at boot and Vue stays on Loading. Static checks and the Node harness never call it, which is why this must be caught in source.`,
+                "Define `getNextAt(canMax) { ... }` returning a Decimal (the cost of the next unit), per 09 P8.");
+        }
+        if (!has("getResetGain")) {
+            hits++;
+            add(FAIL, "D-CUSTOMNEXTAT", L.file, L.start,
+                `CUSTOM layer "${L.id}" defines no getResetGain() — the engine's getResetGain() custom branch calls layers.${L.id}.getResetGain() unguarded (game.js:32) every frame, so tmp.${L.id}.resetGain is a thrown error / undefined in a real browser while the Node harness never calls it (09 P8).`,
+                "Define `getResetGain() { ... }` returning a Decimal gain for one press (0 when none), per 09 P8.");
+        }
+    }
+    if (!hits) pass("D-CUSTOMNEXTAT", "every custom layer defines getNextAt() and getResetGain()");
+}
+
+// D-DIFFNUM — the engine hands layer update() a NUMERIC diff (game.js:353
+// `layers[layer].update(diff)`; the same loop does `diff > limit` and
+// `tmp.pointGen.times(diff)` on it as a number). Any METHOD call on the raw parameter
+// (`diff.times(...)`, `diff.add(...)`) throws TypeError EVERY tick in a real browser.
+// A test harness that passes a Decimal masks exactly this crash — the bundled simulator
+// now passes the numeric diff and reports the throw, and this rule catches it in source
+// (live case, The Smallpox Tree 2026-10-25 §12 #2: `diff.times is not a function` every
+// frame after sur unlocked; the sim had run clean for hours).
+{
+    let hits = 0;
+    const METHODS = "(?:times|add|sub|mul|div|pow|sqrt|cbrt|log|exp|max|min|gte|gt|lte|lt|eq|floor|ceil|round|neg|abs|recip|toNumber|toFixed|toString)";
+    for (const L of layers) {
+        if (L.isUtility) continue;
+        const mask = maskOf(L);
+        if (!mask) continue;
+        for (const dm of codeMatches(L.code, mask, /(?:^|[,{\n])\s*update\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g)) {
+            const param = dm[1];
+            const brace = L.code.indexOf("{", dm.index);
+            const end = matchBracketFrom(L.code, brace);
+            if (end < 0) continue;
+            const body = L.code.slice(brace, end + 1);
+            const bodyMask = mask.slice(brace, end + 1);
+            // normalized anywhere in the body (`diff = new Decimal(diff)`) -> every later read is Decimal-safe
+            if (codeMatches(body, bodyMask, new RegExp("\\b" + param + "\\s*=\\s*new\\s+Decimal\\s*\\(\\s*" + param, "g")).length) continue;
+            const callRe = new RegExp("\\b(" + param + ")\\.(" + METHODS + ")\\s*\\(", "g");
+            const seen = new Set();
+            for (const mm of codeMatches(body, bodyMask, callRe)) {
+                const key = mm[1] + "." + mm[2];
+                if (seen.has(key)) continue; // one finding per param.method, not per call site
+                seen.add(key);
+                hits++;
+                add(FAIL, "D-DIFFNUM", L.file, L.start + dm.index,
+                    `layer "${L.id}" update() calls a Decimal method on its raw diff parameter (\`${key}(...)\`) — the engine passes update() a NUMERIC diff (game.js:353), so every method call on it throws TypeError every tick in a real browser, while a harness passing a Decimal runs clean and hides it.`,
+                    "Normalize at the top of the hook: `update(diff) { diff = new Decimal(diff); ... }` — plain arithmetic like `diff * 2` is fine on the number; only method calls need the Decimal.");
+            }
+        }
+    }
+    if (!hits) pass("D-DIFFNUM", "no update() calls Decimal methods on the raw numeric diff");
+}
+
 // ---------------------------------------------------------------------------
 // report
 // ---------------------------------------------------------------------------

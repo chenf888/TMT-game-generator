@@ -46,10 +46,10 @@ source, a one-layer 100-hour monolith, a 16.7-million-layer colour cube, and mor
   stackable **modifiers** (registry v1.1.0) add optional mechanics with hard dependencies:
   `score-attack`, `minigame`, `boss-rush`, `gacha`, `casino`, `story`, and the structural
   `sim`/`board`/`challenges`/`caps`. See `references/design/13`.
-- **The pipeline verifies the game, not just the source.** An 84-rule static checker reads the
+- **The pipeline verifies the game, not just the source.** An 88-rule static checker reads the
   code; a load-time harness runs it and a pacing simulator plays it. All three were added because
   real briefs kept passing every text-level rule and then failing in play.
-- **84-rule static checker** — every hard rule and every regression caught in real
+- **88-rule static checker** — every hard rule and every regression caught in real
   generated games is automated (`scripts/static_checks.js`): Decimal discipline, row
   contiguity, requires monotonicity, dead-end unlock upgrades, self-scaling compounding
   budgets, achievement visibility, **effects that nothing consumes**, unread engine fields,
@@ -114,7 +114,7 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
 References load **on demand** (`references/core/00–08` engine handbook,
-`references/design/09–15` — 63 design patterns (P1–P63, from the corpus crawl plus full-game
+`references/design/09–15` — 65 design patterns (P1–P65, from the corpus crawl plus full-game
 deep-reads), fun mechanics & content organization (M1–M21), corpus-calibrated numeric design,
 the engine author's own notes, the game-type judgment guide, measurement & harness, and the
 text layer), keeping context small.
@@ -152,7 +152,7 @@ tmt-game-generator/
 │   ├── scaffold.js           # template copy + mod.js patcher + .tmt-profile.json writer
 │   ├── pack.js               # builds dist/<name>/ — the shippable package the platform
 │   │                         #   requires (frontmatter + directory name must match `name`)
-│   ├── static_checks.js      # 84-rule mod-code checker (FAIL/WARN/PASS report, --json,
+│   ├── static_checks.js      # 88-rule mod-code checker (FAIL/WARN/PASS report, --json,
 │   │                         #   --profile <typeId> | --no-profile)
 │   └── i18n_check.js         # text-layer integrity (missing keys, duplicate language codes,
 │                             #   duplicate endonyms, pack parity, placeholder tokens);
