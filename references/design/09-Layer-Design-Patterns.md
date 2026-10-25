@@ -60,7 +60,7 @@ Metrics from `design-metrics.json`; `U/M/C/B/A` = upgrades/milestones/challenges
 
 ## 2. Named design patterns
 
-Each pattern: **What / When to use / Why it works / real code / variants**. Source files are named by their dataset filename in the source corpus (not shipped with this skill). P1–P17 come from the corpus crawl; P18–P29 add *One Dev One Layer* (接力树, an 8-author relay tree analyzed as a full game outside the corpus), P30–P43 add *Celestial Incremental* (same), and P44–P63 come from five corpus games read in depth (C0v1d Plague Tree, The Mining Incremental Table, Incrementreeverse, The Tree Of Life, The Prestige Chain). Tags: `[required]`/`[recommended]` = use in normal generation; `[advanced]` = needs a checker guardrail or blueprint gate; `[optional]` = flavor.
+Each pattern: **What / When to use / Why it works / real code / variants**. Source files are named by their dataset filename in the source corpus (not shipped with this skill). P1–P17 come from the corpus crawl; P18–P29 add *One Dev One Layer* (接力树, an 8-author relay tree analyzed as a full game outside the corpus), P30–P43 add *Celestial Incremental* (same), and P44–P63 come from five corpus games read in depth (C0v1d Plague Tree, The Mining Incremental Table, Incrementreeverse, The Tree Of Life, The Prestige Chain); P64–P65 come from live player-save debugging of The Smallpox Tree (2026-10-25: silent whole-game freeze + four unwinnable challenges). Tags: `[required]`/`[recommended]` = use in normal generation; `[advanced]` = needs a checker guardrail or blueprint gate; `[optional]` = flavor.
 
 ---
 
@@ -1195,6 +1195,22 @@ function getChallengeFactor(comps){
 **What:** decorative tree nodes via `layerShown(){ return "ghost" }` (a truthy-string trick — the checker's `D-LAYERSHOWNBOOL` wants this as an explicit boolean), and a 5×5 goal board ("00"–"44") paying medals/tokens with five independent autobuy toggles.
 
 **When:** pure flavor; the goal grid doubles as a challenge-hub progress dashboard.
+
+---
+
+### P64 — tmp Reads Only Layer-Defined Props（player 态 vs tmp 缓存）  `[required]`
+
+**What:** mod 代码读层状态一律 `player.<id>.<field>`；`tmp.<id>.<prop>` 只有当**层文件里定义过该 prop**（函数或字面量，引擎 updateTempData 只缓存层定义过的项）或属于引擎统一填充集（`resetGain/nextAt/nextAtDisp/canReset/notify/prestigeNotify/trueGlowColor/computedNodeStyle`）时才存在——其余恒 `undefined`，链式 `.times` 当场抛错。
+
+**Why（实案，The Smallpox Tree 2026-10-25）:** `pressureRate()` 写了 `tmp.cc.points`——cc 层没有 `points()` 函数，字段恒 undefined；cc 解锁的存档每帧抛 `Cannot read properties of undefined (reading 'times')`，而引擎主循环用 `ticking` 布尔防重入，**一帧抛错 = 标志永远卡 true = 整局静默冻结**（无控制台报错——首错发生在任何监听器挂载前）。模拟器 layerStub 对任意属性返回 `Decimal(1)`，完全掩盖此类缺陷；js/smoke 也抓不到。护栏 `D-TMPPOINTS`（FAIL）。
+
+---
+
+### P65 — Challenge Goals Never On The Challenge Layer's Own Prestige Resource  `[required]`
+
+**What:** 挑战 `canComplete`（含经 helper 函数间接）读 `player.<本层>.points` 作目标时，该层必须提供**挑战内被动增长**（`passiveGeneration()` 的 `inChallenge("<本层>", <id>)` 分支），或把目标改到别的资源；描述文案要提示"在本层 prestige 会中止挑战"。
+
+**Why（同案）:** 引擎里 prestige 挑战层自身 → `doReset` 的 `completeChallenge`（game.js:216）用**按压前一帧的缓存判定**退出挑战（canComplete 读 tmp 缓存，永远是进入时的 false）——目标 = 本层 prestige 资源（该资源层内唯一来源是被禁止的 prestige）的挑战**数学上不可完成**。四个挑战（vac 11/12、sur 12、int 11）全部踩中；修复 = 挑战内 passive 分层速率（normal 层 ~0.1、static 层 ~0.5 × resetGain/s），目标自爬、达标点挑战框领取。合法对照 A：目标读**低行层资源**（sur 11 读 var.points，行内 prestige 不触发退出）或 **update() 自增状态**（sur 13 读 pressure）。合法对照 B（Solar-Terms 八节试）：目标读本层资源但**入场不清银行**（顶层 doReset 守卫保数据、无 onEnter 清零）——带着存量入场即可达标；护栏只在「onEnter 清零 + 无挑战内被动」齐备时 FAIL（D-CHALOWNRES）。注意 static 层的自动化若走 `autoPrestige`（每帧自动按），passiveGeneration 不要再叠同一层，终局会双倍计入。
 
 ---
 

@@ -154,6 +154,10 @@ Rules of thumb (all from 8+ games):
 9. **Mega-layers must microtab** (2026-10-24 add): celestial's 17.8k-line `ct` layer stays
    navigable only because every content group is a tab. Past ~40 content items without
    microtabs is A-level scroll hell (`D-MICROTABS` already fires at 16).
+10. **The achievements tab carries a count row** (2026-10-25 add, Smallpox round-2 feedback):
+   a `["display-text", …]` reading `player.<id>.achievements.length / <total>` at the top of
+   the side layer's tabFormat. The engine's achievements component renders no counter, and
+   players read one — without it the page was reported as broken.
 
 ---
 

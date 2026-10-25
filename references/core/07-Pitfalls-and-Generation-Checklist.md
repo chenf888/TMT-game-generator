@@ -100,7 +100,9 @@ Each of these shipped broken once and passed every other rule with 0 FAIL. See [
 - [ ] Particles/interactive tree nodes only if they add feedback (not noise).
 
 ### Step 6 — Verify (functional QA)
-- [ ] Serve statically, open `index.html`; **console shows no errors**.
+- [ ] Serve statically (`node tools/serve.js` — no-store; a plain `python -m http.server`
+      once made a fix look ineffective via Chrome's heuristic cache), open `index.html`;
+      **console shows no errors**.
 - [ ] First prestige reachable in a few minutes; `hotkey` works.
 - [ ] Each layer: prestige → upgrades purchasable → effects visible in numbers.
 - [ ] Resets cascade correctly: prestiging a high row resets lower layers and keeps what `doReset`/`layerDataReset` intend.
