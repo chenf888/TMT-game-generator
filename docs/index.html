@@ -256,11 +256,12 @@ footer a { color: var(--blue); }
   <div class="wrap masthead-inner">
     <a class="wordmark" href="#top">
       <strong><span class="lang-en">TMT Game Generator</span><span class="lang-zh">TMT 游戏生成器</span></strong>
-      <span>tmt-game-generator v1.1.2</span>
+      <span>tmt-game-generator v1.1.3</span>
     </a>
     <nav aria-label="Page / 页面导航">
       <a href="#data"><span class="lang-en">Data</span><span class="lang-zh">数据</span></a>
       <a href="#pipeline"><span class="lang-en">Pipeline</span><span class="lang-zh">流水线</span></a>
+      <a href="#start"><span class="lang-en">Start</span><span class="lang-zh">入口</span></a>
       <a href="#types"><span class="lang-en">Types</span><span class="lang-zh">类型</span></a>
       <a href="#install"><span class="lang-en">Install</span><span class="lang-zh">安装</span></a>
       <a class="gh" href="https://github.com/chenf888/TMT-game-generator" rel="noopener">GitHub</a>
@@ -402,6 +403,44 @@ footer a { color: var(--blue); }
   </div>
 </section>
 
+<!-- ============================================================= start -->
+<section id="start">
+  <div class="wrap">
+    <h2><span class="lang-en">Three ways in</span><span class="lang-zh">三种入口</span></h2>
+    <p class="section-sub lang-en">All three run the same pipeline. What differs is who makes the design decisions — you, the agent, or a prompt you write once and reuse.</p>
+    <p class="section-sub lang-zh">三种入口走同一条流水线，区别只在设计由谁决定——你、agent，还是你写一次就能复用的提示词。</p>
+    <table class="type-table">
+      <thead>
+        <tr>
+          <th scope="col"><span class="lang-en">Entry</span><span class="lang-zh">入口</span></th>
+          <th scope="col"><span class="lang-en">Use it when</span><span class="lang-zh">什么时候用</span></th>
+          <th scope="col"><span class="lang-en">What changes</span><span class="lang-zh">会改变什么</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="tid" data-label-en="Entry" data-label-zh="入口"><span class="lang-en">One sentence</span><span class="lang-zh">一句话</span></td>
+          <td data-label-en="Use it when" data-label-zh="什么时候用"><span class="lang-en">You want to start now and let the interview pull the design out of you.</span><span class="lang-zh">想立刻开始，让采访把设计问出来。</span></td>
+          <td data-label-en="What changes" data-label-zh="会改变什么"><span class="lang-en">Nine questions, one confirmation, then this project's default look and balance defaults.</span><span class="lang-zh">九个问题、一次确认，之后是本项目的默认外观与默认数值。</span></td>
+        </tr>
+        <tr>
+          <td class="tid" data-label-en="Entry" data-label-zh="入口"><span class="lang-en">Full prompt</span><span class="lang-zh">完整提示词</span></td>
+          <td data-label-en="Use it when" data-label-zh="什么时候用"><span class="lang-en">You already know the game and would rather write the spec than answer questions.</span><span class="lang-zh">你已经想清楚要做什么，宁愿写规格也不想答题。</span></td>
+          <td data-label-en="What changes" data-label-zh="会改变什么"><span class="lang-en">The interview becomes a confirmation pass. Every gate unchanged.</span><span class="lang-zh">采访变成一次确认。所有门禁不变。</span></td>
+        </tr>
+        <tr>
+          <td class="tid" data-label-en="Entry" data-label-zh="入口"><span class="lang-en">Large-game prompt</span><span class="lang-zh">大型游戏提示词</span></td>
+          <td data-label-en="Use it when" data-label-zh="什么时候用"><span class="lang-en">You want 25+ layers and a game that does not look like a default mod tree.</span><span class="lang-zh">你要 25 层以上，且一眼看不出是默认模组树。</span></td>
+          <td data-label-en="What changes" data-label-zh="会改变什么"><span class="lang-en">Rebuilt background, CSS-drawn icons, redesigned controls and navigation, engine edits allowed, chapter-by-chapter delivery. Every gate still runs.</span><span class="lang-zh">重建背景、CSS 绘制图标、重做控件与导航，允许改引擎，按章交付。所有门禁照走。</span></td>
+        </tr>
+      </tbody>
+      <caption><span class="lang-en">Large-game prompt: assets/large-game-prompt.md · Full prompt: assets/full-prompt-template.md</span><span class="lang-zh">大型游戏提示词：assets/large-game-prompt.md · 完整提示词：assets/full-prompt-template.md</span></caption>
+    </table>
+    <p class="type-note lang-en"><strong>Recommended for large builds.</strong> Paste <em>assets/large-game-prompt.md</em> into the agent and fill its §11. It is opt-in: if you open with one sentence, the skill never applies it, never suggests it, and never detours through it.</p>
+    <p class="type-note lang-zh"><strong>做大型游戏建议用它。</strong>把 <em>assets/large-game-prompt.md</em> 贴给 agent，填好 §11 即可。它是自愿启用的：如果你用一句话开场，技能不会应用它、不会推荐它，也不会绕道去问。</p>
+  </div>
+</section>
+
 <!-- ============================================================= types -->
 <section id="types">
   <div class="wrap">
@@ -476,6 +515,7 @@ footer a { color: var(--blue); }
           <li>“Build a prestige tree game where you breed dragons”</li>
           <li><span class="lang-en">or, where the tool supports it: </span><span class="lang-zh">或在支持斜杠命令的工具里：</span><em>/tmt-game-generator</em></li>
         </ul>
+        <p class="req"><span class="lang-en">For 25+ layers and a look of its own, paste <em>assets/large-game-prompt.md</em> instead. A one-sentence request stays the default path and never pulls that prompt in.</span><span class="lang-zh">要做 25 层以上、且外观自成一套，改为粘贴 <em>assets/large-game-prompt.md</em>。一句话仍是默认路径，不会自动引入那份提示词。</span></p>
         <p class="req"><span class="lang-en">Full docs and source: </span><span class="lang-zh">仓库与完整文档见 </span><a href="https://github.com/chenf888/TMT-game-generator" rel="noopener">GitHub</a><span class="lang-en">.</span><span class="lang-zh">。</span></p>
       </div>
     </div>

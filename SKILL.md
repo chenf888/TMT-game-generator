@@ -3,7 +3,7 @@ name: tmt-game-generator
 description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 89 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
 description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 89 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
 description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 89 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
-version: 1.1.2
+version: 1.1.3
 author: TMT GG
 ---
 
@@ -29,6 +29,8 @@ This skill is self-contained. Everything it needs is in this folder:
 | `assets/balance-defaults.json` | Machine-readable measured balance defaults (from 09 §4) + `corpusBaselines` (from 11) |
 | `assets/fun-quota.json` | Machine-readable fun-density quotas per blueprint (from 10 §5) |
 | `assets/design-brief-template.md` | The design document you fill BEFORE coding |
+| `assets/full-prompt-template.md` | The **complete-prompt template** the user fills INSTEAD of the interview (Stage 1 express input): phases, signature mechanics, story, numbers — depth-first entry for games the user already understands |
+| `assets/large-game-prompt.md` | A **standalone, user-sendable prompt** for a 25+ layer game that does NOT look like this pipeline's default output: redesigned background/icons/controls/navigation, explicit permission to edit the engine, and a strict batch delivery format. **Applied only when the user pastes it** — a one-sentence request never pulls it in, and no gate is waived when it is used |
 | `scripts/scaffold.js` | Creates the game folder from the TMT template |
 | `scripts/static_checks.js` | Post-generation static checks (FAIL/WARN/PASS report) |
 | `scripts/i18n_check.js` | Text-layer integrity (only when the game has `js/lang/`; exits 0 silently otherwise) |
@@ -90,6 +92,27 @@ decide", the words *user-delegated*, the AI's choice, and the user's confirmatio
 choice. A question without a ledger row was **not asked**; Stage 2 check 22 fails and Stage 3
 is blocked. Asking every one of them is the pipeline's job, not a courtesy — the historical
 failure mode was the AI quietly deciding Q5/Q8-flavored choices itself.
+
+**Express input — the full-prompt template.** If the user's opening message is (or attaches)
+a filled `assets/full-prompt-template.md`, Stage 1 is a **confirmation pass, not an
+interview**: every filled field is the user's verbatim answer — transcribe it into the brief's
+§2 ledger with source `full-prompt`. Still do: (1) restate the Q1 three-line recap from its
+§B and lock it only on their confirmation; (2) with a Q4b answer written, run classify.js as
+an audit — the user's explicit pick wins over the keyword route, but the script still checks
+every modifier's hard dependency and reports the drops; (3) ask every blank field — a blank
+in the template is a question not yet asked, never an AI decision; (4) the template's own
+defaults ("blank = default") are proposals the user accepted by leaving them blank — record them as
+`user-delegated → default (user confirmed: full-prompt)` so the ledger stays complete. The
+template replaces the interview, **never the gates**: the Stage 2 brief confirmation and
+every later stage run unchanged.
+
+**Opt-in only — the large-game prompt.** `assets/large-game-prompt.md` is a separate, harsher
+brief for 25+ layer builds that deliberately break the default look (it authorizes engine edits).
+Use it **only when the user pastes it or explicitly asks for that file**. A one-sentence request
+("make me an incremental game about X") must run the default pipeline and must not be redirected
+to it — not as a suggestion, not as a "would you like the advanced prompt?" detour. When it *is*
+supplied, its style and scale rules outrank the pipeline's default aesthetics, while every gate
+in Stage 2 onward still runs; see its §8 for the precedence contract.
 
 **Step 0 (only if the user gave no theme):** ask what the game is about (free text), then do Q1.
 If the user said "you pick the theme", propose 2–3 candidates **and wait for their pick** —

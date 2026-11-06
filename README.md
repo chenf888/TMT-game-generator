@@ -60,6 +60,19 @@ source, a one-layer 100-hour monolith, a 16.7-million-layer colour cube, and mor
   interview question was actually asked and answered by the user. Rules are gated per type:
   a game with no declared type is checked exactly as before.
 
+## Two ways to start
+
+| Entry | Use it when | What you get |
+|---|---|---|
+| **One sentence** (default) | You want the pipeline to make the decisions with you, question by question | The nine-question interview, every gate, this project's default look |
+| **`assets/full-prompt-template.md`** | You already know the game you want and would rather write the spec than answer questions | The interview becomes a confirmation pass; every gate unchanged |
+| **`assets/large-game-prompt.md`** — **recommended for large builds** | You want 25+ layers and a game that does **not** look like a default mod tree | A pasted, self-contained prompt: rebuilt background, CSS-drawn icons, redesigned controls and navigation, explicit permission to edit the engine, and a strict chapter-by-chapter delivery format |
+
+**The large-game prompt is opt-in.** Paste it and it overrides the default aesthetics while every gate
+(design-brief confirmation, static checks, smoke test, pacing simulation, browser pass) still runs.
+Start with one sentence instead, and the skill ignores that file completely — no mention of it, no
+"would you like the advanced prompt?" detour, no change to the default path.
+
 ## Requirements
 
 - Any agent tool that loads SKILL.md skills (see Install).
@@ -118,6 +131,13 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | 6.5 Browser verification | The generator itself opens the served game: `__bootErrors` empty, every layer tab and microtab opens, one real prestige per layer kind, save→reload intact, console clean. Three builds shipped browser-only breakages before this stage existed (boot race, self-wiping prestige, a render throw that froze the page on "Loading..."). Late layers open in seconds via `--save-at` (the page reloads at that layer's unlock moment); feel proxies land in brief §12. Per-layer micro-gates shrink this pass but never replace it. Fixes are recorded in brief §12 |
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
+**Express entry — skip the interview:** for a game you already understand, fill
+`assets/full-prompt-template.md` (the complete-prompt template: identity, the §2 question
+ledger pre-answered, content phases, signature mechanics, story, numbers — written in your
+language) and hand it to the agent instead of answering the interview. It replaces Stage 1's
+questioning, not any gate: filled fields are transcribed verbatim into the question ledger,
+blank fields are still asked, the Q1 recap and the Stage 2 brief are still confirmed by you.
+
 References load **on demand** (`references/core/00–08` engine handbook,
 `references/design/09–15` — 65 design patterns (P1–P65, from the corpus crawl plus full-game
 deep-reads), fun mechanics & content organization (M1–M21), corpus-calibrated numeric design,
@@ -145,6 +165,10 @@ tmt-game-generator/
 │   ├── fun-quota.json        # per-blueprint fun-density quotas + the thresholds the
 │   │                         #   checker READS AT RUN TIME
 │   ├── design-brief-template.md  # with the §2 question ledger the checker audits (D-QLEDGER)
+│   ├── full-prompt-template.md   # the complete-prompt entry: user fills it INSTEAD of the
+│   │                             #   interview (stage-1 express input; gates unchanged)
+│   ├── large-game-prompt.md      # standalone prompt to paste into any agent: 25+ layers,
+│   │                             #   redesigned visuals, engine edits allowed, batched delivery
 │   └── harness/              # copy into <game>/tools/ — these RUN the game, they don't read it
 │       ├── smoke.js          #   load-time harness (stage 5.5): loads the real mod files with
 │       │                     #   engine stubs; catches load-time throws, duplicate ids,
