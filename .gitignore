@@ -1,0 +1,6 @@
+# smoke-test scratch output (run_tests.js scaffolds here)
+tests/.tmp-scaffold/
+
+# OS junk
+Thumbs.db
+.DS_Store

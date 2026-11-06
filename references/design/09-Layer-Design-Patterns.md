@@ -467,7 +467,7 @@ if (hasChallenge('invincible_star', 12)) exp = exp.times(1.1)   // completion re
 
 Small habits found across top games that make 10k-line layers maintainable (and generated code reviewable):
 
-- **`window.<lang>mode` i18n ternaries** and parallel `resourceEN` fields (Gaokao, Mining) — ship bilingual UI from one codebase.
+- **`window.<lang>mode` i18n ternaries** and parallel `resourceEN` fields (Gaokao, Mining) — ship bilingual UI from one codebase. The language **switch lives in the Settings panel** (the options-tab, via an overridden `js/technical/systemComponents.js`) — **never a standalone/floating button** (static rule N-LANGTOGGLE; the reference shape is in handbook 15).
 - **Formula-on-Shift**: `["display-text", function () { if (shiftDown) return "公式：..." }]` (Mining) — experts get exact formulas, newcomers don't drown.
 - **Author comments at integration points** — e.g. Mario Maker leaves `//冲突点位，需要调整` ("automation grant collision, needs tuning") right where two milestones both grant `autoUpgrade`; generated games should instead *assert* uniqueness at build time (see 07 checklist).
 - **`milestoneOverpowered()` / `overpowered()`** second-tier milestone effects (Mario Maker) — milestones evolve when a late upgrade is bought; keeps early text honest without rewriting.

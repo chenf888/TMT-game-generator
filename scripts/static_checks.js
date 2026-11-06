@@ -772,7 +772,7 @@ for (const f of allModderCandidates) {
         // prestige requirements (07 rule 7)
         if (info.type === "normal" || info.type === "static") {
             const miss = [];
-            if (!/\bbaseResource\s*:/.test(L.code)) miss.push("baseResource");
+            if (!/\bbaseResource\s*:/.test(L.code) && !/\bbaseResource\s*\(\s*\)\s*\{/.test(L.code)) miss.push("baseResource");   // the engine accepts both a value and a function (tmp eager-calls it per tick)
             if (!/\bbaseAmount\s*\(/.test(L.code)) miss.push("baseAmount()");
             if (!/\brequires\s*:/.test(L.code)) miss.push("requires");
             if (miss.length)
@@ -2470,6 +2470,28 @@ const ID_COLLECTIONS = ["upgrades", "buyables", "milestones", "challenges", "ach
         else add(WARN, "N-MAINSTR", layers[0].file, null,
             `${hits.length} layer(s) still render the stock "main-display" (${hits.slice(0, 5).join(", ")}${hits.length > 5 ? ", …" : ""}) in a game that declares a non-English language mode — that component hard-codes the English words "You have" and "(x/sec)", so the layer tab mixes languages no matter how completely you translated your own strings.`,
             "Override mainDisplay (or supply mainAmount()) with the localized sentence — the stock component cannot be translated without editing engine files (07 Part F7, handbook 15 §2).");
+    }
+}
+
+// --- N-LANGTOGGLE: a translated game's language switch must live in the Settings panel ---
+// T2/T3/T4 trees keep shipping a standalone/floating toggle button, which is not aesthetic and
+// is poor UX. The control belongs in the engine options-tab (the Settings screen), next to
+// Save/Theme/Offline-Prod — the reference shape is documented self-contained in handbook 15
+// ("the language control lives in the Settings panel"); a translated build ships that button.
+// systemComponents.js lives in technical/, which the checker EXCLUDES from allModderCandidates
+// (the engine dir is not linted), so this rule reads that one file directly.
+{
+    const declared = allModderCandidates.some((f) =>
+        /chinesemode|chineseMode|LANG_PACKS|LANG_MODES|LANG_CODE|window\s*\.\s*LANG_|toggleChinese|switchLang|setLang|toggleLang/.test(loadRec(f).clean));
+    if (!declared) pass("N-LANGTOGGLE", "no non-English language mode — nothing to put in the settings panel");
+    else {
+        const scPath = path.join(jsDir, "technical", "systemComponents.js");
+        const hasControl = fs.existsSync(scPath) &&
+            /chinesemode|chineseMode|toggleChinese|switchLang|setLang|toggleLang|LANG_MODE|语言|<select/i.test(loadRec(scPath).clean);
+        if (hasControl) pass("N-LANGTOGGLE", "the language switch lives in the Settings panel (options-tab)");
+        else add(WARN, "N-LANGTOGGLE", scPath, null,
+            `a language mode is declared but no language control was found in the Settings panel (js/technical/systemComponents.js options-tab). A standalone/floating toggle button is the anti-pattern.`,
+            "Render the switch INSIDE the options-tab by overriding js/technical/systemComponents.js — reference shape: a `<button class=\"opt\" onclick=\"toggleChinese()\">Language / 语言: {{ player.chinesemode?\"中文\":\"English\" }}</button>` cell next to Save/Theme (T3/T4: the mode `<select>` goes there instead). See handbook 15, \"the language control lives in the Settings panel\".");
     }
 }
 

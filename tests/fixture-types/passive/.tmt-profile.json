@@ -1,0 +1,29 @@
+{
+  "$comment": "Written by scaffold.js. Read by static_checks.js to apply this type's gates. Safe to edit or delete.",
+  "type": "passive-prestige",
+  "typeName": "被动声望链",
+  "modifiers": [
+    "challenges"
+  ],
+  "droppedModifiers": [],
+  "exemptRules": [
+    "D-NOUPDATE"
+  ],
+  "requiredModules": [
+    "layers:normal|static",
+    "upgrades",
+    "milestones",
+    "mod.js"
+  ],
+  "forbiddenModules": [
+    "clickables",
+    "grid",
+    "update()"
+  ],
+  "requiredRules": [
+    "N-UNWIRED",
+    "D-REQLADDER",
+    "N-MSDESTROY"
+  ],
+  "registryVersion": "1.0.0"
+}

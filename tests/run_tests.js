@@ -142,6 +142,9 @@ console.log("== test 2: fixture-bad must report every injected defect ==");
                                // effect() applies ×2 — the readout lies
             "N-MAINSTR",       // defects.js declares window.chinesemode, but five layers
                                // still render the stock English-only "main-display"
+            "N-LANGTOGGLE",    // defects.js declares window.chinesemode but fixture-bad ships
+                               // no language control in the options-tab — the anti-pattern
+                               // (a floating toggle); the rule wants it in the Settings panel
             "D-ROW-UNSET",     // CASCADE from N-FACTORY: layer q's `row: 4` is inside the
                                // factory's return value, so the layer source has no row
             // phase-⑪ browser-verified rules (2026-10-24, from three generated games):

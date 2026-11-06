@@ -1,8 +1,8 @@
 ---
 name: tmt-game-generator
-description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 88 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
-description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 88 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
-description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 88 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
+description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 89 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
+description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 89 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
+description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 89 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
 version: 1.0.0
 author: TMT GG
 ---
@@ -218,9 +218,11 @@ Full judgment aid: `references/design/13`.
 much of Stage 4 changes (handbook 15):
 - **T1 `Single language`** — write strings inline.
 - **T2 `Two languages, one toggle`** — the `P17` convention: a `window.chinesemode` flag with
-  `cond ? "中文" : "English"` ternaries on user-facing strings.
+  `cond ? "中文" : "English"` ternaries on user-facing strings. The toggle button renders in the
+  **Settings panel** (the options-tab), not as a floating button.
 - **T3 `Several complete languages, switchable`** — the `js/lang/` text layer: one
-  `t(key, fallback)` accessor, complete packs, a settings dropdown. Do **not** use ternaries here.
+  `t(key, fallback)` accessor, complete packs, a settings dropdown in the **options-tab**.
+  Do **not** use ternaries here.
 - **T4 `Mixed / polyglot`** — T3 plus a phrase pool assigning each sentence its own language (one
   real build: 370 sentences, 370 languages).
 - Optional style notes via Other: colour mood, naming voice (feeds per-layer `color`/`symbol`).
@@ -231,10 +233,12 @@ T2 records it as the flag's initial value in `startData` (`chinesemode: false` =
 default) and it goes into brief §1; never change it silently afterwards — flipping it rewrites
 the saved preference of every existing player.
 
-T2 and above add four mandatory items regardless of tier: lang files load **before `js/mod.js`**;
+T2 and above add five mandatory items regardless of tier: lang files load **before `js/mod.js`**;
 descriptions/titles/tooltips/`winText` are **functions**, never module-scope values; `main-display`
-is **overridden** (it hard-codes `You have` / `(x/sec)` — 07 Part F7); `scripts/i18n_check.js`
-reports 0 FAIL.
+is **overridden** (it hard-codes `You have` / `(x/sec)` — 07 Part F7); the language **switch
+renders in the Settings panel** (override `js/technical/systemComponents.js` options-tab — a
+standalone/floating button is the anti-pattern; `N-LANGTOGGLE`, reference shape in handbook 15);
+`scripts/i18n_check.js` reports 0 FAIL.
 
 **Q8 — Endgame flavor (medium/large; small answers `classic` by default — still ask).** The
 deep-read corpus (10-Fun M19–M21) shows three named endgame verbs beyond "prestige until the
@@ -455,13 +459,15 @@ cascades, save/export, offline, and wiring that only exists once every layer is 
 - Formula-on-Shift QoL: `["display-text", function() { if (shiftDown) return "…" }]`.
 - Language scope per Q7: T2 = `window.chinesemode` ternaries; T3/T4 = the `js/lang/` text layer
   (**references/design/15**). T2+ must override `main-display` — it hard-codes English chrome.
+  The language switch renders in the **Settings panel** (override `systemComponents.js` options-tab),
+  never a floating button (`N-LANGTOGGLE`).
 - Numbers: EVERYTHING through `new Decimal(...)` (strings like `"1e10"` for big values);
   display via `format()`/`formatWhole()`; NO native operators on currencies; no `.mod()`;
   no `resetBuyables()`; Vue2 syntax only. Full red lines: references/core/07 Part A/B.
 
 ### 4.5 Structures no tool can see through (07 Part F)
 
-Each of these shipped as a defect in a real build, and each is invisible to all 88 rules:
+Each of these shipped as a defect in a real build, and each is invisible to all 89 rules:
 - **Never build a layer at runtime.** `addLayer(id, factory())` hides `row`, `startData` and every
   component from the checker and the harness (F11) — one build took 8 FAILs from this.
 - **One home for pacing constants** (`js/tuning.js`), read by the game *and* the simulator: a

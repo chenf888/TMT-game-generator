@@ -39,6 +39,30 @@ T3/T4 are the same machinery; T4 only adds a pool and a rotation. Do not attempt
 ternary — one build's T4 is 370 strings across 370 languages and 7 helper scripts, because the
 integrity problem is real and mechanical.
 
+### The language control lives in the Settings panel (mandatory, T2+)
+
+A T2/T3/T4 game's language switch must be rendered **inside the engine options-tab** — the
+Settings screen the player already uses for Save / Theme / Offline-Prod — **not** as a
+standalone floating button, a layer-tab raw-html widget, or a main-display overlay. A floating
+button is the anti-pattern this rule kills: it is not aesthetic, it competes with the tree for
+screen space, and players do not look there for a settings control.
+
+Override `js/technical/systemComponents.js`'s `options-tab` template and add the control as a
+`<button class="opt">` cell matching the stock Save/Theme buttons (the reference shape below is
+self-contained — no external file needed):
+
+    <tr>
+        <td><button class="opt" onclick="toggleChinese()">Language / 语言: {{ player.chinesemode?"中文":"English" }}</button></td>
+    </tr>
+
+- **T2** — one toggle button that flips `player.chinesemode` (persist it in `addedPlayerData`
+  so it survives save); the label shows the CURRENT language so the button self-describes.
+- **T3 / T4** — a mode `<select>` (or one button per mode) bound to the `js/lang/` preference,
+  in the same options-tab table.
+
+The static rule **N-LANGTOGGLE** warns when a language mode is declared but the options-tab has
+no language control — that is the floating-button anti-pattern.
+
 ---
 
 ## §2 The `js/lang/` convention (T3/T4)

@@ -1,0 +1,24 @@
+{
+  "$comment": "Written by scaffold.js. Read by static_checks.js to apply this type's gates. Safe to edit or delete.",
+  "type": "active-click",
+  "typeName": "点击驱动",
+  "modifiers": [
+    "minigame"
+  ],
+  "droppedModifiers": [],
+  "exemptRules": [],
+  "requiredModules": [
+    "clickables",
+    "layers"
+  ],
+  "forbiddenModules": [
+    "Decimal in clickable state",
+    "an arrow-function onClick that uses this"
+  ],
+  "requiredRules": [
+    "T-CLICKABLE",
+    "N-GHOSTFIELD",
+    "D-MICROTABS"
+  ],
+  "registryVersion": "1.0.0"
+}
