@@ -15,7 +15,7 @@
  *   <out>/tmt-game-generator/          default <out> = <parent of this skill>/dist
  *
  * The script:
- *   1. copies the skill, excluding development-only paths (dist/, tests/.tmp-*)
+ *   1. copies the skill, excluding development-only paths (dist/, .git, .github, tests/.tmp-*)
  *   2. fails if SKILL.md's `name` does not equal the target directory name
  *   3. fails if any required frontmatter field is missing
  *   4. reports the package size against the 3 MB platform limit
@@ -29,7 +29,20 @@ const fs = require("fs");
 const path = require("path");
 
 const SKILL_ROOT = path.resolve(__dirname, "..");
-const EXCLUDE = new Set(["dist", ".git", "node_modules", ".workbuddy"]);
+/* Development-only paths. `.github` is repo infrastructure (CI, issue forms, templates),
+ * not skill content: a shipped package that carries one is noise at best and, in a skills
+ * directory, an unread stray directory at worst. `.gitignore` is the only dotfile that
+ * ships — it is useful to anyone who keeps the installed copy under version control. */
+const EXCLUDE = new Set(["dist", ".git", ".github", "node_modules", ".workbuddy"]);
+/* Stated separately from EXCLUDE so that trimming the filter is caught instead of
+ * silently allowed: this list is the intent, EXCLUDE is the implementation, and a
+ * mismatch between them fails the build. */
+const MUST_EXCLUDE = ["dist", ".git", ".github", "node_modules", ".workbuddy"];
+const missingExclusions = MUST_EXCLUDE.filter((n) => !EXCLUDE.has(n));
+if (missingExclusions.length) {
+    console.error(`FAIL: the package would ship development-only paths: ${missingExclusions.join(", ")}`);
+    process.exit(1);
+}
 const isScratch = (name) => name.startsWith(".tmp-");
 
 const args = process.argv.slice(2);
@@ -90,9 +103,17 @@ if (!/^---\r?\n/.test(copiedMd)) { console.error("FAIL: packaged SKILL.md lost i
 if (path.basename(target) !== name) { console.error("FAIL: packaged directory name drifted from `name`"); process.exit(1); }
 
 let bytes = 0, files = 0;
+const stray = [];
 const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
         const p = path.join(dir, ent.name);
+        // A file counts only when it is not dev-only. This is a second line of defence:
+        // the copy filter above already drops them, so a hit here means the filter broke.
+        // Dot-directories are flagged structurally, so a future `.foo/` cannot ship just
+        // because nobody added it to the list.
+        if (EXCLUDE.has(ent.name) || isScratch(ent.name) || (ent.isDirectory() && ent.name.startsWith("."))) {
+            stray.push(path.relative(target, p));
+        }
         if (ent.isDirectory()) walk(p);
         else { bytes += fs.statSync(p).size; files++; }
     }
@@ -103,13 +124,15 @@ const mb = bytes / 1024 / 1024;
 const bodyBytes = Buffer.byteLength(copiedMd, "utf8");
 const overBody = bodyBytes > 64 * 1024;
 const overPack = mb > 3;
+const carriesDev = stray.length > 0;
 
 console.log(`pack: ${target}`);
 console.log(`      ${files} file(s), ${mb.toFixed(2)} MB  ${overPack ? "FAIL (>3 MB limit)" : "ok (≤3 MB)"}`);
 console.log(`      SKILL.md ${(bodyBytes / 1024).toFixed(1)} KB  ${overBody ? "FAIL (>64 KB limit)" : "ok (≤64 KB)"}`);
+console.log(`      dev-only paths  ${carriesDev ? "FAIL (" + stray.join(", ") + ")" : "none"}`);
 console.log(`      name="${name}" version=${meta.version} author="${meta.author}"`);
 console.log("");
 console.log("install by copying the PACKAGE (not the development tree) into your tool's skills dir:");
 console.log("      ZCode / Claude Code / Codex / Cursor:  <skills-dir>/" + name + "/");
 console.log("      then run:  node tests/run_tests.js   inside the installed copy");
-if (overBody || overPack) process.exit(1);
+if (overBody || overPack || carriesDev) process.exit(1);
