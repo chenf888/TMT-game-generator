@@ -118,7 +118,7 @@ Layer-level: `achievementPopups: false` disables popups.
 
 ## 4. Challenges — optional handicaps with rewards
 
-Helpers: `inChallenge(layer, id)` · `hasChallenge(layer, id)` · `challengeCompletions(layer, id)` · `maxedChallenge(layer, id)` · `challengeEffect(layer, id)`. Entering a challenge **resets the layer** (and applies its handicaps — which you implement); reaching the win condition completes it.
+Helpers: `inChallenge(layer, id)` · `hasChallenge(layer, id)` · `challengeCompletions(layer, id)` · `maxedChallenge(layer, id)` · `challengeEffect(layer, id)`. Entering a challenge runs `doReset(layer, true)`, which zeroes the root currency and cascades **only through the rows below the layer** (`js/game.js:210-217`; `rowReset` tests `tmp[layer].row > tmp[lr].row`). **The challenged layer's own `points` are not reset** — so `onEnter()` must zero whatever `canComplete()` reads, or the goal is already met and one more click finishes it (handbook 10 §M1b). Completion is also manual: reaching the win condition does not fire `onComplete`, the player presses Finish.
 
 ```js
 challenges: {
@@ -145,7 +145,7 @@ challenges: {
 | `name` | *(no label)* | String or function. |
 | `challengeDescription` | *(no label)* | What makes it hard. Implement handicaps (usually gated by `inChallenge`). |
 | `goalDescription` | *(no label)* | The win condition text. |
-| `canComplete()` | *(no label)* | Bool: is the win condition met right now? Returning a **number** bulk-completes that many times. |
+| `canComplete()` | *(no label)* | Bool: is the win condition met right now? Returning a **number** bulk-completes that many times. It must read state that your `onEnter()` clears — otherwise it is true on entry (handbook 10 §M1b). |
 | `rewardDescription` | *(no label)* | What you get. Implement it elsewhere. |
 | `rewardEffect()` / `rewardDisplay()` | optional | Compute/show the reward. |
 | `fullDisplay()` | **OVERRIDE** | Full custom challenge text. |

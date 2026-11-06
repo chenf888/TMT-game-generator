@@ -145,7 +145,7 @@ Ordered steps, each granting exactly one chore removal, with granting milestone 
 | | none | P12 softcap start ≈ next-layer unlock, power 0.3–0.5 corpus — but the measured retune favors power 0.1 with start 1e9–1e12 and cap raises of ×10 priced 1e12–1e18 (`balance-defaults.json softcap.measuredRetune`) | layer softcap / effect() softcap() |
 | | yes (e.g. exam score 150) | hard cap `softcap(x, cap, 0)` | custom points()/getResetGain() |
 
-## 9. Self-check results (SKILL.md Stage 2, all 21 — numbering matches SKILL.md's table)
+## 9. Self-check results (SKILL.md Stage 2, all 23 — numbering matches SKILL.md's table)
 
 Tick each after verifying the tables above. Any FAIL → revise the tables, not the code.
 
@@ -172,6 +172,13 @@ Tick each after verifying the tables above. Any FAIL → revise the tables, not 
 - [ ] 19 — **reset lifecycle**: best/total kept; `autoPrestige` implies `resetsNothing`; no `update()` assigns points; every `doReset` guards `layerDataReset` with the vanilla `row > this.row` line; every static layer has `canBuyMax()` (03 §4.1; N-MSDESTROY/AUTOWIPE/POINTSWRITE/STATICMAX)
 - [ ] 20 — **type contract** (Q4b): mandatory modules planned, forbidden absent, modifier dependencies hold, dropped modifiers have §10 reasons (13; type-registry)
 - [ ] 21 — **measurement plan**: pacing constants in `js/tuning.js` read by game AND simulator; every pacing quantity callable (14 §3.3)
+- [ ] 22 — **question ledger complete**: every question ID (S0, Q1–Q8, Q4b type + modifier multi-select)
+      has a §2 row holding a user answer or a `user-delegated → … (user confirmed)` entry. A blank row or
+      an un-asked question blocks Stage 3 — this one cannot be accepted in §9.1 (Stage 1; `D-QLEDGER`)
+- [ ] 23 — **buyable persistence**: every buyable is consumed outside its own layer (a later layer reads
+      `buyableEffect('<this>', id)` or gates on `getBuyableAmount`), or is marked capped phase content in
+      §4.1; the ladder's P4 step-5 `autoBuyable` is a closed-form buyMax, never `+1` per tick
+      (09 P4/P27/P54; `N-BUYABLEDEAD`; fun-quota.json)
 
 ## 9.1 Static-warning acceptance (Stage 5 output)
 
@@ -207,8 +214,11 @@ exists, and the next build inherits the pattern.
 | | | | |
 
 Measured timeline (greedy, `--click 1 --dt 1`): first purchase ___ s; first prestige per layer
-___; total to `isEndgame()` ___ h. Sim exclusions = the bias (handbook 14 §3.2, achievement
-count is a pacing lever inside it): ___.
+___; total to `isEndgame()` ___ h; achievements earned ___ / ___ (the sim earns them — a low
+count means the rewards are gated behind content the generic policy never reaches).
+Challenge bracket: lower ___ h (default run) / upper ___ h (`--challenges`); challenges already
+completable at unlock ___ / ___ — any non-zero count is the "Start → Finish" defect (10 §M1b).
+Sim exclusions = the bias (handbook 14 §3.2 — clickables/board, offline, dithering): ___.
 
 ## 12. Browser-verification fixes (Stage 6.5)
 

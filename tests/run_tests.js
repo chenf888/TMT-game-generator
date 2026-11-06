@@ -10,6 +10,9 @@
  *   5. types.test.js: the game-type layer — classify.js routing, the registry contract,
  *                     and the T-* type rules (run as a child process so its assertions
  *                     stay independent of this file's).
+ *   6. docs         : SKILL.md's Stage-2 self-check table and the brief template's §9 must
+ *                     list the same checks, the header must state the real count, and every
+ *                     "brief §N" pointer must resolve inside the template.
  *
  * Usage: node tests/run_tests.js
  */
@@ -250,6 +253,55 @@ console.log("\n== test 5: the game-type layer (types.test.js) ==");
     // types.test.js prints its own ok/FAIL lines; echo them so one command shows everything.
     for (const line of r.stdout.split(/\r?\n/)) if (/^\s+(ok|FAIL)|^(ALL|\d+ TYPE)/.test(line)) console.log("  " + line.trim().replace(/^ok\s*-\s*/, "ok  - ").replace(/^FAIL-\s*/, "FAIL- "));
     ok(r.status === 0, "types.test.js passed", r.stderr);
+}
+
+// ---------------------------------------------------------------------------
+console.log("== test 6: documentation consistency (self-check table vs brief template) ==");
+{
+    const skill = fs.readFileSync(path.join(ROOT, "SKILL.md"), "utf8");
+    const tmpl = fs.readFileSync(path.join(ROOT, "assets", "design-brief-template.md"), "utf8");
+
+    // SKILL.md Stage-2 table rows: | 22 | **question ledger complete** ... (scoped to the section:
+    // other tables in the file also open with a number)
+    const stage2 = skill.slice(skill.indexOf("## Stage 2"), skill.indexOf("## Stage 3"));
+    const skillNums = [...stage2.matchAll(/^\|\s*(\d{1,2})\s*\|/gm)].map((m) => +m[1]);
+    // template §9 checkboxes: - [ ] 22 — ...
+    const tmplNums = [...tmpl.matchAll(/^- \[ \] (\d{1,2}) —/gm)].map((m) => +m[1]);
+
+    ok(skillNums.length >= 20, "SKILL.md Stage-2 self-check table parsed", `found ${skillNums.length}`);
+    ok(tmplNums.length === skillNums.length,
+        `the brief template lists every self-check (${skillNums.length})`,
+        `SKILL.md ${skillNums.length} vs template ${tmplNums.length} — the template is what the agent fills in, so a missing row is a check with no home`);
+    ok(tmplNums.join(",") === skillNums.join(","),
+        "self-check numbering matches 1:1 (a renumber on one side would silently misalign them)",
+        `SKILL.md [${skillNums.join(",")}] vs template [${tmplNums.join(",")}]`);
+
+    const headerCount = (tmpl.match(/## 9\. Self-check results[^\n]*?all (\d+)/) || [])[1];
+    ok(headerCount && +headerCount === tmplNums.length,
+        "the template's §9 header states the real count", `header says ${headerCount}, rows ${tmplNums.length}`);
+
+    // The stale-count class that shipped: prose kept saying 21 after the table grew to 23.
+    ok(!/\ball 21\b|\b21 checks\b/.test(skill), "SKILL.md carries no stale '21 checks' claim");
+
+    // The released version has to agree everywhere a reader can see it: the SKILL.md
+    // frontmatter (what the platform reads) and the landing page (what a human reads).
+    const skillVersion = (skill.match(/^version:\s*(\S+)\s*$/m) || [])[1];
+    const pageVersion = (fs.readFileSync(path.join(ROOT, "docs", "index.html"), "utf8")
+        .match(/tmt-game-generator v(\d+\.\d+\.\d+)/) || [])[1];
+    ok(skillVersion && pageVersion && skillVersion === pageVersion,
+        "SKILL.md and docs/index.html agree on the released version",
+        `SKILL.md ${skillVersion || "(missing)"} vs docs/index.html ${pageVersion || "(missing)"}`);
+
+    // Every pointer into the brief must name a section the template actually has.
+    const maxSection = Math.max(...[...tmpl.matchAll(/^## (\d{1,2})[a-z]?\./gm)].map((m) => +m[1]));
+    const refs = [
+        ...skill.matchAll(/\bbrief'?s? §(\d+)/gi),
+        ...skill.matchAll(/§(\d+) of the template/gi),
+    ].map((m) => +m[1]);
+    const unresolved = [...new Set(refs.filter((n) => n > maxSection))];
+    ok(unresolved.length === 0,
+        `every brief § reference resolves (template has §1–§${maxSection})`,
+        "unresolved: " + unresolved.map((n) => "§" + n).join(", ") + " — SKILL.md once sent browser fixes to a nonexistent §14");
 }
 
 // ---------------------------------------------------------------------------

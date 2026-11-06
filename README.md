@@ -72,6 +72,11 @@ source, a one-layer 100-hour monolith, a 16.7-million-layer colour cube, and mor
 
 ## Install
 
+> **Do not copy this checkout into a skills directory.** The platform requires the shipped folder
+> name to equal `SKILL.md`'s `name`, and a development tree rarely is (`TMT-Skill` here vs
+> `tmt-game-generator`). Copying it as-is installs a skill that will not load. Always build
+> `dist/tmt-game-generator/` first.
+
 Build the package first, then install it:
 
 ```bash
@@ -109,7 +114,7 @@ You can also invoke it explicitly where the tool supports it (`/tmt-game-generat
 | 4. Generate | Layer files bottom-row-first per the brief: Decimal-safe code, **every upgrade classified token-vs-value and wired to a consumer**, effect-kind diversity plan, tabFormat/microtabs organization, M1–M21 mechanics, automation ladder, softcaps, theming. **Each layer is gated before the next is written** (per-layer micro-gate): static checks re-run at 0 FAIL, the partial game boots, the new tab opens, one prestige + one purchase, console clean — the browser-only crash class dies at write time |
 | 5. Static checks | `node scripts/static_checks.js <game-folder>` — reads `.tmt-profile.json` and applies that type's gates, exemptions and per-blueprint thresholds; FAIL blocks manual testing; WARNs need a written justification in the brief. Plus `node scripts/i18n_check.js` when the game has a `js/lang/` text layer |
 | 5.5 Load-time smoke | `node tools/smoke.js` (copied from `assets/harness/`) — the real mod files loaded in Node: load-time throws, duplicate layer ids, `startData` contract, NaN/undefined hooks against a fresh save. 0 FAIL before the full browser pass |
-| 6. Balance walkthrough | **Measured, not estimated.** `node tools/simulate.js` drives the real economy and reports the first-purchase time, each layer's first prestige and the total to `isEndgame()`. Three real briefs passed every static rule and were then overturned by play (8–18 h promised → 2.5 h delivered; 28-second detonation; six automation steps with unreachable thresholds). `--probe <layer>` before any knob turn; `--save-at <layerId>` exports an engine-format save for the browser pass. Rebalance the brief, not the code |
+| 6. Balance walkthrough | **Measured, not estimated.** `node tools/simulate.js` drives the real economy and reports the first-purchase time, each layer's first prestige and the total to `isEndgame()`. Achievements are earned like a real player's, so the default run is a tight lower bound; `--challenges` credits every challenge at unlock for an upper bound and reports how many were already completable the moment they unlocked (19 of 41 in the generated corpus — each one a design defect). Three real briefs passed every static rule and were then overturned by play (8–18 h promised → 2.5 h delivered; 28-second detonation; six automation steps with unreachable thresholds). `--probe <layer>` before any knob turn; `--save-at <layerId>` exports an engine-format save for the browser pass. Rebalance the brief, not the code |
 | 6.5 Browser verification | The generator itself opens the served game: `__bootErrors` empty, every layer tab and microtab opens, one real prestige per layer kind, save→reload intact, console clean. Three builds shipped browser-only breakages before this stage existed (boot race, self-wiping prestige, a render throw that froze the page on "Loading..."). Late layers open in seconds via `--save-at` (the page reloads at that layer's unlock moment); feel proxies land in brief §12. Per-layer micro-gates shrink this pass but never replace it. Fixes are recorded in brief §12 |
 | 7. Test handoff | Serve, play, and verify against the checklist (console clean, first prestige in minutes, save/load, offline cap, endgame) |
 
@@ -184,13 +189,15 @@ tmt-game-generator/
 node tests/run_tests.js
 ```
 
-Five smoke groups should all pass: good fixture clean, bad fixture catches every rule with
-zero false positives, a freshly scaffolded game (from the bundled template) passes the
-checker, the ghost fixture flags exactly the unread engine fields (and does NOT flag the
-valid ones — `completionLimit`, `canComplete`), and the type layer routes correctly and
-enforces its own rules. The last group includes the check that matters most for backwards
-compatibility: **a game with no declared type produces no `T-*` output at all**, so its
-report is byte-identical to what it was before types existed. This works from any directory the skill is installed in — no environment variables
+Six smoke groups (158 assertions) should all pass: good fixture clean, bad fixture catches
+every rule with zero false positives, a freshly scaffolded game (from the bundled template)
+passes the checker, the ghost fixture flags exactly the unread engine fields (and does NOT
+flag the valid ones — `completionLimit`, `canComplete`), the type layer routes correctly and
+enforces its own rules, and the docs agree with the brief template (self-check numbering,
+every `brief §N` pointer, the released version). The type group includes the check that
+matters most for backwards compatibility: **a game with no declared type produces no `T-*`
+output at all**, so its report is byte-identical to what it was before types existed. This
+works from any directory the skill is installed in — no environment variables
 needed. To point the scaffolder at a different engine template anyway, use
 `--from <template-dir>` or the `TMT_TEMPLATE` environment variable.
 

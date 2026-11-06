@@ -18,8 +18,16 @@
  *   and to isEndgame().
  *
  * KNOWN LOWER-BOUND BIAS (documented, not a bug)
- *   Excluded: challenge rewards, achievement effects, clickable/minigame and
- *   board content, offline time, and human dithering. The sim is therefore
+ *   Excluded: challenge rewards, clickable/minigame and board content, offline
+ *   time, and human dithering. Challenge rewards are available as an explicitly
+ *   labelled UPPER bound via --challenges (see that block below); run both and
+ *   read the bracket. Achievements are NOT excluded — they are earned
+ *   the way the engine earns them (updateAchievements below), because the
+ *   measured cost of excluding them was far too high to keep: The Smallpox Tree
+ *   simmed at 18.96 h without them and 11.14 h with them (−41%, 34 of its 50
+ *   achievements fire under the generic policy with no per-game adaptation), and
+ *   its first purchase moved 10 s → 6 s, i.e. the excluded version reported a
+ *   pacing failure that does not exist. The sim is therefore
  *   FASTER than a real player. Two reference points: one build's sim was 0.62 h
  *   against a 2.5 h human run (×4), another's 99.8 h matched its target. Read
  *   the sim's total as a floor; if the floor already misses the target, the
@@ -44,6 +52,8 @@
  *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --max-hours 200
  *   node assets/harness/simulate.js <game-folder> --click 1 --dt 1 --probe <endgame-layer>
  *   node assets/harness/simulate.js <game-folder> --save-at <layerId>   (browser handoff)
+ *   node assets/harness/simulate.js <game-folder> --challenges          (upper bound: every
+ *       challenge credited the tick it unlocks — run both modes and read the bracket)
  *   Copy to <game>/tools/simulate.js next to the game. Put every tunable
  *   constant in a modFile (e.g. js/tuning.js) that BOTH the game and this script
  *   read — otherwise you are tuning a number the game does not use.
@@ -56,6 +66,12 @@
  *                 prestige is bespoke needs its own branch
  *   · production  — getPointGen() is called directly; a game whose rate lives in
  *                 a helper must expose it (see js/tuning.js in the references)
+ *   · achievements — done() runs against the sim's own player, so an achievement
+ *                 that reads a field the harness does not track simply never
+ *                 fires. That is SAFE (it only lowers the floor, never inflates
+ *                 it) and needs no action; the report prints earned/total so a
+ *                 suspiciously low count is visible instead of silent. Only
+ *                 teach one here if a specific reward must be measured.
  *   · endgame probe — --probe <layer> prints the state at every press of that
  *                 layer; give the layer a sim-only simProbeGates() hook returning
  *                 [label, have, need] rows to see WHICH gate is the hard one.
@@ -175,14 +191,71 @@ global.TREE_LAYERS = [];
 global.UP = 0; global.DOWN = 1; global.LEFT = 2; global.RIGHT = 3;
 global.addNode = () => {};
 global.addLayer = function (id, def) { LAYERS[id] = def; layerOrder.push(id); };
+/* NOT exposed as `global.layers`: the engine's registry holds PROCESSED definitions (row,
+ * startData defaults, component ids filled in), so aliasing the raw defs here silently
+ * changes what a game reads — on The Typhoon Tree it turned a 0.10 h run into one that
+ * never finished in 5 h. A game that reaches for `layers` gets a reported update() throw
+ * instead, which is the harness's normal way of saying "this code path cannot be faked". */
 global.hasUpgrade = (l, id) => !!player[l] && player[l].upgrades.includes(Number(id));
 global.hasMilestone = (l, id) => !!player[l] && player[l].milestones.includes(Number(id));
-global.hasAchievement = () => false;
-global.inChallenge = () => false;
-global.hasChallenge = () => false;
-global.maxedChallenge = () => false;
-global.challengeCompletions = () => new Decimal(0);
-global.challengeEffect = () => new Decimal(1);
+global.hasAchievement = (l, id) => !!player[l] && !!player[l].achievements &&
+    (player[l].achievements.includes(Number(id)) || player[l].achievements.includes(String(id)));
+/* Challenges are OFF by default and ON with --challenges. The two runs answer two
+ * different questions and are meant to be read as a bracket:
+ *   default        — the player never touches a challenge      → LOWER bound on time
+ *   --challenges   — every challenge is credited the tick it    → UPPER bound on time
+ *                    unlocks, up to its completionLimit
+ * The second mode is deliberately generous: it does not enter the challenge, does not
+ * apply the entry reset, and does not spend a second on the in-challenge grind. What it
+ * DOES measure is how much of the game's power sits behind challenge rewards — and, via
+ * the `already completable at unlock` count, how many challenges are broken in the
+ * specific way this harness keeps finding: a goal that is already true when the challenge
+ * appears, so the player clicks Start and then Finish. */
+const CHALLENGES = argv.includes("--challenges");
+const chLimit = (l, id) => {
+    const c = LAYERS[l] && LAYERS[l].challenges && LAYERS[l].challenges[id];
+    if (!c || typeof c !== "object") return 1;
+    return (c.completionLimit === undefined) ? 1 : c.completionLimit;
+};
+global.inChallenge = () => false;   // credit mode never sits inside one
+global.hasChallenge = (l, id) => !!CHALLENGES && !!player[l] && !!player[l].challenges && !!player[l].challenges[id];
+global.maxedChallenge = (l, id) => global.hasChallenge(l, id) && new Decimal(player[l].challenges[id]).gte(chLimit(l, id));
+global.challengeCompletions = (l, id) => new Decimal((CHALLENGES && player[l] && player[l].challenges && player[l].challenges[id]) || 0);
+global.challengeEffect = function (l, id) {
+    const c = LAYERS[l] && LAYERS[l].challenges && LAYERS[l].challenges[id];
+    if (!c || c.rewardEffect === undefined) return new Decimal(1);
+    try { return (typeof c.rewardEffect === "function") ? c.rewardEffect.call(c) : c.rewardEffect; }
+    catch (_) { return new Decimal(1); }
+};
+/* The accessors the engine implements and this harness used to lack
+ * (js/utils/easyAccess.js:73-83). They matter only once something can call them, and
+ * that is exactly what hasAchievement above unlocks: a game writes
+ * `if (hasAchievement("a", 21)) gain = gain.times(achievementEffect("a", 21))`, so with
+ * hasAchievement hard-wired to false the branch never ran and the missing stub was
+ * invisible. Implement hasAchievement alone and this path becomes live — the prototype
+ * crashed with `ReferenceError: achievementEffect is not defined` inside gainMult.
+ *
+ * An achievement's `effect` is a FUNCTION on the definition (`effect() { return new
+ * Decimal(2) }`), evaluated by the engine with the definition as `this` (temp.js
+ * updateTempData calls layerData[item]()); a plain value is also legal. A missing effect
+ * returns 1 rather than undefined: that is a game bug the static checker owns, and the
+ * simulator must stay measurable instead of turning every later number into NaN.
+ *
+ * clickableEffect / gridEffect: no game in the 12-game generated corpus calls either
+ * (measured 2026-11-06), so these two are defensive — without them a mod that reads one
+ * from getPointGen throws into the caller's catch and silently reads as zero income.
+ * Grids are not simulated at all, so gridEffect stays neutral. */
+global.achievementEffect = function (l, id) {
+    const a = LAYERS[l] && LAYERS[l].achievements && LAYERS[l].achievements[id];
+    if (!a || a.effect === undefined) return new Decimal(1);
+    return (typeof a.effect === "function") ? a.effect.call(a) : a.effect;
+};
+global.clickableEffect = function (l, id) {
+    const c = LAYERS[l] && LAYERS[l].clickables && LAYERS[l].clickables[id];
+    if (!c || c.effect === undefined) return new Decimal(1);
+    return (typeof c.effect === "function") ? c.effect.call(c) : c.effect;
+};
+global.gridEffect = () => new Decimal(1);
 global.completeChallenge = () => {};
 global.getBuyableAmount = (l, id) => (player[l].buyables[id] || new Decimal(0));
 global.setBuyableAmount = (l, id, v) => { player[l].buyables[id] = v; };
@@ -265,7 +338,7 @@ let player = {};
 for (const id of layerOrder) {
     let sd = {};
     try { sd = LAYERS[id].startData ? LAYERS[id].startData() : {}; } catch (_) { sd = {}; }
-    player[id] = Object.assign({}, sd, { upgrades: [], milestones: [], challenges: [], buyables: {} });
+    player[id] = Object.assign({}, sd, { upgrades: [], milestones: [], achievements: [], challenges: [], buyables: {} });
     if (typeof player[id].unlocked !== "boolean") player[id].unlocked = false;
     if (!player[id].points || typeof player[id].points.add !== "function") player[id].points = new Decimal(0);
 }
@@ -433,9 +506,13 @@ function tryBuyBuyables(l) {
     for (const id of Object.keys(LAYERS[l].buyables || {})) {
         const b = LAYERS[l].buyables[id];
         if (!b || typeof b !== "object") continue;
+        /* Bind the component identity BEFORE unlocked(): a buyable written as
+         * `unlocked() { return player[this.layer].unlocked && … }` — the normal idiom —
+         * threw "Cannot read properties of undefined (reading 'unlocked')" and killed the
+         * run on The Truth Tower. Upgrades already had this order right. */
+        b.layer = l; b.id = Number(id);
         if (b.unlocked && !b.unlocked()) continue;
         const have = global.getBuyableAmount(l, id);
-        b.layer = l; b.id = Number(id);
         let cost;
         try { cost = b.cost(have); } catch (_) { continue; }
         if (!cost || cost.lte(0)) continue;
@@ -461,6 +538,79 @@ function updateMilestones() {
             n++;
         }
     }
+    return n;
+}
+/* Achievements, mirrored from the engine's updateAchievements (js/utils.js:270-279).
+ * The engine runs it for EVERY layer that has an achievements table — not only visible
+ * ones — and gates on `tmp[layer].deactivated`, which this harness cannot model.
+ * Two differences from updateMilestones are not optional:
+ *   · the isPlainObject guard. An achievements table carries numeric `rows` / `cols`
+ *     siblings, so `for (x in ...)` walks them as if they were achievements; without the
+ *     guard the prototype died with "Cannot create property 'layer' on number '10'" on
+ *     The Typhoon Tree.
+ *   · no unlocked gate. The engine evaluates done() for every layer regardless of
+ *     whether the player can see it, so a locked layer earns achievements here too.
+ *     That is the engine's behaviour, not a shortcut this harness takes.
+ * The id is pushed as a Number (this file's convention) — the engine pushes the raw
+ * `for...in` key, but hasAchievement accepts both shapes (easyAccess.js:9-11). */
+function updateAchievements() {
+    let n = 0;
+    for (const id of layerOrder) {
+        const defs = LAYERS[id].achievements;
+        if (!defs) continue;
+        for (const aid of Object.keys(defs)) {
+            const a = defs[aid];
+            if (!a || typeof a !== "object") continue;      // rows / cols are numbers
+            if (hasAchievement(id, aid)) continue;
+            a.layer = id; a.id = Number(aid);
+            try { if (!a.done()) continue; } catch (_) { continue; }
+            player[id].achievements.push(Number(aid));
+            player[id].achievements.sort((x, y) => x - y);
+            try { if (a.onComplete) a.onComplete(); } catch (_) {}
+            n++;
+        }
+    }
+    return n;
+}
+/* Credit-at-unlock, only with --challenges. A challenge is "done" on the first tick its
+ * layer is unlocked and its own unlocked()/canEnter() say yes; repeatables are credited
+ * straight to completionLimit. No entry reset, no handicap time, no policy decision —
+ * that is what makes the resulting number an UPPER bound rather than a prediction.
+ * The diagnostic that matters is the `met` probe: canComplete() evaluated on the state
+ * the player already has. True means the challenge is claimable the moment it appears,
+ * which is the "click Start, click Finish" defect, and it is counted separately so a
+ * game cannot hide it behind a generous ceiling. */
+let chalCredited = 0, chalInsta = 0;
+const chalInstaList = [];
+/* One credit per challenge per run, even if a prestige wipes the layer's challenge array
+ * (layerDataReset clears it, and the pass would otherwise re-credit — and re-fire
+ * onComplete — every tick, which is not "an upper bound", it is runaway). */
+const chalCreditedOnce = new Set();
+function creditChallenges() {
+    let n = 0;
+    for (const id of layerOrder) {
+        const defs = LAYERS[id].challenges;
+        if (!defs || !player[id] || !player[id].unlocked) continue;
+        for (const cid of Object.keys(defs)) {
+            const c = defs[cid];
+            if (!c || typeof c !== "object") continue;
+            const key = id + "/" + cid;
+            if (chalCreditedOnce.has(key)) continue;
+            const lim = chLimit(id, cid);
+            if (Number(player[id].challenges[cid] || 0) >= lim) continue;
+            c.layer = id; c.id = Number(cid);
+            try { if (c.unlocked && !c.unlocked()) continue; } catch (_) { continue; }
+            try { if (typeof c.canEnter === "function" && !c.canEnter()) continue; } catch (_) { continue; }
+            let met = false;
+            try { met = !!(c.canComplete && c.canComplete()); } catch (_) { met = false; }
+            if (met) { chalInsta++; chalInstaList.push(key + " @" + (t / 3600).toFixed(2) + "h"); }
+            chalCreditedOnce.add(key);
+            player[id].challenges[cid] = lim;
+            try { if (c.onComplete) c.onComplete(); } catch (_) {}
+            n++;
+        }
+    }
+    chalCredited += n;
     return n;
 }
 // layers become visible/unlocked when the engine's layerShown/layerUnlocked says so
@@ -544,7 +694,9 @@ const tick = () => {
         if (LAYERS[id].canBuyMax && LAYERS[id].canBuyMax()) { /* static buy-max handled by gainOf */ }
     }
     updateMilestones();
+    updateAchievements();
     refreshUnlocks();
+    if (CHALLENGES) creditChallenges();
     if (SAVE_AT !== null && !saveDumped && player[SAVE_AT] && player[SAVE_AT].unlocked) dumpSaveAt();
     if (saveDumped) return;
     for (const id of layerOrder) if (LAYERS[id].type) { tryBuyUpgrades(id); tryBuyBuyables(id); }
@@ -555,6 +707,7 @@ const tick = () => {
             lastPress[id] = t;
             if (!events.firstPrestige[id]) events.firstPrestige[id] = +t.toFixed(1);
             updateMilestones();
+            updateAchievements();
         }
     }
     t += STEP;
@@ -581,6 +734,11 @@ for (const id of layerOrder) if (player[id].milestones.length) events.firstMiles
 const hours = t / 3600;
 let reached = false;
 try { reached = !!ENDGAME(); } catch (_) {}
+const achEarned = layerOrder.reduce((n, id) => n + (player[id].achievements ? player[id].achievements.length : 0), 0);
+const achTotal = layerOrder.reduce((n, id) => n + Object.keys(LAYERS[id].achievements || {})
+    .filter((k) => { const a = LAYERS[id].achievements[k]; return a && typeof a === "object"; }).length, 0);
+const chalTotal = layerOrder.reduce((n, id) => n + Object.keys(LAYERS[id].challenges || {})
+    .filter((k) => { const c = LAYERS[id].challenges[k]; return c && typeof c === "object"; }).length, 0);
 const report = {
     game, reachedEndgame: reached, totalHours: +hours.toFixed(2),
     firstPurchaseSeconds: events.firstPurchase,
@@ -590,8 +748,14 @@ const report = {
     layers: layerOrder.length,
     upgradesBought: layerOrder.reduce((n, id) => n + player[id].upgrades.length, 0),
     milestonesEarned: layerOrder.reduce((n, id) => n + player[id].milestones.length, 0),
+    achievementsEarned: achEarned,
+    achievementsTotal: achTotal,
+    challengesCredited: CHALLENGES ? chalCredited : 0,
+    challengesTotal: chalTotal,
+    challengesAlreadyComplete: CHALLENGES ? chalInsta : 0,
     saveAt: saveDumped ? path.basename(saveAtPath) : null,
-    simIsLowerBound: true,
+    simIsLowerBound: !CHALLENGES,
+    simIsUpperBound: CHALLENGES,
 };
 if (asJson) { console.log(JSON.stringify(report, null, 2)); }
 else {
@@ -601,12 +765,43 @@ else {
     LOG("  first prestige by layer   : " + (Object.keys(events.firstPrestige).length ? JSON.stringify(events.firstPrestige) : "none"));
     LOG("  peak income              : " + report.peakIncome + " at " + report.peakAtSeconds + " s");
     LOG("  upgrades / milestones    : " + report.upgradesBought + " / " + report.milestonesEarned);
+    LOG("  achievements earned      : " + achEarned + " / " + achTotal + (achTotal === 0 ? "   (none defined)" : ""));
+    if (CHALLENGES) {
+        LOG("  challenges credited      : " + chalCredited + " / " + chalTotal + "   (UPPER-BOUND mode)");
+        if (chalInsta > 0) {
+            LOG("  !! " + chalInsta + " of them were ALREADY completable the moment they unlocked —");
+            LOG("     the goal does not depend on in-challenge progress. Entering and clicking");
+            LOG("     Finish completes them instantly: " + chalInstaList.slice(0, 6).join(", ") +
+                (chalInstaList.length > 6 ? ", …" : ""));
+            LOG("     This is a design defect, not a simulator artefact: the entry reset clears");
+            LOG("     lower rows and the root currency, never the challenged layer's own points.");
+        }
+    } else if (chalTotal > 0) {
+        LOG("  challenges credited      : 0 / " + chalTotal + "   (excluded; pass --challenges for the upper bound)");
+    }
     LOG("  total to isEndgame()     : " + hours.toFixed(2) + " h" + (saveDumped ? "  (run cut short by --save-at — not a pacing run)" : reached ? "" : "  (DID NOT REACH — check the endgame target vs the production curve)"));
     if (reached && hours < 0.1)
         LOG("  !! NOT CALIBRATED: finishing this fast means the generic policy out-prestiged the\n" +
             "     game's own guards. The early timeline above is still valid; the total is not.\n" +
             "     Wire the ADAPT points, then fit the policy to one known playthrough value.");
     LOG("");
-    LOG("  This is a LOWER BOUND: no challenge rewards, no achievements, no clickables,");
-    LOG("  no human dithering. Rebalance the BRIEF, then re-run — never hand-tune the code.");
+    if (CHALLENGES) {
+        LOG("  This is an UPPER BOUND: every challenge was credited on the tick it unlocked,");
+        LOG("  with no entry reset and no in-challenge time. Read it against the default run");
+        LOG("  (lower bound) — the truth sits between the two, and the gap is what your");
+        LOG("  challenges are worth. Achievements ARE modelled in both modes.");
+    } else {
+        LOG("  This is a LOWER BOUND: no challenge rewards, no clickables or board content,");
+        LOG("  no human dithering. Achievements ARE modelled (see the count above), so this");
+        LOG("  floor is much closer to real play than it used to be — but still a floor.");
+        LOG("  Pass --challenges for the other end of the bracket.");
+    }
+    LOG("  Rebalance the BRIEF, then re-run — never hand-tune the code.");
 }
+
+/* Exit explicitly. The mod files under test may install timers of their own — a ticking
+ * watchdog is the recommended escape from the engine's stuck-`ticking` deadlock — and any
+ * live timer keeps Node's event loop alive forever, so the process would hang AFTER printing
+ * a complete report (found on The-Typhoon-Tree, whose mod.js installs one at load). The
+ * report is already on stdout by this point; nothing is left to flush. */
+process.exit(0);

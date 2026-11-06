@@ -114,19 +114,42 @@ that cadence.
 
 ### 3.2 The exclusions are the bias, and they must be written down
 
-Both reference simulators exclude the same things and say so in their headers: challenge
-rewards, achievement effects, clickable/minigame and board content, offline time, and human
-dithering. That makes the sim a **lower bound**. State it in the brief next to the number.
-One build's sim was 0.62 h against a 2.5 h human run — ×4 — and that ratio is itself the
-calibration.
+The simulator excludes what its header says: challenge rewards, clickable/minigame and board
+content, offline time, and human dithering. That makes the sim a **lower bound**. State it in
+the brief next to the number. One build's sim was 0.62 h against a 2.5 h human run — ×4 — and
+that ratio is itself the calibration.
 
-**The achievement count is a pacing lever hiding inside that bias.** Every achievement's
-`effect()` is excluded from the sim, so the *number* of achievements silently scales real
-playtime down without moving the measured floor. One build planned 24 achievements at ×1.15
-each (×21 endgame income), then caught itself before shipping 50 of them (×1080) — the
-simulated 5.25 h would have stopped bounding the real game. If you change an achievement
-count after the measurement, either lower the per-achievement reward to keep the product
-constant or re-measure; never change the count alone.
+**Achievements used to be on that list and no longer are.** They were cheap to model — the
+engine's `updateAchievements` (`js/utils.js:270`) is structurally the milestone loop — and
+expensive to omit: The Smallpox Tree simmed **18.96 h** with them excluded and **11.14 h** with
+them modelled (−41%, 34 of its 50 achievements earned under the generic policy with no per-game
+adaptation), and its first purchase moved **10 s → 6 s**, turning a passing build into a
+reported failure. Its five reward achievements are ×2/×2/×3/×5/×10 = 600× income; a floor that
+omits that does not deserve the name.
+
+What that does **not** license is pretending challenge rewards are free. They are optional and
+run as a **second, separately labelled pass**:
+
+```bash
+node tools/simulate.js <game>                # LOWER bound — challenges untouched (default)
+node tools/simulate.js <game> --challenges   # UPPER bound — every challenge credited at unlock
+```
+
+`--challenges` does not enter a challenge: it credits each one on the tick its layer unlocks,
+straight to `completionLimit`, with no entry reset and no in-challenge time. That is why it is an
+upper bound, and why the two runs are read as a **bracket** rather than as two estimates: the
+lower number says "even without a single challenge clear, the game takes this long", the upper
+says "even with every challenge cleared for free, it cannot take longer than this". A target
+outside the bracket is wrong no matter how the challenges are tuned; a target inside it means the
+challenge layer is now part of the pacing decision and the brief must say so.
+
+The upper pass also audits the challenge layer, which is the defect this corpus keeps producing:
+it prints how many challenges were **already completable the moment they unlocked** (19 of 41
+across the runnable generated trees). That is measurable only in play — the source cannot tell you
+whether the goal sits above the player's current value. Design contract: 10 §M1b.
+
+The achievement count is still a pacing lever, just one you can now *measure* instead of assume.
+If you change an achievement count after the measurement, re-measure; never change the count alone.
 
 ### 3.3 Constants live in one place, read by both
 

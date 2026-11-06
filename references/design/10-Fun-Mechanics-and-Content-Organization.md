@@ -171,6 +171,64 @@ Challenges disable/modify specific systems via `inChallenge()` gates scattered t
 MM2 runs 18 of them gated behind milestones ("Reach 50,000,000 coins → unlock a super mushroom
 challenge"). Wiring: goal via `canComplete()`; nerf e.g. `gainMult(): ... if (!inChallenge('x',11)) mult = mult.times(yoshiEff)` (coin 2099); reward checked with `hasChallenge()`.
 
+### M1b — The entry contract: why challenges complete on the first click
+
+The most common defect in generated challenge layers is that the player clicks **Start**, the
+button immediately reads **Finish**, and one more click completes it. It is not a UI bug and not
+a player mistake; it is the entry reset not covering what the goal reads.
+
+What `startChallenge` actually does (`js/game.js:249-267` → `doReset(layer, true)`):
+
+| Effect | Scope |
+|---|---|
+| `tmp[layer].baseAmount = 0` | a temp field, recomputed next frame for normal layers |
+| `player.points` (the ROOT currency) | zeroed at row 0, reset to start points above it |
+| `rowReset(x)` for every row ≤ the layer's row | only layers with `tmp[layer].row > tmp[lr].row` — i.e. **strictly lower rows** — are `layerDataReset`; equal-row layers are skipped unless they define `doReset` |
+| the challenged layer's own `points` / `best` / `total` | **NOT reset** |
+
+So a challenge is only as hard as its `onEnter()` makes it. Measured on the eight generated
+trees that the simulator can run (`--challenges`, 2026-11-06): **19 of 41 credited challenges
+were already completable the moment they unlocked** — 5/6 in The Smallpox Tree, 6/6 in The True
+Color Tree, 3/4 in The Prime Conjecture Tree, 5/8 in The Tree Tree. The three that are clean
+(Typhoon, Solar Terms, Ties) are exactly the ones whose goal sits above the player's current
+value or whose goal grows with completions.
+
+**The contract.** Before writing a challenge, name the quantity the goal reads, then make
+`onEnter()` zero *that exact quantity*:
+
+```js
+11: {
+    // goal reads player.chal.runPeak — so onEnter must zero runPeak, not "the layer"
+    onEnter() { player.chal.runPeak = new Decimal(0); player.chal.points = new Decimal(0) },
+    canComplete() { return player.chal.runPeak.gte(this.goal) },
+    goal: new Decimal(1e6),
+}
+```
+
+- **Read set == reset set.** Every field `canComplete()` touches must be written by `onEnter`
+  (or live on a strictly lower row, which the cascade does clear, or be the root currency of a
+  row-0 layer).
+- **Never score on permanents**: `best`, `total`, `hasUpgrade`, `hasMilestone`, `hasAchievement`,
+  another layer's currency, or a module-level counter that survives a reset. The engine keeps
+  `best`/`total` on prestige, so "reach 1e6 best" is true forever after the first time.
+- **Repeatables need a rising bar.** If `completionLimit > 1`, the goal must scale with
+  `challengeCompletions()` (`goal = base × growth^completions`, Typhoon's `envGoal`) *and*
+  `onEnter` must clear the peak. Otherwise re-entry is a free completion until the cap.
+- **A challenge needs a handicap, not just a goal.** Gate 2–3 formulas of older layers on
+  `inChallenge(this.layer, this.id)`; `challengeDescription()` should name them. A challenge that
+  only resets and asks you to climb again is a prestige with extra clicks.
+- **Show the progress.** `goalDescription()` should print current/goal; the tab already glows when
+  `canComplete()` is true, which is the player's only signal that the run is over.
+- **Say what happens on exit.** Prestiging inside a challenge aborts it (`js/game.js:216`); if that
+  costs the player progress, put it in `challengeDescription()`.
+
+**Measurement instead of a static rule.** Whether a goal is "already met" cannot be decided from
+the source — it depends on the economy at unlock time. So the check is empirical: run
+`node tools/simulate.js <game> --challenges`; it credits every challenge at unlock and prints
+`N of them were ALREADY completable the moment they unlocked`. Any N > 0 is a defect to fix
+before shipping (SKILL.md Stage 6).
+
+
 ### M2 — Score-attack challenge hub (春节树 `e` layer)
 Challenges don't just complete — you **accumulate a score inside** the challenge and the best
 score per challenge is the real reward currency:

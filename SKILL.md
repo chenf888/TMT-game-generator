@@ -3,7 +3,7 @@ name: tmt-game-generator
 description: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 89 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏；用户点名 The Modding Tree 或 TMT；需要开箱可玩、数值平衡、控制台零报错的成品。触发词：做增量游戏、制作放置游戏、生成点击游戏、idle game、incremental game、prestige tree、modding tree、The Modding Tree、TMT 游戏、帮我做个挂机游戏、声望树游戏、升级树游戏。不用于：给已有 TMT 游戏调数值或排错；其他框架（Profectus、ExpantaNum 系）的增量游戏。
 description_zh: 通过对话生成完整、可游玩的 The Modding Tree (TMT) v2.7 增量放置游戏：采访定参 → 数据驱动的设计文档 → 内置引擎模板脚手架 → 生成 layers 代码 → 89 条静态规则加加载期冒烟 → 无头模拟器实测节奏 → 交付可测版本。适用场景：从零制作增量/放置/点击/声望树游戏，或用户点名 The Modding Tree / TMT。不用于给已有 TMT 游戏调数值、排错，以及其他框架的增量游戏。
 description_en: Generate a complete, playable The Modding Tree (TMT) v2.7 incremental game from a short conversation: interview the player, write a data-driven design brief, scaffold from the bundled engine template, generate layer code, run 89 static checks plus a load-time harness, measure the pacing in a headless simulator, and hand off a tested build. Use for incremental, idle, clicker, prestige-tree and modding-tree games built from scratch, or when the user names The Modding Tree / TMT. Do not use to rebalance or debug an existing TMT game, or for incremental games on other frameworks (Profectus, ExpantaNum-based engines).
-version: 1.0.0
+version: 1.1.2
 author: TMT GG
 ---
 
@@ -33,7 +33,7 @@ This skill is self-contained. Everything it needs is in this folder:
 | `scripts/static_checks.js` | Post-generation static checks (FAIL/WARN/PASS report) |
 | `scripts/i18n_check.js` | Text-layer integrity (only when the game has `js/lang/`; exits 0 silently otherwise) |
 | `assets/harness/smoke.js` | **Load-time harness** — copy to `<game>/tools/`, run before the full browser pass (Stage 5.5) |
-| `assets/harness/simulate.js` | **Pacing simulator** — copy to `<game>/tools/`, run before rebalancing (Stage 6); `--probe <layer>` before any knob turn, `--save-at <layerId>` exports an engine-format save for the Stage 6.5 browser pass |
+| `assets/harness/simulate.js` | **Pacing simulator** — copy to `<game>/tools/`, run before rebalancing (Stage 6). Default is the lower bound; `--challenges` adds the upper bound and audits every challenge for instant completion. `--probe <layer>` before any knob turn, `--save-at <layerId>` exports an engine-format save for the Stage 6.5 browser pass |
 | `template/` | Bundled TMT v2.7 engine template (verbatim minus demo/docs — upstream MIT licenses included) |
 
 The engine template ships **bundled** at `template/`, so the skill works from any install
@@ -53,7 +53,7 @@ location. `scaffold.js` resolves it as: `--from <dir>` > `TMT_TEMPLATE` env var 
 | 5. Static checks | check report (type profile applied) | 0 FAIL (WARNs justified in brief) |
 | 5.5 Load-time smoke | harness report (`tools/smoke.js`) | 0 FAIL — every mod file loads, no duplicate ids, no fresh-save crash |
 | 6. Balance walkthrough | annotated numbers, **measured in-sim** | heuristic table verified **and** the sim's early timeline matches the design intent |
-| 6.5 Browser verification | boot + interaction report, fixes recorded in brief §14 | `__bootErrors` empty, every layer tab opens and renders, one real prestige per layer type, console clean |
+| 6.5 Browser verification | boot + interaction report, fixes recorded in brief §12 | `__bootErrors` empty, every layer tab opens and renders, one real prestige per layer type, console clean |
 | 7. Manual test handoff | test instructions for the user | 07 Part D checklist handed over |
 
 **Load references on demand, not all at once** (keeps context small):
@@ -316,7 +316,7 @@ folding adjustments back into the tables. Scaffolding before that confirmation i
 "the AI decided by itself" failure this pipeline bans.
 
 **Write the brief so it can be refuted.** These checks verify *internal consistency*; Stage 5.5
-and Stage 6 verify *the game*, and three real briefs that passed all 21 were then overturned by
+and Stage 6 verify *the game*, and three real briefs that passed all 23 were then overturned by
 measurement. Write the numbers so a later simulation can contradict them, and expect it to.
 
 ---
@@ -408,10 +408,12 @@ listed in `modInfo.modFiles`, and every file must be appended to modFiles. Per t
   milestones: each grants a closed-form buyMax auto-buyer (P54 inverse of the cost curve) for an
   EARLIER layer's load-bearing buyable. Never emit `+1`-per-tick loops (`D-AUTOINVERT`) — they
   never catch up after offline time.
-- The four budget rules that are hard FAILs: **N-UNWIRED** (every `effect()` id must be consumed),
-  **N-PGBOOL** (`passiveGeneration()` returns a plain number), **N-SELFTOTAL** (Σ self-scaling
-  exponents ≤ 0.6, and `ln(effect)/ln(cost) < 1` for buyables), **N-UNLOCKDEAD** (every
-  `layerShown` gate needs a writer).
+- The three budget rules that are hard FAILs: **N-UNWIRED** (every `effect()` id must be consumed),
+  **N-SELFTOTAL** (Σ self-scaling exponents ≤ 0.6, and `ln(effect)/ln(cost) < 1` for buyables),
+  **N-UNLOCKDEAD** (every `layerShown` gate needs a writer). **N-PGBOOL** (`passiveGeneration()`
+  returns a plain number) sits one level below them at WARN — stock v2.7 coerces a bare `true` to 1,
+  so only forks and custom readers go silently to zero. Treat that WARN as blocking anyway on any
+  game that ships its own engine copy or reads `tmp[layer].passiveGeneration` as a Decimal.
 - `gainMult()` = the P10 web: list every older layer's boost that reaches this layer, and make
   this layer boost ≥2 older layers.
 - `doReset(resettingLayer)` only when keeping things (P9); softcaps per P12.
@@ -478,6 +480,15 @@ Each of these shipped as a defect in a real build, and each is invisible to all 
 - **Set `modInfo.allowSmall`** if any value can go below `1e-4`, or `format()` prints `0.00` (F1).
 - **Price a discrete endgame purchase above the top of the ladder it ends** (F15); `layeradd` needs
   a plain number and `winText` must be a function (F2/F3).
+- **A challenge's goal must live in state its `onEnter()` clears.** Entering runs
+  `doReset(layer, true)`: it zeroes the root currency and resets only the rows *below* the layer —
+  the challenged layer's own `points` survive (`js/game.js:210-217`). So `canComplete()` reading
+  `player[this.layer].points`, or any `best`/`total`/milestone/other-layer value, is true on entry:
+  the player clicks Start, the button says Finish, one more click completes it. Write
+  `onEnter()` to zero exactly the fields the goal reads, make repeatables raise the bar with
+  `challengeCompletions()`, and gate 2–3 older-layer formulas on `inChallenge()` so the run is
+  actually harder. Contract and the measured evidence: 10 §M1b; verification: Stage 6's
+  `--challenges` pass.
 
 ---
 
@@ -493,6 +504,10 @@ node scripts/static_checks.js "<game-folder>"
   acceptance table). An unexplained WARN counts as a
   failure. Legitimate reasons do exist: a deliberate ×150 requires leap for a multi-row jump, a
   hard-capped currency whose ladder cannot span three orders, a sink layer that must never reset.
+- **`D-QLEDGER` is the one WARN that §9.1 cannot discharge.** It is WARN rather than FAIL only so
+  that games generated before the ledger rule existed do not hard-fail; for a game this pipeline
+  built, it is a Stage 2 gate. An "accepted with reason" row does not clear it — ask the missing
+  question, or get the delegation confirmed by the user, then re-run.
 - **The rule catalogue is the checker's own header, not this file.** `scripts/static_checks.js`
   documents every rule id with their level, their provenance and the incident that produced each.
   Read it there: a second copy here would drift, and had already (this section was 20 rules
@@ -549,7 +564,7 @@ node tools/smoke.js
 
 ## Stage 6 — Balance walkthrough (a measurement, not an estimate)
 
-**Read `references/design/14` before this stage.** Three real briefs passed all 21 checks and were
+**Read `references/design/14` before this stage.** Three real briefs passed all 23 checks and were
 then overturned by play: one promised 8–18 h and delivered 2.5 h, one promised a sane multiplier
 stack and detonated at 28 s, one promised six automation steps whose thresholds were unreachable.
 Paper reachability is a consistency argument, not a prediction — run both passes and let the
@@ -559,6 +574,19 @@ measurement have the last word.
 cp <skill>/assets/harness/simulate.js <game>/tools/simulate.js
 node tools/simulate.js
 ```
+
+Run it **twice** — the pair is the measurement, not either number alone:
+
+```bash
+node tools/simulate.js <game>                # LOWER bound: the player never touches a challenge
+node tools/simulate.js <game> --challenges   # UPPER bound: every challenge credited at unlock
+```
+
+The truth sits inside the bracket. A wide gap means the game's power is parked behind challenge
+rewards, and the brief has to say which number its target refers to. The second run doubles as a
+design audit of the challenge layer: it prints how many challenges were **already completable the
+moment they unlocked** (measured across the generated corpus: 19 of 41). Any such challenge is the
+"click Start, click Finish" defect — fix it per 10 §M1b before handoff, not after.
 
 Trust the **early timeline** (first affordable purchase, each layer's first prestige): it is
 policy-independent and it is where the author rules bite. Do **not** quote the total until the
